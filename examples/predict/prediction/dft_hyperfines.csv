@@ -1,4 +1,4 @@
-#This file was generated with SimpNMR v0.0.0 on 18:16:07 03-11-2025 
+#This file was generated with SimpNMR v0.0.1 on 20:28:06 28-11-2025 
 # Data taken from file /Users/ernestborysenko/git/simpnmr/examples/predict/hyperfine_tpssh.log
 atom_label, Aiso (MHz), Adip_xx (MHz), Adip_xy (MHz), Adip_xz (MHz), Adip_yy (MHz), Adip_yz (MHz), Adip_zz (MHz)
 Ni1, 14.87302, -0.45420, 0.00000, 0.00000, 1.30420, 0.00000, -0.85000

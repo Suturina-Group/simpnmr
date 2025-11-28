@@ -1,4 +1,4 @@
-# This file was generated with SimpNMR v0.0.0 at 18:16:11 03-11-2025 
+# This file was generated with SimpNMR v0.0.1 at 20:28:10 28-11-2025 
 # T = 298.00 K
 atom_label (),chem_label (),x (Å),y (Å),z (Å),Aiso (ppm Å^-3),Adip_xx (ppm Å^-3),Adip_xy (ppm Å^-3),Adip_xz (ppm Å^-3),Adip_yy (ppm Å^-3),Adip_yz (ppm Å^-3),Adip_zz (ppm Å^-3),δ_total_avg (ppm),δ_total (ppm),δ_dia (ppm),δ_fc (ppm),δ_pc (ppm),linewidth (Hz)
 C1,C_tphz4,0.73210,3.61944,0.00000,1596.57905,-1507.05743,-348.67422,0.00000,-701.71678,0.00000,2208.77421,485.89248,485.89233,0.00000,490.44375,-4.55142,1

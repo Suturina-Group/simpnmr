@@ -1,4 +1,4 @@
-#This file was generated with SimpNMR v0.0.0 at 18:16:11 03-11-2025 
+#This file was generated with SimpNMR v0.0.1 at 20:28:10 28-11-2025 
 #Data from /Users/ernestborysenko/git/simpnmr/examples/predict/nev.out (orca_nev)
 Temperature (K),chi_iso (Å^3),chi_xx (Å^3),chi_xy (Å^3),chi_xz (Å^3),chi_yy (Å^3),chi_yz (Å^3),chi_zz (Å^3),dchi_xx (Å^3),dchi_xy (Å^3),dchi_xz (Å^3),dchi_yy (Å^3),dchi_yz (Å^3),dchi_zz (Å^3),chi_x (Å^3),chi_y (Å^3),chi_z (Å^3),chi_ax (Å^3),chi_rho (Å^3),alpha (degrees),beta (degrees),gamma (degrees)
 298.00000,0.30718,0.30581,0.00000,0.00000,0.25598,-0.00000,0.28380,0.02395,0.00000,0.00000,-0.02589,-0.00000,0.00194,0.25598,0.28380,0.30581,-0.03883,-0.01101,89.99891,90.00058,-90.00072

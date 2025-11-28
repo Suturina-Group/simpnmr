@@ -1238,37 +1238,34 @@ def predict_func(uargs):
                 chem_label: np.mean(rate_list)
                 for chem_label, rate_list in r1_by_chem_label.items()
             }
-            print("\033[1m Average R1 rates by chemical label (s^-1):\033[0m")
-            for chem_label, r1 in avg_r1_by_chem_label.items():
-                print(f"{chem_label}: R₁ = {r1:.3e} s^-1")
             # Calculate average R2 rates for each chemical label
             avg_r2_by_chem_label = {
                 chem_label: np.mean(rate_list)
                 for chem_label, rate_list in r2_by_chem_label.items()
             }
-            print("\033[1m Average R2 rates by chemical label (s^-1):\033[0m")
-            for chem_label, r2 in avg_r2_by_chem_label.items():
-                print(f"{chem_label}: R₂ = {r2:.3e} s^-1")
-            # Calculate average linewidths for each chemical label
+            # Calculate average linewidths for each chemical label (Hz)
             avg_lw_by_chem_label = {
                 chem_label: np.mean([rate / np.pi for rate in rate_list])
                 for chem_label, rate_list in r2_by_chem_label.items()
             }
-            print("\033[1m Average linewidths by chemical label (Hz):\033[0m")
-            for chem_label, lw in avg_lw_by_chem_label.items():
-                print(f"{chem_label}: λ = {lw:.3e} Hz")
-                #Assign average linewidths to nuclei in the molecule (in ppm)
-            
+
+            # Optional decomposition of R1 into SBM and Curie components
+            avg_dipolar_by_chem_label = None
+            avg_contact_by_chem_label = None
+            avg_curie_by_chem_label = None
+
             if 'sbm' in config.relaxation_model:
                 dipolar_by_chem_label = defaultdict(list)
                 contact_by_chem_label = defaultdict(list)
                 for nuc in base_molecule.nuclei:
                     if 'sbm_dipolar_r1_rates' in locals() and nuc.label in sbm_dipolar_r1_rates:
                         dipolar_by_chem_label[nuc.chem_label].append(
-                            sbm_dipolar_r1_rates[nuc.label])
+                            sbm_dipolar_r1_rates[nuc.label]
+                        )
                     if 'sbm_contact_r1_rates' in locals() and nuc.label in sbm_contact_r1_rates:
                         contact_by_chem_label[nuc.chem_label].append(
-                            sbm_contact_r1_rates[nuc.label])
+                            sbm_contact_r1_rates[nuc.label]
+                        )
                 avg_dipolar_by_chem_label = {
                     chem_label: np.mean(rate_list)
                     for chem_label, rate_list in dipolar_by_chem_label.items()
@@ -1277,26 +1274,32 @@ def predict_func(uargs):
                     chem_label: np.mean(rate_list)
                     for chem_label, rate_list in contact_by_chem_label.items()
                 }
-                print("\033[1m Average SBM Dipolar R1 rates by chemical label (s^-1):\033[0m]")
-                for chem_label, r1 in avg_dipolar_by_chem_label.items():
-                    print(f"{chem_label}: R₁(dipolar) = {r1:.3e} s^-1")
-                print("\033[1m Average SBM Contact R1 rates by chemical label (s^-1):\033[0m]")
-                for chem_label, r1 in avg_contact_by_chem_label.items():
-                    print(f"{chem_label}: R₁(contact) = {r1:.3e} s^-1")
 
             if 'curie' in config.relaxation_model:
                 curie_by_chem_label = defaultdict(list)
                 for nuc in base_molecule.nuclei:
                     if 'curie_r1_rates' in locals() and nuc.label in curie_r1_rates:
                         curie_by_chem_label[nuc.chem_label].append(
-                            curie_r1_rates[nuc.label])
+                            curie_r1_rates[nuc.label]
+                        )
                 avg_curie_by_chem_label = {
                     chem_label: np.mean(rate_list)
                     for chem_label, rate_list in curie_by_chem_label.items()
                 }
-                print("\033[1m Average Curie R1 rates by chemical label (s^-1):\033[0m")
-                for chem_label, r1 in avg_curie_by_chem_label.items():
-                    print(f"{chem_label}: R₁(Curie) = {r1:.3e} s^-1") 
+
+            # Save the relaxation data to CSV
+            outputs.save_relaxation_decomposition(
+                file_name=os.path.join(
+                    config.project_name,
+                    "relaxation_decomposition.csv"
+                ),
+                avg_r1_by_chem_label=avg_r1_by_chem_label,
+                avg_r2_by_chem_label=avg_r2_by_chem_label,
+                avg_lw_by_chem_label=avg_lw_by_chem_label,
+                avg_dipolar_by_chem_label=avg_dipolar_by_chem_label,
+                avg_contact_by_chem_label=avg_contact_by_chem_label,
+                avg_curie_by_chem_label=avg_curie_by_chem_label,
+            )
 
             for nuc in base_molecule.nuclei:
                 if nuc.chem_label in avg_lw_by_chem_label:

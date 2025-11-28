@@ -148,3 +148,114 @@ def save_susc(molecules: list[main.Molecule],
         )
 
     return
+
+def save_relaxation_decomposition(
+        avg_r1_by_chem_label: dict[str, float],
+        avg_r2_by_chem_label: dict[str, float],
+        avg_lw_by_chem_label: dict[str, float],
+        file_name: str,
+        avg_dipolar_by_chem_label: dict[str, float] | None = None,
+        avg_contact_by_chem_label: dict[str, float] | None = None,
+        avg_curie_by_chem_label: dict[str, float] | None = None,
+        delimiter: str = ',',
+        comment: str = '',
+        verbose: bool = True
+) -> None:
+    '''
+    Saves per-chemical-label relaxation rates and linewidths to csv file.
+
+    avg_r1_by_chem_label: dict[str, float]
+        Average total R1 rates by chemical label (s^-1)
+    avg_r2_by_chem_label: dict[str, float]
+        Average total R2 rates by chemical label (s^-1)
+    avg_lw_by_chem_label: dict[str, float]
+        Average linewidths by chemical label (Hz)
+    avg_dipolar_by_chem_label: dict[str, float], optional
+        Average SBM dipolar R1 contribution (s^-1)
+    avg_contact_by_chem_label: dict[str, float], optional
+        Average SBM contact R1 contribution (s^-1)
+    avg_curie_by_chem_label: dict[str, float], optional
+        Average Curie R1 contribution (s^-1)
+    file_name: str
+        Path to file to save to
+    delimiter: str, default ','
+        Delimiter used in csv file
+    comment: str, ''
+        Additional comment line added to file - must begin with #
+    verbose: bool, default True
+        If True, print filename to screen
+    '''
+
+    # Collect the union of all chemical labels that appear in any dict
+    chem_labels: set[str] = set(avg_r1_by_chem_label.keys())
+    chem_labels |= set(avg_r2_by_chem_label.keys())
+    chem_labels |= set(avg_lw_by_chem_label.keys())
+
+    if avg_dipolar_by_chem_label is not None:
+        chem_labels |= set(avg_dipolar_by_chem_label.keys())
+    if avg_contact_by_chem_label is not None:
+        chem_labels |= set(avg_contact_by_chem_label.keys())
+    if avg_curie_by_chem_label is not None:
+        chem_labels |= set(avg_curie_by_chem_label.keys())
+
+    chem_labels = sorted(chem_labels)
+
+    # Base columns
+    out: dict[str, list] = {
+        'chem_label': chem_labels,
+        'R1_total (s^-1)': [
+            avg_r1_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ],
+        'R2_total (s^-1)': [
+            avg_r2_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ],
+        'linewidth (Hz)': [
+            avg_lw_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ],
+    }
+
+    # Optional decompositions
+    if avg_dipolar_by_chem_label is not None:
+        out['R1_sbm_dipolar (s^-1)'] = [
+            avg_dipolar_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_contact_by_chem_label is not None:
+        out['R1_sbm_contact (s^-1)'] = [
+            avg_contact_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_curie_by_chem_label is not None:
+        out['R1_curie (s^-1)'] = [
+            avg_curie_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+
+    df = pd.DataFrame(data=out)
+
+    _comment = (
+        f'#This file was generated with SimpNMR v{__version__}'
+        ' at {}\n'.format(
+            datetime.datetime.now().strftime('%H:%M:%S %d-%m-%Y ')
+        )
+    )
+
+    if len(comment):
+        if comment[0] != '#':
+            comment = f'#{comment}'
+        _comment += f'{comment}\n'
+
+    with open(file_name, 'w') as _f:
+        _f.write(_comment)
+        df.to_csv(
+            _f,
+            sep=delimiter,
+            header=True,
+            float_format='%.5e',
+            index=None
+        )
+
+    if verbose:
+        ut.cprint(
+            f'\n Relaxation decomposition written to \n {file_name}\n',
+            'cyan'
+        )
+
+    return

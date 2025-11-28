@@ -1,5 +1,5 @@
 project:
-  name: prediction_feii
+  name: prediction_relaxation
 
 hyperfine:
   method: dft 

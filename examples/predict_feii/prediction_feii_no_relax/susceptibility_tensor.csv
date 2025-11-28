@@ -1,4 +1,0 @@
-#This file was generated with simpnmr v0.0.0 at 10:04:43 15-10-2025 
-#Data from /Users/jamiewhipham/Downloads/simpnmr-main/examples/predict_feii/MesBDIFeCl2LiTHF2_geomB3LYP_nevpt2_lft.out (orca_nev)
-Temperature (K),chi_iso (Å^3),chi_xx (Å^3),chi_xy (Å^3),chi_xz (Å^3),chi_yy (Å^3),chi_yz (Å^3),chi_zz (Å^3),dchi_xx (Å^3),dchi_xy (Å^3),dchi_xz (Å^3),dchi_yy (Å^3),dchi_yz (Å^3),dchi_zz (Å^3),chi_x (Å^3),chi_y (Å^3),chi_z (Å^3),chi_ax (Å^3),chi_rho (Å^3),alpha (degrees),beta (degrees),gamma (degrees)
-298.00000,0.24551,0.21746,0.00035,0.00000,0.21246,-0.00000,0.30661,-0.02805,0.00035,0.00000,-0.03305,-0.00000,0.06110,0.21243,0.21748,0.30661,0.09165,0.00252,0.00339,3.99363,0.00304
