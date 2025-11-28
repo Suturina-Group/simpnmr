@@ -1,5 +1,5 @@
-#This file was generated with SimpNMR v0.0.1 on 20:26:51 28-11-2025 
-# Data taken from file /Users/ernestborysenko/git/simpnmr/examples/predict_relax/bp86_single_point_b3lyp_geometry.log
+#This file was generated with SimpNMR v1.0.8 on 18:07:21 28-11-2025 
+# Data taken from file /Users/ernestborysenko/git/simpnmr/examples/predict_feii/bp86_single_point_b3lyp_geometry.log
 atom_label, Aiso (MHz), Adip_xx (MHz), Adip_xy (MHz), Adip_xz (MHz), Adip_yy (MHz), Adip_yz (MHz), Adip_zz (MHz)
 Fe1, 18.15214, -5.43899, 0.14332, 0.00000, -4.10851, 0.00000, 9.54750
 Cl1, 5.19141, 1.08139, 0.02013, 1.30646, -2.03408, 0.01868, 0.95269

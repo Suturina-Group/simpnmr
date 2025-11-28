@@ -151,7 +151,8 @@ class FitSuscConfig(Config):
             'method',
             'file',
             'average',
-            'pdip_centres'
+            'pdip_centres',
+            'spin'
         ],
         'experiment': [
             'files'
@@ -231,6 +232,9 @@ class FitSuscConfig(Config):
         self._susc_fit_variables = ''
         self._susc_fit_average_shifts = []
         self._chem_labels_file = ''
+        self._spin_S = None
+        self._spin_multiplicity = None
+        self._spin_file = ''
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -418,8 +422,6 @@ class FitSuscConfig(Config):
         self._chem_labels_file = os.path.abspath(value)
         return None
 
-        return None
-
     @property
     def susc_fit_variables(self) -> dict[str, dict[str, float]]:
         return self._susc_fit_variables
@@ -537,6 +539,43 @@ class FitSuscConfig(Config):
         self._diamagnetic_ref_file = os.path.abspath(value)
         return
 
+    @property
+    def spin_S(self) -> float | None:
+        return self._spin_S
+
+    @spin_S.setter
+    def spin_S(self, value: float | None):
+        self._spin_S = value
+
+    @property
+    def spin_multiplicity(self) -> float | None:
+        return self._spin_multiplicity
+
+    @spin_multiplicity.setter
+    def spin_multiplicity(self, value: float | None):
+        self._spin_multiplicity = value
+        
+    @property
+    def spin_file(self) -> str:
+        return self._spin_file
+
+    @spin_file.setter
+    def spin_file(self, value: str):
+        self._spin_file = os.path.abspath(value)
+
+    @property
+    def hyperfine_spin(self) -> float | None:
+        return self._spin_S
+    
+    @hyperfine_spin.setter
+    def hyperfine_spin(self, value):
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            self._spin_S = float(value)
+        except Exception:
+            raise ValueError(f'Cannot convert hyperfine: spin={value} to float')
+        
     @classmethod
     def from_file(cls, file_name) -> 'FitSuscConfig':
         '''
@@ -596,7 +635,8 @@ class PredictConfig(FitSuscConfig):
             'method',
             'file',
             'average',
-            'pdip_centre'
+            'pdip_centres',
+            'spin'
         ],
         'experiment': [
             'files',
@@ -664,8 +704,9 @@ class PredictConfig(FitSuscConfig):
 
     @susceptibility_format.setter
     def susceptibility_format(self, value: str):
-        if value not in ['csv', 'txt', 'orca_cas', 'orca_nev', 'molcas']:
-            raise ValueError(f'Unknown hyperfine:method {value}')
+        # if value not in ['csv', 'txt', 'orca', 'molcas']:
+        if value not in ['csv', 'txt', 'orca_nev', 'orca_cas', 'molcas']:
+            raise ValueError(f'Unknown susceptibility_format: {value}')
         else:
             self._susceptibility_format = value
         return None
@@ -839,7 +880,7 @@ class PlotAConfig(FitSuscConfig):
             'method',
             'file',
             'average',
-            'pdip_centre'
+            'pdip_centres'
         ],
         'nuclei': [
             'include',

@@ -4,7 +4,8 @@ project:
 hyperfine:
   method: dft
   file: hyperfine_tpssh.log
-
+  spin: 2.0
+  
 chem_labels:
   file: chem_labels.csv
 

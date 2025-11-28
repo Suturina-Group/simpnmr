@@ -21,6 +21,7 @@ from . import models
 from . import visualise as vis
 from . import outputs
 from collections import defaultdict
+from . import transform as tfm
 
 # Change figure save dialog to use current working directory
 mpl.rcParams['savefig.directory'] = ''
@@ -993,11 +994,21 @@ def predict_func(uargs):
     if len(config.hyperfine_average):
         base_molecule.average_hyperfine(config.hyperfine_average)
 
+    # Rotate hyperfine tensors from DFT frame into chi eigenframe
+    if 'orca' in config.susceptibility_format:
+        rot_mat, trans_mat = tfm.get_rotation_and_transformation()
+        base_molecule.rotate_hyperfines(rot_mat)
+
+    # Transform HFC coordinates into the chi eigenframe and save
+    if 'orca' in config.susceptibility_format:
+        tfm.rotate_coords_to_chi_frame(config.project_name)
+
     # Load susceptibility information
     if 'orca' in config.susceptibility_format:
         suscs = main.Susceptibility.from_orca(
             config.susceptibility_file,
             section=config.susceptibility_format.split('orca_')[1]
+            # section = 'auto'
         )
     elif 'csv' in config.susceptibility_format:
         suscs = main.Susceptibility.from_csv(
@@ -1060,8 +1071,12 @@ def predict_func(uargs):
             tau_e1 = config.relaxation_T1e
             tau_e2 = config.relaxation_T2e
             tau_R = config.relaxation_tR
-            multiplicity = rdrs.read_gaussian_log_spin(config.hyperfine_file)
-            spin = (multiplicity - 1) / 2
+
+            if config.spin_S is not None:
+                spin = config.spin_S
+            else:
+                spin = rdrs.QCSpin.guess_from_file(config.hyperfine_file).S
+
             if config.relaxation_model == "sbm":
                 # Calculate SBM dipolar rates (R1)
                 sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
@@ -1305,7 +1320,7 @@ def predict_func(uargs):
                 if nuc.chem_label in avg_lw_by_chem_label:
                     nuc.shift.lw = avg_lw_by_chem_label[nuc.chem_label] / (abs(omega_I_dict[nuc.label]) / (2 * np.pi)) * 1e6  # noqa
     else:
-        ut.cprint(" No relaxation model specified — linewidths will be fixed at 1 ppm.", "cyan")
+        ut.cprint("\n No relaxation model specified — linewidths will be fixed at 1 ppm.\n", "cyan")
 
     # Load experimental data from file into list of experiment objects
     if len(config.experiment_files):
@@ -1341,15 +1356,34 @@ def predict_func(uargs):
     if not config.diamagnetic_file:
         _terms.pop(_terms.index('d'))
 
+    # Try to read the spin from config (YAML)
+    spin = config.spin_S
+
+    # If the spin is not provided, try to infer from QC file safely
+    if spin is None:
+        ext = os.path.splitext(config.hyperfine_file)[1].lower()
+        try:
+            if config.hyperfine_method == 'dft' or ext in ('.log', '.out'):
+                spin_obj = rdrs.QCSpin.guess_from_file(config.hyperfine_file)
+                spin = spin_obj.S
+        except SystemExit:
+            spin = None
+
     # Update susceptibility tensor of Molecule using model
     for molecule, susc, experiment in zip(molecules, suscs, experiments):
         molecule.susc = susc
-        
-        # Set spin-only value of the magnetic susceptibility
-        if config.susceptibility_format in ('orca_cas', 'orca_nev'):
-            susc.iso = ut.get_spin_only_susceptibility(uargs, susc.temperature)
 
-        # Calculate shifts using new susceptibility tensor
+        if 'orca' in config.susceptibility_format:
+            susc.iso = ut.get_true_iso_susceptibility(uargs, susc.temperature)
+        elif spin is not None:
+            susc.iso = ut.get_spin_only_susceptibility(uargs, susc.temperature)
+        else:
+            ut.cprint(
+                "\n Spin not specified and could not be inferred — using χ_iso from susceptibility file (no spin-only correction)\n",
+                "cyan"
+            )
+
+        # Calculate shifts using new susceptibility tensor and rotated hyperfines
         molecule.calculate_shifts()
 
         # Calculate average shifts

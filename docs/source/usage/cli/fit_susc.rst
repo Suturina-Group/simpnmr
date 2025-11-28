@@ -135,7 +135,7 @@ An example input file for ``fit_susc`` can be found in the ``SimpNMR`` `reposito
     |                             |                         |                                     |                                                                         |                      |
     |                             |                         |                                     |  - ``method:raw`` supports ``.csv`` file - see :ref:`here <dia_csv>`.   |                      |
     +-----------------------------+-------------------------+-------------------------------------+-------------------------------------------------------------------------+----------------------+
-    | ``diamagnetic_reference``   | ``method``              | ``dft``/``pdip``/``raw``            | Method for calculation of reference diamagnetic shifts                  | |:x:|                |
+    | ``diamagnetic_ref``         | ``method``              | ``dft``/``pdip``/``raw``            | Method for calculation of reference diamagnetic shifts                  | |:x:|                |
     |                             |                         |                                     |                                                                         |                      |
     |                             |                         |                                     | Options:                                                                |                      |
     |                             |                         |                                     |                                                                         |                      |
@@ -143,7 +143,7 @@ An example input file for ``fit_susc`` can be found in the ``SimpNMR`` `reposito
     |                             |                         |                                     |                                                                         |                      |
     |                             |                         |                                     |  - ``method:raw`` specifies ``.csv`` data entry                         |                      |
     +-----------------------------+-------------------------+-------------------------------------+-------------------------------------------------------------------------+----------------------+
-    | ``diamagnetic_reference``   | ``file``                | File Name                           | File containing reference diamagnetic data - Format depends on          | |:x:|                |
+    | ``diamagnetic_ref``         | ``file``                | File Name                           | File containing reference diamagnetic data - Format depends on          | |:x:|                |
     |                             |                         |                                     | ``method``                                                              |                      |
     |                             |                         |                                     |                                                                         |                      |
     |                             |                         |                                     | Options:                                                                |                      |

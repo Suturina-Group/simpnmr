@@ -31,9 +31,33 @@ pages:
     paths:
     - public
     expire_in: 1 day
-  # rules:
-  #   - if: '$force == "docs" && $CI_COMMIT_REF_NAME == "main"'
-  #     when:
-  #       manual
-  #   - when:
-  #       never
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - when: never
+
+release:
+  stage: deploy
+  image: python:3.11
+  before_script:
+    - pip install --upgrade pip
+    - pip install python-semantic-release build twine
+    - git config --global user.name "semantic-release"
+    - git config --global user.email "semantic-release@example.com"
+    - git checkout -B "$CI_COMMIT_BRANCH" "$CI_COMMIT_SHA"
+  script:
+    - rm -rf dist/*
+    - semantic-release version --push --vcs-release
+    - semantic-release publish
+    - |
+      if ls dist/* 1> /dev/null 2>&1; then
+        python -m twine upload --non-interactive --skip-existing dist/*
+      else
+        echo "No distributions to upload, skipping twine."
+      fi
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - when: never

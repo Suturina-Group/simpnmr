@@ -10,6 +10,9 @@ import xyz_py.atomic as atomic
 import copy
 import pandas as pd
 import os
+import math
+
+from .scripts import chi_plot as chi_helpers
 
 from . import utils as ut
 from . import main
@@ -44,7 +47,6 @@ SAFE_COLOURS = [
     "rgb(170, 68 , 153)",
     "rgb(136, 34 , 85)"
 ]
-
 
 def set_violin_colours(violin: dict, color: str) -> None:
     '''
@@ -667,8 +669,8 @@ def plot_pred_spectrum(molecule: main.Molecule,
         plt.show()
 
     # Write spectrum data (ppm and normalized intensity) to CSV for external visualization
-    df = pd.DataFrame({'x': ppm_grid, 'y': _total})
-    csv_path = os.path.join(os.path.dirname(save_name), f'spectrum_xyz_{molecule.susc.temperature:.2f}_K.csv')
+    df = pd.DataFrame({'shift (ppm)': ppm_grid, 'intensity (a.u.)': _total})
+    csv_path = os.path.join(os.path.dirname(save_name), f'shift_vs_intensity_{molecule.susc.temperature:.2f}_K.csv')
     df.to_csv(csv_path, index=False)
 
     return fig, ax
@@ -1272,284 +1274,220 @@ def plot_shift_tdep(experiments: list[main.Experiment], tdep: str = '',
 
 def plot_isoaxrho(molecules: list[main.Molecule], save: bool = True,
                   show: bool = True, save_name: str = 'iso_ax_rho_tdep.png',
-                  window_title: str = 'Isotropic, Axial, and Rhombic susceptibilities', # noqa
-                  verbose: bool = True,
-                  y_mode: str = 'chiT',
-                  susc_units: str = 'A3',
-                  out_file: str = 'chi_fits.txt',
-                  susc_models: list[models.SusceptibilityModel] = []) -> tuple[plt.Figure, tuple[plt.Axes]]: # noqa
-    '''
-    Plots isotropic, axial, and rhombic components of susceptibility as a\n
-    function of temperature as either XT vs T or X vs T.
+    window_title: str = 'Isotropic, Axial, and Rhombic susceptibilities', # noqa
+    verbose: bool = True,
+    y_mode: str = 'chiT',
+    susc_units: str = 'A3',
+    out_file: str = 'chi_fits.txt',
+    susc_models: list[models.SusceptibilityModel] = []) -> tuple[plt.Figure, tuple[plt.Axes]]: # noqa
+    """
+    Plot isotropic, axial and rhombic susceptibility components vs inverse temperature
+    using the chi_plot weighted linear regression logic.
+    """
 
-    Parameters
-    ----------
-    molecules: list[main.Molecule]
-        Molecules containing non-empty Susceptibility attributes
-    save: bool, default True
-        If True, saves plot to file
-    show: bool, default True
-        If True, shows plot on screen
-    save_name: str, default 'iso_ax_rho_tdep.png'
-        If save is True, will save plot to this file name
-    window_title: str, default 'Isotropic, Axial, and Rhombic susceptibilities'
-        Title of figure window, not of plot
-    verbose: bool, default True
-        If True, plot file location is written to terminal
-    susc_units: str, {'A3', 'A3 mol-1', 'cm3 mol-1', 'cm3'}
-        Units to use for susceptibility
-    y_mode: str, {'chiT', 'chi'}
-        Quantity to plot on y axis, either XT or X
+    weighted_linreg_predict = chi_helpers.weighted_linreg_predict
+    _plot_component = chi_helpers._plot_component
+    _finalize_axes = chi_helpers._finalize_axes
 
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    tuple[plt.Axes]
-        Matplotlib axis objects for isotropic, axial, and rhombic plots
-    '''
+    def _unit_conv(units: str) -> tuple[float, str]:
+        if units == 'A3':
+            return 1.0, r'$\mathregular{\AA^3}$'
+        if units == 'A3 mol-1':
+            return constants.Avogadro, r'$\mathregular{\AA^3 \ mol^{-1}}$'
+        if units == 'cm3':
+            return 1E-24, r'$\mathregular{cm^3}$'
+        if units == 'cm3 mol-1':
+            return 1E-24 * constants.Avogadro / (4 * np.pi), r'$\mathregular{cm^3 \ mol^{-1}}$' # noqa
+        raise ValueError(f'Unsupported susceptibility unit: {units}')
 
-    def funk(T, A, B):
-        return A + B / T
+    if not len(molecules):
+        return None, None
 
-    def fit_and_plot(temperature, chi_component, y_mode: str, ax: plt.Axes,
-                     bax: plt.Axes, name: str, use_errors: bool = False,
-                     chi_errors=[], susc_units='A3'):
+    temperatures = np.array([m.susc.temperature for m in molecules], dtype=float)
+    isotropic = np.array([m.susc.iso for m in molecules], dtype=float)
+    axial = np.array([m.susc.axiality for m in molecules], dtype=float)
+    rhombic = np.array([m.susc.rhombicity for m in molecules], dtype=float)
 
-        if susc_units == 'A3':
-            conv = 1.
-            unit_label = r'$\mathregular{\AA^3}$'
-        elif susc_units == 'A3 mol-1':
-            conv = constants.Avogadro
-            unit_label = r'$\mathregular{\AA^3 \ mol^{-1}}$'
-        elif susc_units == 'cm3':
-            conv = 1E-24
-            unit_label = r'$\mathregular{cm^3}$'
-        elif susc_units == 'cm3 mol-1':
-            conv = 1E-24 * constants.Avogadro / (4 * np.pi)
-            unit_label = r'$\mathregular{cm^3 \ mol^{-1}}$'
+    iso_err = axial_err = rhombic_err = None
 
-        y_labels = {
-            'chiT': {
-                'iso': rf'$\chi_\mathregular{{iso}}T$ / {unit_label} K',
-                'axial': rf'$\Delta\chi_\mathregular{{ax}}T$ / {unit_label} K',
-                'rhombic': rf'$\Delta\chi_\mathregular{{rh}}T$ / {unit_label} K' # noqa
-            },
-            'chi': {
-                'iso': rf'$\chi_\mathregular{{iso}}$ / {unit_label}',
-                'axial': rf'$\Delta\chi_\mathregular{{ax}}$ / {unit_label}',
-                'rhombic': rf'$\Delta\chi_\mathregular{{rh}}$ / {unit_label}' #!!!!!
-            }
-        }
+    mask = np.isfinite(temperatures) & np.isfinite(isotropic) & np.isfinite(axial) & np.isfinite(rhombic) # noqa
+    if not np.any(mask):
+        return None, None
 
-        # Switch units
-        chi_component *= conv
-        if use_errors and chi_errors is not None:
-            chi_errors = np.asarray(chi_errors, dtype=float) * conv
+    temperatures = temperatures[mask]
+    isotropic = isotropic[mask]
+    axial = axial[mask]
+    rhombic = rhombic[mask]
 
-        if y_mode.lower() == 'chit':
-            chi_component *= temperature
-            if use_errors and chi_errors is not None:
-                chi_errors = chi_errors * temperature
+    inv_t = np.divide(1.0, temperatures, out=np.full_like(temperatures, np.nan), where=temperatures != 0) # noqa
 
-        if not use_errors:
-            ax.plot(
-                temperature,
-                chi_component,
-                lw=0,
-                marker='x',
-                ms=5,
-                color='black'
-            )
-        else:
-            ax.errorbar(
-                temperature,
-                chi_component,
-                yerr=chi_errors,
-                lw=0,
-                elinewidth=1.5,
-                fillstyle='none',
-                color='black',
-                capsize=1.5,
-                marker='x',
-                ms=5
-            )
+    finite_mask = np.isfinite(inv_t) & np.isfinite(isotropic) & np.isfinite(axial) & np.isfinite(rhombic) # noqa
+    temperatures = temperatures[finite_mask]
+    inv_t = inv_t[finite_mask]
+    isotropic = isotropic[finite_mask]
+    axial = axial[finite_mask]
+    rhombic = rhombic[finite_mask]
 
-        ax.set_xlabel(r'$T$ / K')
-        ax.set_ylabel(y_labels[y_mode][name])
-
-        ax.spines[['right', 'top']].set_visible(False)
-
-        if y_mode.lower() == 'chit':
-            # Prepare sigma only if there are positive errors; otherwise, fit unweighted
-            sigma = None
-            abs_sigma = False
-            if use_errors and chi_errors is not None:
-                # Ensure array and check for any strictly positive entries
-                _errs = np.asarray(chi_errors, dtype=float)
-                if np.any(_errs > 0):
-                    sigma = _errs
-                    abs_sigma = True
-            popt, pcov = curve_fit(
-                funk,
-                temperature,
-                chi_component,
-                sigma=sigma,
-                absolute_sigma=abs_sigma
-            )
-            perr = np.sqrt(np.diag(pcov))
-            # plot fit
-            ax.plot(temperature, funk(temperature, *popt))
-
-            # Calculate adjusted r2
-            ss_res = np.sum((chi_component - funk(temperature, *popt))**2)
-            ss_tot = np.sum((chi_component - np.mean(chi_component))**2)
-            r2 = 1 - (ss_res / ss_tot)
-            adj_r2 = 1 - (1 - r2) * (len(chi_component) - 1) / (len(chi_component) - 2 - 1) # noqa
-
-            # Add fit parameters and r2 to bottom plot area
-            # if use_errors:
-            params = rf'$A = {popt[0]:.1f} \pm {perr[0]:.1f} \ $' + unit_label + ' K\n' + rf'$B = {popt[1]:.1f} \pm {perr[1]:.1f} \ $' + unit_label + r' $\mathregular{K}^2$' # noqa
-            # else:
-            #     params = rf'$A = {popt[0]:.1f} \ $' + unit_label + ' K\n' + rf'$B = {popt[1]:.1f} \ $' + unit_label + ' $\mathregular{K}^2$' # noqa
-            bax.annotate(
-                text=rf'$r^2_\mathregular{{adj}} = {adj_r2:.3f}$' + '\n' + params, # noqa
-                xy=(0.1, 0.5),
-                xycoords='axes fraction'
-            )
-
-        # Add minor ticks
-        ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
-        ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
-
-        # Remove all bottom plot features to give an effective text box
-        bax.spines[['right', 'top', 'left', 'bottom']].set_visible(False)
-        bax.xaxis.set_ticks([])
-        bax.yaxis.set_ticks([])
-
-        if y_mode.lower() == 'chit':
-            return popt[0], popt[1]
-        else:
-            return 0, 0
-
-    fig, ax = plt.subplots(
-        2,
-        3,
-        figsize=[10, 3.5],
-        num=window_title,
-        gridspec_kw={'height_ratios': [10, 1]}
-    )
-
-    isotropic = np.array([molecule.susc.iso for molecule in molecules])
-    temperature = np.array([molecule.susc.temperature for molecule in molecules]) # noqa
-
-    axial = np.array([molecule.susc.axiality for molecule in molecules])
-    rhombic = np.array([molecule.susc.rhombicity for molecule in molecules])
-
-    if len(susc_models) and isinstance(susc_models[0], models.IsoAxRhoFitter):
-        if 'iso' in susc_models[0].fix_vars:
-            iso_err = np.zeros(len(susc_models))
-        else:
-            iso_err = np.array([model.fit_stdev['iso'] for model in susc_models]) # noqa
-        if 'ax' in susc_models[0].fix_vars:
-            axial_err = np.zeros(len(susc_models))
-        else:
-            axial_err = np.array([model.fit_stdev['ax'] for model in susc_models]) # noqa
-        if 'rho_over_ax' in susc_models[0].fix_vars:
-            rhombic_over_ax_err = np.zeros(len(susc_models))
-        else:
-            rhombic_over_ax_err = np.array([model.fit_stdev['rho_over_ax'] for model in susc_models]) # noqa
-        use_errors = True
-    else:
-        use_errors = False
-        iso_err = np.zeros(len(susc_models))
-        axial_err = np.zeros(len(susc_models))
-        rhombic_over_ax_err = np.zeros(len(susc_models))
-
-    # Use per-component weighting flags: do not weight if the parameter was fixed
+    conv, unit_label = _unit_conv(susc_units)
+    isotropic *= conv
+    axial *= conv
+    rhombic *= conv
     if len(susc_models) and isinstance(susc_models[0], models.IsoAxRhoFitter):
         _fix = susc_models[0].fix_vars
-    else:
-        _fix = {}
-    use_iso_errors = use_errors and ('iso' not in _fix)
-    use_ax_errors = use_errors and ('ax' not in _fix)
-    use_rh_errors = use_errors and ('rho_over_ax' not in _fix)
+        if 'iso' not in _fix:
+            iso_err = [model.fit_stdev['iso'] * conv for model in susc_models]
+        if 'ax' not in _fix:
+            axial_err = [model.fit_stdev['ax'] * conv for model in susc_models]
+        if 'rho_over_ax' not in _fix:
+            rhombic_err = [model.fit_stdev['rho_over_ax'] * conv for model in susc_models]
 
-    # Isotropic
-    if np.sum(np.abs(isotropic)) > 1E-8:
-        aiso, biso = fit_and_plot(
-            temperature,
-            isotropic,
-            y_mode,
-            ax[0, 0],
-            ax[1, 0],
-            'iso',
-            use_errors=use_iso_errors,
-            chi_errors=iso_err,
-            susc_units=susc_units
-        )
-    else:
-        aiso, biso = 0, 0
-        fig.delaxes(ax[0, 0])
-        fig.delaxes(ax[1, 0])
+    if iso_err is not None:
+        iso_err = [err for err, keep in zip(iso_err, mask) if keep]
+    if axial_err is not None:
+        axial_err = [err for err, keep in zip(axial_err, mask) if keep]
+    if rhombic_err is not None:
+        rhombic_err = [err for err, keep in zip(rhombic_err, mask) if keep]
 
-    # Axial
-    if np.sum(np.abs(axial)) > 1E-8:
-        aax, bax = fit_and_plot(
-            temperature,
-            axial,
-            y_mode,
-            ax[0, 1],
-            ax[1, 1],
-            'axial',
-            use_errors=use_ax_errors,
-            chi_errors=axial_err,
-            susc_units=susc_units
-        )
-    else:
-        aax, bax = 0, 0
-        fig.delaxes(ax[0, 1])
-        fig.delaxes(ax[1, 1])
+    if iso_err is not None:
+        iso_err = [err for err, keep in zip(iso_err, finite_mask) if keep]
+    if axial_err is not None:
+        axial_err = [err for err, keep in zip(axial_err, finite_mask) if keep]
+    if rhombic_err is not None:
+        rhombic_err = [err for err, keep in zip(rhombic_err, finite_mask) if keep]
 
-    if np.sum(np.abs(rhombic)) > 1E-8:
-        # Rhombic
-        arh, brh = fit_and_plot(
-            temperature,
-            rhombic,
-            y_mode,
-            ax[0, 2],
-            ax[1, 2],
-            'rhombic',
-            use_errors=use_rh_errors,
-            chi_errors=rhombic_over_ax_err,
-            susc_units=susc_units
-        )
-    else:
-        arh, brh = 0, 0
-        fig.delaxes(ax[0, 2])
-        fig.delaxes(ax[1, 2])
+    ylabel_base = rf'$\chi T$ / {unit_label} K' if y_mode.lower() == 'chit' else rf'$\chi$ / {unit_label}' # noqa
 
-    fig.tight_layout()
+    if y_mode.lower() == 'chit':
+        isotropic *= temperatures
+        axial *= temperatures
+        rhombic *= temperatures
+        if iso_err is not None:
+            iso_err = list(np.array(iso_err, dtype=float) * temperatures)
+        if axial_err is not None:
+            axial_err = list(np.array(axial_err, dtype=float) * temperatures)
+        if rhombic_err is not None:
+            rhombic_err = list(np.array(rhombic_err, dtype=float) * temperatures)
+
+    def _fit(comp: np.ndarray, errs: list[float] | None):
+        sig = errs if errs is not None and len(errs) == len(comp) else None
+        return weighted_linreg_predict(inv_t.tolist(), comp.tolist(), inv_t.tolist(), sigma=sig)
+
+    iso_pred, a_iso, b_iso, iso_std, a_iso_se, b_iso_se = _fit(isotropic, iso_err)
+    ax_pred, a_ax, b_ax, ax_std, a_ax_se, b_ax_se = _fit(axial, axial_err)
+    rho_pred, a_rho, b_rho, rho_std, a_rho_se, b_rho_se = _fit(rhombic, rhombic_err)
+
+    base, ext = os.path.splitext(save_name)
+    ext = ext if ext else '.png'
+    iso_out = f'{base}_iso{ext}'
+    ax_out = f'{base}_ax{ext}'
+    rho_out = f'{base}_rho{ext}'
 
     if save:
-        plt.savefig(save_name, dpi=500)
+        fig_iso, _ = _plot_component(
+            'blue',
+            inv_t.tolist(),
+            None,
+            None,
+            None,
+            inv_t.tolist(),
+            isotropic.tolist(),
+            iso_err,
+            iso_pred,
+            iso_std,
+            a_iso,
+            b_iso,
+            a_iso_se,
+            b_iso_se,
+            'iso',
+            iso_out,
+            ylabel_base=ylabel_base
+        )
+        plt.close(fig_iso)
+        fig_ax, _ = _plot_component(
+            'green',
+            inv_t.tolist(),
+            None,
+            None,
+            None,
+            inv_t.tolist(),
+            axial.tolist(),
+            axial_err,
+            ax_pred,
+            ax_std,
+            a_ax,
+            b_ax,
+            a_ax_se,
+            b_ax_se,
+            'ax',
+            ax_out,
+            ylabel_base=ylabel_base
+        )
+        plt.close(fig_ax)
+        fig_rho, _ = _plot_component(
+            'red',
+            inv_t.tolist(),
+            None,
+            None,
+            None,
+            inv_t.tolist(),
+            rhombic.tolist(),
+            rhombic_err,
+            rho_pred,
+            rho_std,
+            a_rho,
+            b_rho,
+            a_rho_se,
+            b_rho_se,
+            'rho',
+            rho_out,
+            ylabel_base=ylabel_base
+        )
+        plt.close(fig_rho)
+
+    fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True, num=window_title)
+    ax.plot(inv_t, isotropic, label=r'$\chi_{iso}$', color='blue', marker='o', linestyle='')
+    ax.plot(inv_t, axial, label=r'$\chi_{ax}$', color='green', marker='o', linestyle='')
+    ax.plot(inv_t, rhombic, label=r'$\chi_{rho}$', color='red', marker='o', linestyle='')
+
+    if iso_pred is not None:
+        ax.plot(inv_t, iso_pred, label=r'$\chi_{iso}$ LR', linestyle='-.', linewidth=1.5, color='blue') # noqa
+    if ax_pred is not None:
+        ax.plot(inv_t, ax_pred, label=r'$\chi_{ax}$ LR', linestyle='-.', linewidth=1.5, color='green') # noqa
+    if rho_pred is not None:
+        ax.plot(inv_t, rho_pred, label=r'$\chi_{rho}$ LR', linestyle='-.', linewidth=1.5, color='red') # noqa
+
+    if iso_err is not None:
+        ax.errorbar(inv_t, isotropic, yerr=iso_err, fmt='none', ecolor='blue', alpha=0.5, capsize=2) # noqa
+    if axial_err is not None:
+        ax.errorbar(inv_t, axial, yerr=axial_err, fmt='none', ecolor='green', alpha=0.5, capsize=2) # noqa
+    if rhombic_err is not None:
+        ax.errorbar(inv_t, rhombic, yerr=rhombic_err, fmt='none', ecolor='red', alpha=0.5, capsize=2) # noqa
+
+    legend = _finalize_axes(ax, inv_t.tolist(), inv_t.tolist(), 'All Components', base_ylabel=ylabel_base) # noqa
+    fig.canvas.draw()
+    legend_bbox = legend.get_window_extent()
+    ax_bbox = ax.get_window_extent()
+    if legend_bbox.y0 < ax_bbox.y1:
+        y_min, y_max = ax.get_ylim()
+        y_padding = (y_max - y_min) * 0.10
+        ax.set_ylim(y_min, y_max + y_padding)
+
+    if save:
+        plt.savefig(save_name, dpi=600)
         if verbose:
-            ut.cprint(
-                f'\n {y_mode} vs T plots saved to \n {save_name}\n',
-                'cyan'
-            )
+            ut.cprint(f'\n {y_mode} vs 1/T plots saved to \n {save_name}\n', 'cyan')
     if show:
         plt.show()
 
     if y_mode.lower() == 'chit':
-
         with open(out_file, 'w') as f:
+            _fmt = lambda v: f'{v:.6f}' if v is not None else 'nan'
             f.write('isotropic\n')
-            f.write(f'A = {aiso:.4f}      B = {biso:.4f}\n')
+            f.write(f'a = {_fmt(a_iso)}      b = {_fmt(b_iso)}\n')
             f.write('axial\n')
-            f.write(f'A = {aax:.4f}      B = {bax:.4f}\n')
+            f.write(f'a = {_fmt(a_ax)}      b = {_fmt(b_ax)}\n')
             f.write('rhombic\n')
-            f.write(f'A = {arh:.4f}      B = {brh:.4f}\n')
+            f.write(f'a = {_fmt(a_rho)}      b = {_fmt(b_rho)}\n')
     return fig, ax
 
 

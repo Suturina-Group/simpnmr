@@ -1,4 +1,4 @@
-#This file was generated with SimpNMR v0.0.1 at 20:26:51 28-11-2025 
+#This file was generated with SimpNMR v1.1.0 at 20:44:31 28-11-2025 
 chem_label,R1_total (s^-1),R2_total (s^-1),linewidth (Hz),R1_sbm_dipolar (s^-1),R1_sbm_contact (s^-1),R1_curie (s^-1)
 H_BDI_Me,3.68990e+02,6.01897e+02,1.91590e+02,3.28811e+02,9.60847e-02,4.00831e+01
 H_BDI_mH,1.38259e+02,2.18508e+02,6.95532e+01,1.23234e+02,2.73155e-03,1.50226e+01

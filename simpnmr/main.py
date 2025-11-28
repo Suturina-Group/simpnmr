@@ -2138,21 +2138,32 @@ class Molecule():
 
     def rotate_hyperfines(self, rot_mat: ArrayLike):
         '''
-        Rotates all hyperfine tensors of this molecule using specified\n
-        rotation matrix
+        Rotates all hyperfine tensors of this molecule using a specified
+        rotation matrix.
+
+        This applies the standard second-rank tensor rotation
+
+            A' = R . A . R^T
+
+        where R maps components from the *old* frame into the *new* frame.
 
         Parameters
         ----------
         rot_mat: array_like
-            Forward rotation matrix applied to hyperfine tensors as R^-1.A.R
+            Rotation matrix R applied to hyperfine tensors as:
+            A_new = R @ A_old @ R.T
 
         Returns
         -------
         None
         '''
 
+        rot_mat = np.asarray(rot_mat)
+        if rot_mat.shape != (3, 3):
+            raise ValueError('rot_mat must be a (3x3) rotation matrix')
+
         for nuc in self.nuclei:
-            nuc.A.tensor = la.inv(rot_mat) @ nuc.A.tensor @ rot_mat
+            nuc.A.tensor = rot_mat @ nuc.A.tensor @ rot_mat.T
 
         return
 
