@@ -466,6 +466,43 @@ def get_spin_only_susceptibility(uargs, temperature):
     return chi_only_iso
 
 
+def sbm_r1_dipolar(
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    gamma_I_dict,
+    omega_I_dict,
+    omega_S,
+    tau_c1,
+    tau_c2,
+    spin
+):
+    def J(omega, tau):
+        return tau / (1 + (omega * tau) ** 2)
+
+    rates = {}
+    for label in nuclei_labels:
+        r = np.linalg.norm(nuclei_coords[label] - electron_coords) * 1e-10
+        gamma_I = gamma_I_dict[label]
+        omega_I = omega_I_dict[label]
+        prefactor = (
+            (1 / 10)
+            * (1 / r**6)
+            * (MU0 / (4 * np.pi))**2
+            * (gamma_I * GE * MUB)**2
+            * spin * (spin + 1)
+        )
+        spectral_density = (
+            3 * J(omega_I, tau_c1)
+            + 6 * J(omega_I + omega_S, tau_c2)
+            + J(omega_I - omega_S, tau_c2)
+        )
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
 def sbm_r2_dipolar(
         nuclei_labels,
         nuclei_coords,
@@ -505,6 +542,35 @@ def sbm_r2_dipolar(
     return rates
 
 
+def sbm_r1_contact(
+    nuclei_labels,
+    Aiso_dict,
+    omega_I_dict,
+    omega_S,
+    tau_e2,
+    spin
+):
+    def J(omega, tau):
+        return tau / (1 + (omega * tau) ** 2)
+
+    rates = {}
+
+    for label in nuclei_labels:
+        Aiso = Aiso_dict[label]
+        omega_I = omega_I_dict[label]
+        prefactor = (
+            (2 / 3)
+            * Aiso**2
+            * spin * (spin + 1)
+        )
+        spectral_density = (
+            J(omega_I - omega_S, tau_e2)
+        )
+        rate = prefactor * spectral_density
+        rates[label] = rate
+    return rates
+
+
 def sbm_r2_contact(
         nuclei_labels,
         Aiso_dict,
@@ -536,13 +602,45 @@ def sbm_r2_contact(
     return rates
 
 
+def gueron_r1_curie(
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    omega_I_dict,
+    T,
+    tau_R,
+    spin
+):
+
+    def J(omega, tau):
+        return tau / (1 + (omega * tau) ** 2)
+
+    rates = {}
+
+    for label in nuclei_labels:
+        r = np.linalg.norm(nuclei_coords[label] - electron_coords) * 1e-10
+        omega_I = omega_I_dict[label]
+        prefactor = (
+            (2 / 5)
+            * (1 / r**6)
+            * (MU0 / (4 * np.pi))**2
+            * (omega_I / (3 * consts.k * T))**2
+            * (GE * MUB)**4
+            * (spin * (spin + 1))**2
+        )
+        spectral_density = (3 * J(omega_I, tau_R))
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
+
 def gueron_r2_curie(
         nuclei_labels,
         nuclei_coords,
         electron_coords,
-        gamma_I_dict,
         omega_I_dict,
-        B0,
         T,
         tau_R,
         spin
@@ -555,13 +653,12 @@ def gueron_r2_curie(
 
     for label in nuclei_labels:
         r = np.linalg.norm(nuclei_coords[label] - electron_coords) * 1e-10
-        gamma_I = gamma_I_dict[label]
         omega_I = omega_I_dict[label]
         prefactor = (
             (1 / 5)
             * (1 / r**6)
             * (MU0 / (4 * np.pi))**2
-            * (- gamma_I * B0 / (3 * consts.k * T))**2
+            * (omega_I / (3 * consts.k * T))**2
             * (GE * MUB)**4
             * (spin * (spin + 1))**2
         )

@@ -1060,11 +1060,31 @@ def predict_func(uargs):
             tau_e1 = config.relaxation_T1e
             tau_e2 = config.relaxation_T2e
             tau_R = config.relaxation_tR
-            # multiplicity = rdrs.read_gaussian_log_spin(config.hyperfine_file)
-            multiplicity = 5
+            multiplicity = rdrs.read_gaussian_log_spin(config.hyperfine_file)
             spin = (multiplicity - 1) / 2
             if config.relaxation_model == "sbm":
-                # Calculate SBM dipolar rates
+                # Calculate SBM dipolar rates (R1)
+                sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                    list(nuclei_coords.keys()),
+                    nuclei_coords,
+                    electron_coords,
+                    gamma_I_dict,
+                    omega_I_dict,
+                    omega_S,
+                    tau_c1,
+                    tau_c2,
+                    spin
+                )
+                # Calculate SBM contact rates (R1)
+                sbm_contact_r1_rates = ut.sbm_r1_contact(
+                    list(nuclei_coords.keys()),
+                    A_iso_dict,
+                    omega_I_dict,
+                    omega_S,
+                    tau_e2,
+                    spin
+                )
+                # Calculate SBM dipolar rates (R2)
                 sbm_dipolar_r2_rates = ut.sbm_r2_dipolar(
                     list(nuclei_coords.keys()),
                     nuclei_coords,
@@ -1076,7 +1096,7 @@ def predict_func(uargs):
                     tau_c2,
                     spin
                 )
-                # Calculate SBM contact rates
+                # Calculate SBM contact rates (R2)
                 sbm_contact_r2_rates = ut.sbm_r2_contact(
                     list(nuclei_coords.keys()),
                     A_iso_dict,
@@ -1087,28 +1107,61 @@ def predict_func(uargs):
                     spin
                 )
                 # Combine rates into a single dictionary
-                rates = {
+                rates_r1 = {
+                    label: sbm_dipolar_r1_rates[label] +
+                    sbm_contact_r1_rates[label]
+                    for label in nuclei_coords
+                }
+                rates_r2 = {
                     label: sbm_dipolar_r2_rates[label] +
                     sbm_contact_r2_rates[label]
                     for label in nuclei_coords
                 }
-            # Curie mechanism only
+            # Curie mechanism only (R1 and R2)
             elif config.relaxation_model == "curie":
+                curie_r1_rates = ut.gueron_r1_curie(
+                    list(nuclei_coords.keys()),
+                    nuclei_coords,
+                    electron_coords,
+                    omega_I_dict,
+                    config.relaxation_temperature,
+                    tau_R,
+                    spin
+                )
                 curie_r2_rates = ut.gueron_r2_curie(
+                    list(nuclei_coords.keys()),
+                    nuclei_coords,
+                    electron_coords,
+                    omega_I_dict,
+                    config.relaxation_temperature,
+                    tau_R,
+                    spin
+                )
+                rates_r1 = {label: curie_r1_rates[label]
+                            for label in nuclei_coords}
+                rates_r2 = {label: curie_r2_rates[label]
+                            for label in nuclei_coords}
+            # Combined SBM and Curie mechanisms
+            elif config.relaxation_model == "sbm curie" or config.relaxation_model == "curie sbm":  # noqa
+                sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
                     list(nuclei_coords.keys()),
                     nuclei_coords,
                     electron_coords,
                     gamma_I_dict,
                     omega_I_dict,
-                    B0,
-                    config.relaxation_temperature,
-                    tau_R,
+                    omega_S,
+                    tau_c1,
+                    tau_c2,
                     spin
                 )
-                rates = {label: curie_r2_rates[label]
-                         for label in nuclei_coords}
-            # Combined SBM and Curie mechanisms
-            elif config.relaxation_model == "sbm curie" or config.relaxation_model == "curie sbm":  # noqa
+                sbm_contact_r1_rates = ut.sbm_r1_contact(
+                    list(nuclei_coords.keys()),
+                    A_iso_dict,
+                    omega_I_dict,
+                    omega_S,
+                    tau_e1,
+                    spin
+                )
                 sbm_dipolar_r2_rates = ut.sbm_r2_dipolar(
                     list(nuclei_coords.keys()),
                     nuclei_coords,
@@ -1120,9 +1173,9 @@ def predict_func(uargs):
                     tau_c2,
                     spin
                 )
-                # print("SBM Dipolar Rates:")
-                # for label, rate in sbm_dipolar_r2_rates.items():
-                #     print(f"{label}: {rate:.3e} s^-1")
+                #print("SBM Dipolar Rates:")
+                #for label, rate in sbm_dipolar_r2_rates.items():
+                #    print(f"{label}: {rate:.3e} s^-1")
 
                 # Calculate SBM contact rates
                 sbm_contact_r2_rates = ut.sbm_r2_contact(
@@ -1137,14 +1190,20 @@ def predict_func(uargs):
                 # print("SBM Contact Rates:")
                 # for label, rate in sbm_contact_r2_rates.items():
                 #     print(f"{label}: {rate:.3e} s^-1")
-
+                curie_r1_rates = ut.gueron_r1_curie(
+                    list(nuclei_coords.keys()),
+                    nuclei_coords,
+                    electron_coords,
+                    omega_I_dict,
+                    config.relaxation_temperature,
+                    tau_R,
+                    spin
+                )
                 curie_r2_rates = ut.gueron_r2_curie(
                     list(nuclei_coords.keys()),
                     nuclei_coords,
                     electron_coords,
-                    gamma_I_dict,
                     omega_I_dict,
-                    B0,
                     config.relaxation_temperature,
                     tau_R,
                     spin
@@ -1153,28 +1212,92 @@ def predict_func(uargs):
                 # for label, rate in curie_r2_rates.items():
                 #     print(f"{label}: {rate:.3e} s^-1")
 
-                rates = {
+                rates_r1 = {
+                    label: sbm_dipolar_r1_rates[label] + sbm_contact_r1_rates[label] + curie_r1_rates[label]  # noqa
+                    for label in nuclei_coords
+                }
+                rates_r2 = {
                     label: sbm_dipolar_r2_rates[label] + sbm_contact_r2_rates[label] + curie_r2_rates[label]  # noqa
                     for label in nuclei_coords
                 }
 
+
             # Group rates by chemical label
-            rates_by_chem_label = defaultdict(list)
+            r1_by_chem_label = defaultdict(list)
             for nuc in base_molecule.nuclei:
-                if nuc.label in rates:
-                    rates_by_chem_label[nuc.chem_label].append(
-                        rates[nuc.label])
+                if nuc.label in rates_r1:
+                    r1_by_chem_label[nuc.chem_label].append(
+                        rates_r1[nuc.label])
+            r2_by_chem_label = defaultdict(list)
+            for nuc in base_molecule.nuclei:
+                if nuc.label in rates_r2:
+                    r2_by_chem_label[nuc.chem_label].append(
+                        rates_r2[nuc.label])
+            # Calculate average R1 rates for each chemical label
+            avg_r1_by_chem_label = {
+                chem_label: np.mean(rate_list)
+                for chem_label, rate_list in r1_by_chem_label.items()
+            }
+            print("\033[1m Average R1 rates by chemical label (s^-1):\033[0m")
+            for chem_label, r1 in avg_r1_by_chem_label.items():
+                print(f"{chem_label}: R₁ = {r1:.3e} s^-1")
+            # Calculate average R2 rates for each chemical label
+            avg_r2_by_chem_label = {
+                chem_label: np.mean(rate_list)
+                for chem_label, rate_list in r2_by_chem_label.items()
+            }
+            print("\033[1m Average R2 rates by chemical label (s^-1):\033[0m")
+            for chem_label, r2 in avg_r2_by_chem_label.items():
+                print(f"{chem_label}: R₂ = {r2:.3e} s^-1")
             # Calculate average linewidths for each chemical label
             avg_lw_by_chem_label = {
                 chem_label: np.mean([rate / np.pi for rate in rate_list])
-                for chem_label, rate_list in rates_by_chem_label.items()
+                for chem_label, rate_list in r2_by_chem_label.items()
             }
-
-            # print("Average linewidths by chemical label (Hz):")
-            # for chem_label, lw in avg_lw_by_chem_label.items():
-            #     print(f"{chem_label}: {lw:.3e} Hz")
-            # Assign average linewidths to nuclei in the molecule (in ppm)
+            print("\033[1m Average linewidths by chemical label (Hz):\033[0m")
+            for chem_label, lw in avg_lw_by_chem_label.items():
+                print(f"{chem_label}: λ = {lw:.3e} Hz")
+                #Assign average linewidths to nuclei in the molecule (in ppm)
             
+            if 'sbm' in config.relaxation_model:
+                dipolar_by_chem_label = defaultdict(list)
+                contact_by_chem_label = defaultdict(list)
+                for nuc in base_molecule.nuclei:
+                    if 'sbm_dipolar_r1_rates' in locals() and nuc.label in sbm_dipolar_r1_rates:
+                        dipolar_by_chem_label[nuc.chem_label].append(
+                            sbm_dipolar_r1_rates[nuc.label])
+                    if 'sbm_contact_r1_rates' in locals() and nuc.label in sbm_contact_r1_rates:
+                        contact_by_chem_label[nuc.chem_label].append(
+                            sbm_contact_r1_rates[nuc.label])
+                avg_dipolar_by_chem_label = {
+                    chem_label: np.mean(rate_list)
+                    for chem_label, rate_list in dipolar_by_chem_label.items()
+                }
+                avg_contact_by_chem_label = {
+                    chem_label: np.mean(rate_list)
+                    for chem_label, rate_list in contact_by_chem_label.items()
+                }
+                print("\033[1m Average SBM Dipolar R1 rates by chemical label (s^-1):\033[0m]")
+                for chem_label, r1 in avg_dipolar_by_chem_label.items():
+                    print(f"{chem_label}: R₁(dipolar) = {r1:.3e} s^-1")
+                print("\033[1m Average SBM Contact R1 rates by chemical label (s^-1):\033[0m]")
+                for chem_label, r1 in avg_contact_by_chem_label.items():
+                    print(f"{chem_label}: R₁(contact) = {r1:.3e} s^-1")
+
+            if 'curie' in config.relaxation_model:
+                curie_by_chem_label = defaultdict(list)
+                for nuc in base_molecule.nuclei:
+                    if 'curie_r1_rates' in locals() and nuc.label in curie_r1_rates:
+                        curie_by_chem_label[nuc.chem_label].append(
+                            curie_r1_rates[nuc.label])
+                avg_curie_by_chem_label = {
+                    chem_label: np.mean(rate_list)
+                    for chem_label, rate_list in curie_by_chem_label.items()
+                }
+                print("\033[1m Average Curie R1 rates by chemical label (s^-1):\033[0m")
+                for chem_label, r1 in avg_curie_by_chem_label.items():
+                    print(f"{chem_label}: R₁(Curie) = {r1:.3e} s^-1") 
+
             for nuc in base_molecule.nuclei:
                 if nuc.chem_label in avg_lw_by_chem_label:
                     nuc.shift.lw = avg_lw_by_chem_label[nuc.chem_label] / (abs(omega_I_dict[nuc.label]) / (2 * np.pi)) * 1e6  # noqa
