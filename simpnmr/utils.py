@@ -449,6 +449,37 @@ def isotope_format(isotope_string: str) -> str:
 
     return r'$^\mathregular{{{}}} \mathregular{{{}}}$'.format(nums, lets)
 
+
+def tensor_invariants(tensor: NDArray) -> tuple[float, float, float]:
+    """
+    Returns two scalar invariants of a second-rank tensor:
+
+    I2 = T_xx - T_yy)^2 + (T_yy - T_zz)^2 + (T_zz - T_xx)^2
+    I3 = (2*T_xy)^2 + (2*T_xz)^2 + (2*T_yz)^2
+    """
+    tensor = np.asarray(tensor, dtype=float)
+
+    I1 = (
+        (tensor[0, 1] - tensor[1, 0])**2
+        + (tensor[0, 2] - tensor[2, 0])**2
+        + (tensor[1, 2] - tensor[2, 1])**2
+    )
+
+    I2 = (
+        (tensor[0, 0] - tensor[1, 1])**2
+        + (tensor[1, 1] - tensor[2, 2])**2
+        + (tensor[2, 2] - tensor[0, 0])**2
+    )
+
+    I3 = (
+        (tensor[0, 1] + tensor[1, 0])**2
+        + (tensor[0, 2] + tensor[2, 0])**2
+        + (tensor[1, 2] + tensor[2, 0])**2
+    )
+
+    return I1, I2, I3
+
+
 def calc_g_eff(spin: float, orbit: float, total_momentum_J: float | None):
     """Compute an effective electron g-factor.
 
@@ -511,7 +542,8 @@ def choose_S_eff(spin: float, total_momentum_J: float | None):
     """
 
     return spin if total_momentum_J is None else total_momentum_J
-    
+
+
 def get_spin_only_susceptibility(
     spin: float,
     orbit: float,
@@ -625,6 +657,10 @@ def get_true_iso_susceptibility(
     return chi_true_iso
 
 
+def spectral_density_J(omega, tau):
+    return tau / (1.0 + (omega * tau) ** 2)
+
+
 def sbm_r1_dipolar(
     nuclei_labels,
     nuclei_coords,
@@ -680,9 +716,6 @@ def sbm_r1_dipolar(
         Mapping from nucleus label to R1 dipolar relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective g-factor and angular momentum entering the prefactor
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
     S_eff = choose_S_eff(spin, total_momentum_J)
@@ -702,9 +735,9 @@ def sbm_r1_dipolar(
             * S_eff * (S_eff + 1)
         )
         spectral_density = (
-            3 * J(omega_I, tau_c1)
-            + 6 * J(omega_I + omega_S, tau_c2)
-            + J(omega_I - omega_S, tau_c2)
+            3 * spectral_density_J(omega_I, tau_c1)
+            + 6 * spectral_density_J(omega_I + omega_S, tau_c2)
+            + spectral_density_J(omega_I - omega_S, tau_c2)
         )
         rate = prefactor * spectral_density
         rates[label] = rate
@@ -766,9 +799,6 @@ def sbm_r2_dipolar(
         Mapping from nucleus label to R2 dipolar relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective g-factor and angular momentum entering the prefactor
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
     S_eff = choose_S_eff(spin, total_momentum_J)
@@ -788,11 +818,11 @@ def sbm_r2_dipolar(
             * S_eff * (S_eff + 1)
         )
         spectral_density = (
-            4 * J(0, tau_c1)
-            + 3 * J(omega_I, tau_c1)
-            + 6 * J(omega_S, tau_c2)
-            + 6 * J(omega_I + omega_S, tau_c2)
-            + J(omega_I - omega_S, tau_c2)
+            4 * spectral_density_J(0, tau_c1)
+            + 3 * spectral_density_J(omega_I, tau_c1)
+            + 6 * spectral_density_J(omega_S, tau_c2)
+            + 6 * spectral_density_J(omega_I + omega_S, tau_c2)
+            + spectral_density_J(omega_I - omega_S, tau_c2)
         )
         rate = prefactor * spectral_density
         rates[label] = rate
@@ -840,9 +870,6 @@ def sbm_r1_contact(
         Mapping from nucleus label to R1 contact relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective angular momentum quantum number for the contact term
     S_eff = choose_S_eff(spin, total_momentum_J)
 
@@ -858,7 +885,7 @@ def sbm_r1_contact(
             * S_eff * (S_eff + 1)
         )
         spectral_density = (
-            J(omega_I - omega_S, tau_e2)
+            spectral_density_J(omega_I - omega_S, tau_e2)
         )
         rate = prefactor * spectral_density
         rates[label] = rate
@@ -909,9 +936,6 @@ def sbm_r2_contact(
         Mapping from nucleus label to R2 contact relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective angular momentum quantum number for the contact term
     S_eff = choose_S_eff(spin, total_momentum_J)
 
@@ -927,8 +951,8 @@ def sbm_r2_contact(
             * S_eff * (S_eff + 1)
         )
         spectral_density = (
-            J(0, tau_e1)
-            + J(omega_I - omega_S, tau_e2)
+            spectral_density_J(0, tau_e1)
+            + spectral_density_J(omega_I - omega_S, tau_e2)
         )
         rate = prefactor * spectral_density
         rates[label] = rate
@@ -981,9 +1005,6 @@ def gueron_r1_curie(
         Mapping from nucleus label to R1 Curie relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective g-factor and angular momentum entering the Curie term
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
     S_eff = choose_S_eff(spin, total_momentum_J)
@@ -1002,7 +1023,7 @@ def gueron_r1_curie(
             * (g_eff * MUB)**4
             * (S_eff * (S_eff + 1))**2
         )
-        spectral_density = (3 * J(omega_I, tau_R))
+        spectral_density = (3 * spectral_density_J(omega_I, tau_R))
         rate = prefactor * spectral_density
         rates[label] = rate
 
@@ -1055,9 +1076,6 @@ def gueron_r2_curie(
         Mapping from nucleus label to R2 Curie relaxation rate (s^-1).
     """
 
-    def J(omega, tau):
-        return tau / (1 + (omega * tau) ** 2)
-
     # Effective g-factor and angular momentum entering the Curie term
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
     S_eff = choose_S_eff(spin, total_momentum_J)
@@ -1076,8 +1094,155 @@ def gueron_r2_curie(
             * (g_eff * MUB)**4
             * (S_eff * (S_eff + 1))**2
         )
-        spectral_density = (4 * J(0, tau_R) + 3 * J(omega_I, tau_R))
+        spectral_density = (4 * spectral_density_J(0, tau_R) +
+                            3 * spectral_density_J(omega_I, tau_R))
         rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
+def r1_zfs_anisotropic_curie(
+        nuclei_labels,
+        nuclei_coords,
+        electron_coords,
+        omega_I_dict,
+        susc_tensor,
+        dia_tensor,
+        tau_R
+):
+    """
+    As described in DOI: 10.1039/c8cp01332b, equation (17).
+    """
+    rates = {}
+
+    for label in nuclei_labels:
+
+        # Get electron-nuclea distance vector and magnitude
+        r_vec = nuclei_coords[label] - electron_coords
+        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+
+        # Construct dipolar and shielding tensors
+        dipolar_tensor = (1.0 / (4.0 * np.pi)) * (3.0 * (np.outer(r_vec, r_vec) / r**5) - (1.0 / r**3) * np.eye(3))  # noqa
+        shielding_tensor = dia_tensor - (dipolar_tensor @ susc_tensor)
+
+        # Calculate first- and second-rank invariants
+        I1, I2, I3 = tensor_invariants(shielding_tensor)
+        Lambda_first_rank = np.sqrt(I1)
+        Lambda_second_rank = np.sqrt(I2 + I3)
+
+        omega_I = omega_I_dict[label]
+
+        rate_rank1 = (0.5) * Lambda_first_rank**2 * omega_I**2 * spectral_density_J(3*omega_I, tau_R)  # noqa
+        rate_rank2 = (2.0 / 15.0) * Lambda_second_rank**2 * omega_I**2 * spectral_density_J(omega_I, tau_R)  # noqa
+        rate = rate_rank1 + rate_rank2
+
+        rates[label] = rate
+
+    return rates
+
+
+def r2_zfs_anisotropic_curie(
+        nuclei_labels,
+        nuclei_coords,
+        electron_coords,
+        omega_I_dict,
+        susc_tensor,
+        dia_tensor,
+        tau_R
+):
+    """
+    As described in DOI: 10.1039/c8cp01332b, equation (17).
+    """
+    rates = {}
+
+    for label in nuclei_labels:
+
+        # Get electron-nuclea distance vector and magnitude
+        r_vec = nuclei_coords[label] - electron_coords
+        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+
+        # Construct dipolar and shielding tensors
+        dipolar_tensor = (1.0 / (4.0 * np.pi)) * (3.0 * (np.outer(r_vec, r_vec) / r**5) - (1.0 / r**3) * np.eye(3))  # noqa
+        shielding_tensor = dia_tensor - (dipolar_tensor @ susc_tensor)
+
+        # Calculate first- and second-rank invariants
+        I1, I2, I3 = tensor_invariants(shielding_tensor)
+        Lambda_first_rank = np.sqrt(I1)
+        Lambda_second_rank = np.sqrt(I2 + I3)
+
+        omega_I = omega_I_dict[label]
+
+        rate_rank1 = (0.25) * Lambda_first_rank**2 * omega_I**2 * spectral_density_J(3*omega_I, tau_R)  # noqa
+        rate_rank2 = (1.0 / 45.0) * Lambda_second_rank**2 * omega_I**2 * (4.0 * spectral_density_J(0, tau_R) + spectral_density_J(omega_I, tau_R))  # noqa
+        rate = rate_rank1 + rate_rank2
+
+        rates[label] = rate
+
+    return rates
+
+
+def r1_zfs_anisotropic_dipolar(
+        nuclei_labels,
+        nuclei_coords,
+        electron_coords,
+        gamma_I_dict,
+        spectral_density_tensor_omega,
+):
+    """
+    As described in DOI: 10.1039/c8cp01332b, equation (31).
+    """
+    rates = {}
+
+    for label in nuclei_labels:
+
+        r_vec = nuclei_coords[label] - electron_coords
+        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+        r_unit = r_vec / np.linalg.norm(r_vec)
+
+        G_omega = spectral_density_tensor_omega
+        gamma_I = gamma_I_dict[label]
+        prefactor = (2.0/3.0) * (MU0 / (4.0 * np.pi))**2 * \
+            (1.0 / r**6) * gamma_I**2
+        spectral_density = (3.0 * (np.outer(r_unit, r_unit)) - np.eye(3))**2 @ G_omega  # noqa
+
+        rate = prefactor * spectral_density
+
+        rates[label] = rate
+
+    return rates
+
+
+def r2_zfs_anisotropic_dipolar(
+        nuclei_labels,
+        nuclei_coords,
+        electron_coords,
+        gamma_I_dict,
+        spectral_density_tensor_zero,
+        spectral_density_tensor_omega
+):
+    """
+    As described in DOI: 10.1039/c8cp01332b, equation (31).
+    """
+    rates = {}
+
+    for label in nuclei_labels:
+
+        r_vec = nuclei_coords[label] - electron_coords
+        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+        r_unit = r_vec / np.linalg.norm(r_vec)
+
+        G_zero = spectral_density_tensor_zero
+        G_omega = spectral_density_tensor_omega
+        gamma_I = gamma_I_dict[label]
+
+        prefactor = (1.0/3.0) * (MU0 / (4.0 * np.pi))**2 * \
+            (1.0 / r**6) * gamma_I**2
+        spectral_density = (3.0 * (np.outer(r_unit, r_unit)) -
+                            np.eye(3))**2 @ (G_zero + G_omega)
+
+        rate = prefactor * spectral_density
+
         rates[label] = rate
 
     return rates

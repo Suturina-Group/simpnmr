@@ -562,7 +562,7 @@ class FitSuscConfig(Config):
     @spin_multiplicity.setter
     def spin_multiplicity(self, value: float | None):
         self._spin_multiplicity = value
-        
+
     @property
     def spin_file(self) -> str:
         return self._spin_file
@@ -574,7 +574,7 @@ class FitSuscConfig(Config):
     @property
     def hyperfine_spin(self) -> float | None:
         return self._spin_S
-    
+
     @hyperfine_spin.setter
     def hyperfine_spin(self, value):
         if isinstance(value, (list, tuple)):
@@ -582,20 +582,21 @@ class FitSuscConfig(Config):
         try:
             self._spin_S = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: spin={value} to float')
-        
+            raise ValueError(
+                f'Cannot convert hyperfine: spin={value} to float')
+
     @property
     def orbit(self) -> float | None:
         return self._orbit
-    
+
     @orbit.setter
     def orbit(self, value: float | None):
         self._orbit = value
-    
+
     @property
     def hyperfine_orbit(self) -> float | None:
         return self._orbit
-    
+
     @hyperfine_orbit.setter
     def hyperfine_orbit(self, value: float | None):
         if value is None:
@@ -604,12 +605,13 @@ class FitSuscConfig(Config):
         try:
             self._orbit = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: orbit={value} to float')
+            raise ValueError(
+                f'Cannot convert hyperfine: orbit={value} to float')
 
     @property
     def total_momentum_J(self) -> float | None:
         return self._total_momentum_J
-    
+
     @total_momentum_J.setter
     def total_momentum_J(self, value: float | None):
         self._total_momentum_J = value
@@ -626,8 +628,8 @@ class FitSuscConfig(Config):
         try:
             self._total_momentum_J = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: total momentum J={value} to float')
-
+            raise ValueError(
+                f'Cannot convert hyperfine: total momentum J={value} to float')
 
     @classmethod
     def from_file(cls, file_name) -> 'FitSuscConfig':
@@ -721,6 +723,9 @@ class PredictConfig(FitSuscConfig):
         ],
         'relaxation': [
             'model',
+            'diamagnetic_tensor',
+            'spectral_density_tensor_omega',
+            'spectral_density_tensor_0',
             'electron_coords',
             'magnetic_field_tesla',
             'temperature',
@@ -736,6 +741,9 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_format = ''
         self._susceptibility_temperatures = []
         self._relaxation_model = ''
+        self._relaxation_diamagnetic_tensor = None
+        self._relaxation_spectral_density_tensor_omega = None
+        self._relaxation_spectral_density_tensor_0 = None
         self._relaxation_electron_coords = None
         self._relaxation_magnetic_field_tesla = None
         self._relaxation_temperature = None
@@ -789,10 +797,88 @@ class PredictConfig(FitSuscConfig):
 
     @relaxation_model.setter
     def relaxation_model(self, value: str):
-        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm']:
+        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm', 'zfs_anisotropic_curie', 'zfs_anisotropic_dipolar']:
             raise ValueError(f'Unknown relaxation: model {value}')
         else:
             self._relaxation_model = value.lower()
+        return None
+
+    @property
+    def relaxation_diamagnetic_tensor(self) -> list[list[float], list[float], list[float]] | None:
+        return self._relaxation_diamagnetic_tensor
+
+    @relaxation_diamagnetic_tensor.setter
+    def relaxation_diamagnetic_tensor(self, value: list[list[float], list[float], list[float]] | None):
+        if value is None:
+            self._relaxation_diamagnetic_tensor = None
+            return None
+        if isinstance(value, list) and len(value) == 3:
+            try:
+                tensor = []
+                for row in value:
+                    if not isinstance(row, (list, tuple)) or len(row) != 3:
+                        raise ValueError(
+                            f"Each row of diamagnetic_tensor must be a list of 3 floats")
+                    tensor.append([float(val) for val in row])
+                self._relaxation_diamagnetic_tensor = tensor
+            except Exception:
+                raise ValueError(
+                    f"Cannot convert diamagnetic_tensor {value} to 3x3 list of floats")
+        else:
+            raise ValueError(
+                f"diamagnetic_tensor must be a list of 3 lists, each with 3 floats")
+        return None
+    
+    @property
+    def relaxation_spectral_density_tensor_omega(self) -> list[list[float], list[float], list[float]] | None:
+        return self._relaxation_spectral_density_tensor_omega
+    
+    @relaxation_spectral_density_tensor_omega.setter
+    def relaxation_spectral_density_tensor_omega(self, value: list[list[float], list[float], list[float]] | None):
+        if value is None:
+            self._relaxation_spectral_density_tensor_omega = None
+            return None
+        if isinstance(value, list) and len(value) == 3:
+            try:
+                tensor = []
+                for row in value:
+                    if not isinstance(row, (list, tuple)) or len(row) != 3:
+                        raise ValueError(
+                            f"Each row of spectral_density_tensor_omega must be a list of 3 floats")
+                    tensor.append([float(val) for val in row])
+                self._relaxation_spectral_density_tensor_omega = tensor
+            except Exception:
+                raise ValueError(
+                    f"Cannot convert spectral_density_tensor_omega {value} to 3x3 list of floats")
+        else:
+            raise ValueError(
+                f"spectral_density_tensor_omega must be a list of 3 lists, each with 3 floats")
+        return None
+    
+    @property
+    def relaxation_spectral_density_tensor_0(self) -> list[list[float], list[float], list[float]] | None:
+        return self._relaxation_spectral_density_tensor_0
+    
+    @relaxation_spectral_density_tensor_0.setter
+    def relaxation_spectral_density_tensor_0(self, value: list[list[float], list[float], list[float]] | None):
+        if value is None:
+            self._relaxation_spectral_density_tensor_0 = None
+            return None
+        if isinstance(value, list) and len(value) == 3:
+            try:
+                tensor = []
+                for row in value:
+                    if not isinstance(row, (list, tuple)) or len(row) != 3:
+                        raise ValueError(
+                            f"Each row of spectral_density_tensor_0 must be a list of 3 floats")
+                    tensor.append([float(val) for val in row])
+                self._relaxation_spectral_density_tensor_0 = tensor
+            except Exception:
+                raise ValueError(
+                    f"Cannot convert spectral_density_tensor_0 {value} to 3x3 list of floats")
+        else:
+            raise ValueError(
+                f"spectral_density_tensor_0 must be a list of 3 lists, each with 3 floats")
         return None
 
     @property

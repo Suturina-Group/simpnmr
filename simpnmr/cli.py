@@ -1090,7 +1090,6 @@ def predict_func(uargs):
         except SystemExit:
             spin = None
 
-
     if 'orca' in config.susceptibility_format:
         section = config.susceptibility_format.split('orca_')[1]
         g_tensor = rdrs.read_orca_g_tensor(
@@ -1238,17 +1237,18 @@ def predict_func(uargs):
 
     return
 
+
 def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molecule):
     """
     Calculate linewidths using a user-specified relaxation model (optional).
     This function modifies base_molecule.nuclei in-place by updating
     nuc.shift.lw where appropriate.
     """
-        
+
     # Solomon linewidths if relaxation model is SBM
     nuclei_labels = config.nuclei_include if isinstance(
         config.nuclei_include, list) else [config.nuclei_include]
-    
+
     # Use all nuclei in the molecule that match the requested element(s)
     nuclei_coords = {
         nuc.label: nuc.coord
@@ -1273,7 +1273,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             for nuc in base_molecule.nuclei
             if nuc.label in nuclei_coords
         }
-        
+
     gamma_I_dict = {
         label: ut.NUCLEAR_GAMMAS[ut.st.remove_numbers(
             label)] * 2 * np.pi * 1e6
@@ -1285,9 +1285,9 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
     }
     omega_S = ut.EGAMMA * B0 * 2 * np.pi * 1e6
     tau_c1 = 1 / ((1 / config.relaxation_tR) +
-                    (1 / config.relaxation_T1e))
+                  (1 / config.relaxation_T1e))
     tau_c2 = 1 / ((1 / config.relaxation_tR) +
-                    (1 / config.relaxation_T2e))
+                  (1 / config.relaxation_T2e))
     tau_e1 = config.relaxation_T1e
     tau_e2 = config.relaxation_T2e
     tau_R = config.relaxation_tR
@@ -1390,7 +1390,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
                     for label in nuclei_coords}
         rates_r2 = {label: curie_r2_rates[label]
                     for label in nuclei_coords}
-        
+
     # Combined SBM and Curie mechanisms
     elif config.relaxation_model == "sbm curie" or config.relaxation_model == "curie sbm":  # noqa
         sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
@@ -1473,19 +1473,92 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             for label in nuclei_coords
         }
 
-    # Group rates by chemical label
+    elif config.relaxation_model == 'zfs_anisotropic_curie':
+        if 'orca' in config.susceptibility_format:
+            susc = main.Susceptibility.from_orca(
+                config.susceptibility_file,
+                section=config.susceptibility_format.split('orca_')[1]
+            )
+        elif 'csv' in config.susceptibility_format:
+            susc = main.Susceptibility.from_csv(
+                config.susceptibility_file
+            )
+        else:
+            ut.red_exit('Only ORCA/CSV files are currently supported for ZFS anisotropy relaxation model')  # noqa
+
+        susc_tensors = [s for s in susc if s.temperature in config.susceptibility_temperatures]  # noqa
+        if not susc_tensors:
+            ut.red_exit(
+                'Error: No susceptibility data found for specified temperature(s)'
+            )
+        dia_tensor = config.relaxation_diamagnetic_tensor
+        susc_tensor = susc_tensors[0].tensor
+
+        zfs_aniso_curie_r1_rates = ut.r1_zfs_anisotropic_curie(
+            list(nuclei_coords.keys()),
+            nuclei_coords,
+            electron_coords,
+            omega_I_dict,
+            susc_tensor,
+            dia_tensor,
+            tau_R
+        )
+
+        zfs_aniso_curie_r2_rates = ut.r2_zfs_anisotropic_curie(
+            list(nuclei_coords.keys()),
+            nuclei_coords,
+            electron_coords,
+            omega_I_dict,
+            susc_tensor,
+            dia_tensor,
+            tau_R
+        )
+
+        rates_r1 = {label: zfs_aniso_curie_r1_rates[label]
+                    for label in nuclei_coords}
+        rates_r2 = {label: zfs_aniso_curie_r2_rates[label]
+                    for label in nuclei_coords}
+
+    elif config.relaxation_model == 'zfs_anisotropic_dipolar':
+
+        spec_dens_tensor_zero = config.relaxation_spectral_density_tensor_0  # noqa
+        spec_dens_tensor_omega = config.relaxation_spectral_density_tensor_omega  # noqa
+
+        zfs_anisotriopic_dipolar_r1_rates = ut.r1_zfs_anisotropic_dipolar(
+            list(nuclei_coords.keys()),
+            nuclei_coords,
+            electron_coords,
+            gamma_I_dict,
+            spec_dens_tensor_omega
+        )
+
+        zfs_anisotriopic_dipolar_r2_rates = ut.r2_zfs_anisotropic_dipolar(
+            list(nuclei_coords.keys()),
+            nuclei_coords,
+            electron_coords,
+            gamma_I_dict,
+            spec_dens_tensor_zero,
+            spec_dens_tensor_omega
+        )
+
+        rates_r1 = {label: zfs_anisotriopic_dipolar_r1_rates[label]
+                    for label in nuclei_coords}
+        rates_r2 = {label: zfs_anisotriopic_dipolar_r2_rates[label]
+                    for label in nuclei_coords}
+
+        # Group rates by chemical label
     r1_by_chem_label = defaultdict(list)
     for nuc in base_molecule.nuclei:
         if nuc.label in rates_r1:
             r1_by_chem_label[nuc.chem_label].append(
                 rates_r1[nuc.label])
-            
+
     r2_by_chem_label = defaultdict(list)
     for nuc in base_molecule.nuclei:
         if nuc.label in rates_r2:
             r2_by_chem_label[nuc.chem_label].append(
                 rates_r2[nuc.label])
-            
+
     # Calculate average R1 rates for each chemical label
     avg_r1_by_chem_label = {
         chem_label: np.mean(rate_list)
@@ -1559,6 +1632,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             nuc.shift.lw = avg_lw_by_chem_label[nuc.chem_label] / (abs(omega_I_dict[nuc.label]) / (2 * np.pi)) * 1e6  # noqa
 
     return
+
 
 def fit_corr_time_func(uargs):
     '''
@@ -1818,7 +1892,6 @@ def fit_corr_time_func(uargs):
 
                 return np.array(theory_all)
 
-
             # --- Run the fit ---
             if tau_E_bounds:
                 popt, pcov = curve_fit(
@@ -1958,7 +2031,6 @@ def fit_corr_time_func(uargs):
                     # Return predicted R1 rates for the indices in chem_labels
                     # indices = np.round(chem_label_indices).astype(int)
                     # return np.array([avg_r1_by_chem_label.get(chem_labels[i], np.nan) for i in indices])
-
 
         # --- Run the fit ---
             if tau_R_bounds:
