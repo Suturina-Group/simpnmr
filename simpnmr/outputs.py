@@ -53,48 +53,48 @@ def save_susc(molecules: list[main.Molecule],
 
     # And write susceptibility tensor to csv
     out = {
-        'Temperature (K)': [molecule.susc.temperature for molecule in molecules], # noqa
-        f'chi_iso ({unit_label})': [molecule.susc.iso * conv for molecule in molecules], # noqa
+        'Temperature (K)': [molecule.susc.temperature for molecule in molecules],  # noqa
+        f'chi_iso ({unit_label})': [molecule.susc.iso * conv for molecule in molecules],  # noqa
         f'chi_iso-s-dev ({unit_label})': None,
-        f'chi_xx ({unit_label})': [molecule.susc.tensor[0, 0] * conv for molecule in molecules], # noqa
+        f'chi_xx ({unit_label})': [molecule.susc.tensor[0, 0] * conv for molecule in molecules],  # noqa
         f'chi_xx-s-dev ({unit_label})': None,
-        f'chi_xy ({unit_label})': [molecule.susc.tensor[0, 1] * conv for molecule in molecules], # noqa
+        f'chi_xy ({unit_label})': [molecule.susc.tensor[0, 1] * conv for molecule in molecules],  # noqa
         f'chi_xy-s-dev ({unit_label})': None,
-        f'chi_xz ({unit_label})': [molecule.susc.tensor[0, 2] * conv for molecule in molecules], # noqa
+        f'chi_xz ({unit_label})': [molecule.susc.tensor[0, 2] * conv for molecule in molecules],  # noqa
         f'chi_xz-s-dev ({unit_label})': None,
-        f'chi_yy ({unit_label})': [molecule.susc.tensor[1, 1] * conv for molecule in molecules], # noqa
+        f'chi_yy ({unit_label})': [molecule.susc.tensor[1, 1] * conv for molecule in molecules],  # noqa
         f'chi_yy-s-dev ({unit_label})': None,
-        f'chi_yz ({unit_label})': [molecule.susc.tensor[1, 2] * conv for molecule in molecules], # noqa
+        f'chi_yz ({unit_label})': [molecule.susc.tensor[1, 2] * conv for molecule in molecules],  # noqa
         f'chi_yz-s-dev ({unit_label})': None,
-        f'chi_zz ({unit_label})': [molecule.susc.tensor[2, 2] * conv for molecule in molecules], # noqa
+        f'chi_zz ({unit_label})': [molecule.susc.tensor[2, 2] * conv for molecule in molecules],  # noqa
         f'chi_zz-s-dev ({unit_label})': None,
-        f'dchi_xx ({unit_label})': [molecule.susc.dtensor[0, 0] * conv for molecule in molecules], # noqa
+        f'dchi_xx ({unit_label})': [molecule.susc.dtensor[0, 0] * conv for molecule in molecules],  # noqa
         f'dchi_xx-s-dev ({unit_label})': None,
-        f'dchi_xy ({unit_label})': [molecule.susc.dtensor[0, 1] * conv for molecule in molecules], # noqa
+        f'dchi_xy ({unit_label})': [molecule.susc.dtensor[0, 1] * conv for molecule in molecules],  # noqa
         f'dchi_xy-s-dev ({unit_label})': None,
-        f'dchi_xz ({unit_label})': [molecule.susc.dtensor[0, 2] * conv for molecule in molecules], # noqa
+        f'dchi_xz ({unit_label})': [molecule.susc.dtensor[0, 2] * conv for molecule in molecules],  # noqa
         f'dchi_xz-s-dev ({unit_label})': None,
-        f'dchi_yy ({unit_label})': [molecule.susc.dtensor[1, 1] * conv for molecule in molecules], # noqa
+        f'dchi_yy ({unit_label})': [molecule.susc.dtensor[1, 1] * conv for molecule in molecules],  # noqa
         f'dchi_yy-s-dev ({unit_label})': None,
-        f'dchi_yz ({unit_label})': [molecule.susc.dtensor[1, 2] * conv for molecule in molecules], # noqa
+        f'dchi_yz ({unit_label})': [molecule.susc.dtensor[1, 2] * conv for molecule in molecules],  # noqa
         f'dchi_yz-s-dev ({unit_label})': None,
-        f'dchi_zz ({unit_label})': [molecule.susc.dtensor[2, 2] * conv for molecule in molecules], # noqa
+        f'dchi_zz ({unit_label})': [molecule.susc.dtensor[2, 2] * conv for molecule in molecules],  # noqa
         f'dchi_zz-s-dev ({unit_label})': None,
-        f'chi_x ({unit_label})': [molecule.susc.eigvals[0] * conv for molecule in molecules], # noqa
+        f'chi_x ({unit_label})': [molecule.susc.eigvals[0] * conv for molecule in molecules],  # noqa
         f'chi_x-s-dev ({unit_label})': None,
-        f'chi_y ({unit_label})': [molecule.susc.eigvals[1] * conv for molecule in molecules], # noqa
+        f'chi_y ({unit_label})': [molecule.susc.eigvals[1] * conv for molecule in molecules],  # noqa
         f'chi_y-s-dev ({unit_label})': None,
-        f'chi_z ({unit_label})': [molecule.susc.eigvals[2] * conv for molecule in molecules], # noqa
+        f'chi_z ({unit_label})': [molecule.susc.eigvals[2] * conv for molecule in molecules],  # noqa
         f'chi_z-s-dev ({unit_label})': None,
-        f'chi_ax ({unit_label})': [molecule.susc.axiality * conv for molecule in molecules], # noqa
+        f'chi_ax ({unit_label})': [molecule.susc.axiality * conv for molecule in molecules],  # noqa
         f'chi_ax-s-dev ({unit_label})': None,
-        f'chi_rho ({unit_label})': [molecule.susc.rhombicity * conv for molecule in molecules], # noqa
+        f'chi_rho ({unit_label})': [molecule.susc.rhombicity * conv for molecule in molecules],  # noqa
         f'chi_rho-s-dev ({unit_label})': None,
-        'alpha (degrees)': [molecule.susc.alpha for molecule in molecules], # noqa
+        'alpha (degrees)': [molecule.susc.alpha for molecule in molecules],  # noqa
         'alpha-s-dev (degrees)': None,
-        'beta (degrees)': [molecule.susc.beta for molecule in molecules], # noqa
+        'beta (degrees)': [molecule.susc.beta for molecule in molecules],  # noqa
         'beta-s-dev (degrees)': None,
-        'gamma (degrees)': [molecule.susc.gamma for molecule in molecules], # noqa
+        'gamma (degrees)': [molecule.susc.gamma for molecule in molecules],  # noqa
         'gamma-s-dev (degrees)': None,
         'r2 ()': None,
         'r2_adjusted ()': None,
@@ -149,6 +149,7 @@ def save_susc(molecules: list[main.Molecule],
 
     return
 
+
 def save_relaxation_decomposition(
         avg_r1_by_chem_label: dict[str, float],
         avg_r2_by_chem_label: dict[str, float],
@@ -157,6 +158,8 @@ def save_relaxation_decomposition(
         avg_dipolar_by_chem_label: dict[str, float] | None = None,
         avg_contact_by_chem_label: dict[str, float] | None = None,
         avg_curie_by_chem_label: dict[str, float] | None = None,
+        avg_aniso_curie_by_chem_label: dict[str, float] | None = None,
+        avg_zfs_aniso_dipolar_by_chem_label: dict[str, float] | None = None,
         delimiter: str = ',',
         comment: str = '',
         verbose: bool = True
@@ -176,6 +179,10 @@ def save_relaxation_decomposition(
         Average SBM contact R1 contribution (s^-1)
     avg_curie_by_chem_label: dict[str, float], optional
         Average Curie R1 contribution (s^-1)
+    avg_zfs_aniso_curie_by_chem_label: dict[str, float], optional
+        Average ZFS-anisotropy Curie R1 contribution (s^-1)
+    avg_zfs_aniso_dipolar_by_chem_label: dict[str, float], optional
+        Average ZFS-anisotropy dipolar R1 contribution (s^-1)
     file_name: str
         Path to file to save to
     delimiter: str, default ','
@@ -197,6 +204,10 @@ def save_relaxation_decomposition(
         chem_labels |= set(avg_contact_by_chem_label.keys())
     if avg_curie_by_chem_label is not None:
         chem_labels |= set(avg_curie_by_chem_label.keys())
+    if avg_aniso_curie_by_chem_label is not None:
+        chem_labels |= set(avg_aniso_curie_by_chem_label.keys())
+    if avg_zfs_aniso_dipolar_by_chem_label is not None:
+        chem_labels |= set(avg_zfs_aniso_dipolar_by_chem_label.keys())
 
     chem_labels = sorted(chem_labels)
 
@@ -226,6 +237,14 @@ def save_relaxation_decomposition(
     if avg_curie_by_chem_label is not None:
         out['R1_curie (s^-1)'] = [
             avg_curie_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_aniso_curie_by_chem_label is not None:
+        out['R1_aniso_curie (s^-1)'] = [
+            avg_aniso_curie_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_zfs_aniso_dipolar_by_chem_label is not None:
+        out['R1_zfs_aniso_dipolar (s^-1)'] = [
+            avg_zfs_aniso_dipolar_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
         ]
 
     df = pd.DataFrame(data=out)

@@ -1102,13 +1102,13 @@ def gueron_r2_curie(
     return rates
 
 
-def r1_zfs_anisotropic_curie(
+def r1_anisotropic_curie(
         nuclei_labels,
         nuclei_coords,
         electron_coords,
         omega_I_dict,
         susc_tensor,
-        dia_tensor,
+        shielding_tensor_dict,
         tau_R
 ):
     """
@@ -1120,14 +1120,17 @@ def r1_zfs_anisotropic_curie(
 
         # Get electron-nuclea distance vector and magnitude
         r_vec = nuclei_coords[label] - electron_coords
-        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+        r = np.linalg.norm(r_vec)
+        # Define shielding tensor for each nucleus
+        shielding_tensor = shielding_tensor_dict[label]
 
         # Construct dipolar and shielding tensors
         dipolar_tensor = (1.0 / (4.0 * np.pi)) * (3.0 * (np.outer(r_vec, r_vec) / r**5) - (1.0 / r**3) * np.eye(3))  # noqa
-        shielding_tensor = dia_tensor - (dipolar_tensor @ susc_tensor)
+        shielding_tensor_full = shielding_tensor - \
+            (dipolar_tensor @ susc_tensor)
 
         # Calculate first- and second-rank invariants
-        I1, I2, I3 = tensor_invariants(shielding_tensor)
+        I1, I2, I3 = tensor_invariants(shielding_tensor_full)
         Lambda_first_rank = np.sqrt(I1)
         Lambda_second_rank = np.sqrt(I2 + I3)
 
@@ -1142,13 +1145,13 @@ def r1_zfs_anisotropic_curie(
     return rates
 
 
-def r2_zfs_anisotropic_curie(
+def r2_anisotropic_curie(
         nuclei_labels,
         nuclei_coords,
         electron_coords,
         omega_I_dict,
         susc_tensor,
-        dia_tensor,
+        shielding_tensor_dict,
         tau_R
 ):
     """
@@ -1158,16 +1161,19 @@ def r2_zfs_anisotropic_curie(
 
     for label in nuclei_labels:
 
-        # Get electron-nuclea distance vector and magnitude
+        # Get electron-nuclear distance vector and magnitude
         r_vec = nuclei_coords[label] - electron_coords
-        r = np.linalg.norm(r_vec) * 1e-10  # in meters
+        r = np.linalg.norm(r_vec)
+        # Define shielding tensor for each nucleus
+        shielding_tensor = shielding_tensor_dict[label]
 
         # Construct dipolar and shielding tensors
         dipolar_tensor = (1.0 / (4.0 * np.pi)) * (3.0 * (np.outer(r_vec, r_vec) / r**5) - (1.0 / r**3) * np.eye(3))  # noqa
-        shielding_tensor = dia_tensor - (dipolar_tensor @ susc_tensor)
+        shielding_tensor_full = shielding_tensor - \
+            (dipolar_tensor @ susc_tensor)
 
         # Calculate first- and second-rank invariants
-        I1, I2, I3 = tensor_invariants(shielding_tensor)
+        I1, I2, I3 = tensor_invariants(shielding_tensor_full)
         Lambda_first_rank = np.sqrt(I1)
         Lambda_second_rank = np.sqrt(I2 + I3)
 
@@ -1219,7 +1225,7 @@ def r2_zfs_anisotropic_dipolar(
         electron_coords,
         gamma_I_dict,
         spectral_density_tensor_zero,
-        spectral_density_tensor_omega
+        spectral_density_tensor_omega  # specify units
 ):
     """
     As described in DOI: 10.1039/c8cp01332b, equation (31).

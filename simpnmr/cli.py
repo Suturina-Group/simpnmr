@@ -991,6 +991,18 @@ def predict_func(uargs):
             config.diamagnetic_ref_method
         )
 
+    shielding_tensors = None
+    if len(config.diamagnetic_ref_file):
+        qcs = rdrs.QCStructure.guess_from_file(config.diamagnetic_ref_file)
+        if not isinstance(qcs, rdrs.GaussianLogStructure):
+            ut.red_exit(
+                'Diamagnetic reference file must be a Gaussian output file')
+
+        # Read full 3x3 shielding tensors from Gaussian log file
+        shielding_tensors = rdrs.read_gaussian_09_16_log_shielding_tensors(
+            config.diamagnetic_ref_file
+        )
+
     # Rotationally average hyperfines of user selected nuclei:
     if len(config.hyperfine_average):
         base_molecule.average_hyperfine(config.hyperfine_average)
@@ -1028,6 +1040,9 @@ def predict_func(uargs):
             'Error: No susceptibility data found for specified temperature(s)'
         )
 
+    susc_for_relax = None
+    if getattr(config, "relaxation_model", None) == "curie_aniso":
+        susc_for_relax = suscs[0]
     # Calculate linewidths using user-specified relaxation model (optional)
     if not getattr(config, "relaxation_model", None):
         ut.cprint(
@@ -1041,7 +1056,12 @@ def predict_func(uargs):
             "cyan"
         )
     else:
-        apply_relaxation_model(config, base_molecule)
+        apply_relaxation_model(
+            config,
+            base_molecule,
+            susc_for_relax=susc_for_relax,
+            shielding_tensor=shielding_tensors,
+        )
 
     # Load experimental data from file into list of experiment objects
     if len(config.experiment_files):
@@ -1238,7 +1258,12 @@ def predict_func(uargs):
     return
 
 
-def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molecule):
+def apply_relaxation_model(
+        config: inps.PredictConfig,
+        base_molecule: main.Molecule,
+        susc_for_relax: main.Susceptibility | None = None,
+        shielding_tensor: dict[str, np.ndarray] | None = None,
+):
     """
     Calculate linewidths using a user-specified relaxation model (optional).
     This function modifies base_molecule.nuclei in-place by updating
@@ -1274,6 +1299,34 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             if nuc.label in nuclei_coords
         }
 
+    if config.relaxation_model in ('zfs_anisotropic_curie', 'zfs_anisotropic_dipolar'):
+        if 'orca' in config.susceptibility_format.lower():
+            susc_labels, susc_coords = rdrs.read_orca5_output_xyz(
+                config.susceptibility_file
+            )
+            susc_labels = np.array(
+                xyzp.add_label_indices(susc_labels)
+            )
+        elif 'gaussian' in config.susceptibility_format.lower():
+            susc_labels, susc_coords = rdrs.read_gaussian_log_xyz(
+                config.susceptibility_file
+            )
+            susc_labels = np.array(
+                xyzp.add_label_indices(susc_labels)
+            )
+        else:
+            ut.red_exit(
+                'Reading coordinates from only ORCA and Gaussian susceptibility output files is currently supported.')
+
+        nuclei_coords = {
+            label: coord
+            for label, coord in zip(susc_labels, susc_coords)
+            if ut.st.remove_numbers(label) in nuclei_labels
+        }
+        if not nuclei_coords:
+            ut.red_exit(
+                'No matching nuclei found between susceptibility output file and requested nuclei for relaxation calculation.')
+
     gamma_I_dict = {
         label: ut.NUCLEAR_GAMMAS[ut.st.remove_numbers(
             label)] * 2 * np.pi * 1e6
@@ -1284,13 +1337,16 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         for label in nuclei_coords
     }
     omega_S = ut.EGAMMA * B0 * 2 * np.pi * 1e6
-    tau_c1 = 1 / ((1 / config.relaxation_tR) +
-                  (1 / config.relaxation_T1e))
-    tau_c2 = 1 / ((1 / config.relaxation_tR) +
-                  (1 / config.relaxation_T2e))
-    tau_e1 = config.relaxation_T1e
-    tau_e2 = config.relaxation_T2e
-    tau_R = config.relaxation_tR
+
+    if 'sbm' in config.relaxation_model:
+        tau_c1 = 1.0 / ((1.0 / config.relaxation_tR) +
+                        (1.0 / config.relaxation_T1e))
+        tau_c2 = 1.0 / ((1.0 / config.relaxation_tR) +
+                        (1.0 / config.relaxation_T2e))
+        tau_e1 = config.relaxation_T1e
+        tau_e2 = config.relaxation_T2e
+    elif 'curie' in config.relaxation_model or 'curie_aniso' in config.relaxation_model:
+        tau_R = config.relaxation_tR
 
     if config.spin_S is not None:
         spin = config.spin_S
@@ -1406,6 +1462,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             orbit,
             total_momentum_J
         )
+
         sbm_contact_r1_rates = ut.sbm_r1_contact(
             list(nuclei_coords.keys()),
             A_iso_dict,
@@ -1415,6 +1472,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             spin,
             total_momentum_J
         )
+
         sbm_dipolar_r2_rates = ut.sbm_r2_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
@@ -1440,7 +1498,6 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             spin,
             total_momentum_J
         )
-
         curie_r1_rates = ut.gueron_r1_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
@@ -1473,50 +1530,57 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             for label in nuclei_coords
         }
 
-    elif config.relaxation_model == 'zfs_anisotropic_curie':
-        if 'orca' in config.susceptibility_format:
-            susc = main.Susceptibility.from_orca(
-                config.susceptibility_file,
-                section=config.susceptibility_format.split('orca_')[1]
-            )
-        elif 'csv' in config.susceptibility_format:
-            susc = main.Susceptibility.from_csv(
-                config.susceptibility_file
-            )
-        else:
-            ut.red_exit('Only ORCA/CSV files are currently supported for ZFS anisotropy relaxation model')  # noqa
-
-        susc_tensors = [s for s in susc if s.temperature in config.susceptibility_temperatures]  # noqa
-        if not susc_tensors:
+    elif config.relaxation_model == 'curie_aniso':
+        if susc_for_relax is None:
             ut.red_exit(
-                'Error: No susceptibility data found for specified temperature(s)'
+                'Susceptibility data must be provided for anisotropy relaxation model'
             )
-        dia_tensor = config.relaxation_diamagnetic_tensor
-        susc_tensor = susc_tensors[0].tensor
 
-        zfs_aniso_curie_r1_rates = ut.r1_zfs_anisotropic_curie(
+        susc_tensor = susc_for_relax.tensor
+
+        if shielding_tensor is None:
+            shielding_tensor = {
+                label: np.zeros((3, 3))
+                for label in nuclei_coords
+            }
+        else:
+            for label in nuclei_coords:
+                if label not in shielding_tensor:
+                    ut.red_exit(
+                        f"No shielding tensor found for nucleus {label} in "
+                        f"diamagnetic_ref_file {config.diamagnetic_ref_file}"
+                    )
+
+        for label in nuclei_coords:
+            if label not in shielding_tensor:
+                ut.red_exit(
+                    f"No shielding tensor found for nucleus {label} in "
+                    f"diamagnetic_ref_file {config.diamagnetic_ref_file}"
+                )
+
+        aniso_curie_r1_rates = ut.r1_anisotropic_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
             omega_I_dict,
             susc_tensor,
-            dia_tensor,
+            shielding_tensor,
             tau_R
         )
 
-        zfs_aniso_curie_r2_rates = ut.r2_zfs_anisotropic_curie(
+        aniso_curie_r2_rates = ut.r2_anisotropic_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
             omega_I_dict,
             susc_tensor,
-            dia_tensor,
+            shielding_tensor,
             tau_R
         )
 
-        rates_r1 = {label: zfs_aniso_curie_r1_rates[label]
+        rates_r1 = {label: aniso_curie_r1_rates[label]
                     for label in nuclei_coords}
-        rates_r2 = {label: zfs_aniso_curie_r2_rates[label]
+        rates_r2 = {label: aniso_curie_r2_rates[label]
                     for label in nuclei_coords}
 
     elif config.relaxation_model == 'zfs_anisotropic_dipolar':
@@ -1524,7 +1588,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         spec_dens_tensor_zero = config.relaxation_spectral_density_tensor_0  # noqa
         spec_dens_tensor_omega = config.relaxation_spectral_density_tensor_omega  # noqa
 
-        zfs_anisotriopic_dipolar_r1_rates = ut.r1_zfs_anisotropic_dipolar(
+        zfs_aniso_dipolar_r1_rates = ut.r1_zfs_anisotropic_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1532,7 +1596,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             spec_dens_tensor_omega
         )
 
-        zfs_anisotriopic_dipolar_r2_rates = ut.r2_zfs_anisotropic_dipolar(
+        zfs_aniso_dipolar_r2_rates = ut.r2_zfs_anisotropic_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1541,9 +1605,9 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             spec_dens_tensor_omega
         )
 
-        rates_r1 = {label: zfs_anisotriopic_dipolar_r1_rates[label]
+        rates_r1 = {label: zfs_aniso_dipolar_r1_rates[label]
                     for label in nuclei_coords}
-        rates_r2 = {label: zfs_anisotriopic_dipolar_r2_rates[label]
+        rates_r2 = {label: zfs_aniso_dipolar_r2_rates[label]
                     for label in nuclei_coords}
 
         # Group rates by chemical label
@@ -1579,6 +1643,8 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
     avg_dipolar_by_chem_label = None
     avg_contact_by_chem_label = None
     avg_curie_by_chem_label = None
+    avg_aniso_curie_by_chem_label = None
+    avg_zfs_aniso_dipolar_by_chem_label = None
 
     if 'sbm' in config.relaxation_model:
         dipolar_by_chem_label = defaultdict(list)
@@ -1601,7 +1667,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
             for chem_label, rate_list in contact_by_chem_label.items()
         }
 
-    if 'curie' in config.relaxation_model:
+    if config.relaxation_model in ('curie', 'sbm curie', 'curie sbm'):
         curie_by_chem_label = defaultdict(list)
         for nuc in base_molecule.nuclei:
             if 'curie_r1_rates' in locals() and nuc.label in curie_r1_rates:
@@ -1611,6 +1677,32 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         avg_curie_by_chem_label = {
             chem_label: np.mean(rate_list)
             for chem_label, rate_list in curie_by_chem_label.items()
+        }
+
+    # Anisotropic Curie decomposition
+    if config.relaxation_model == 'curie_aniso':
+        aniso_curie_by_chem_label = defaultdict(list)
+        for nuc in base_molecule.nuclei:
+            if 'aniso_curie_r1_rates' in locals() and nuc.label in aniso_curie_r1_rates:
+                aniso_curie_by_chem_label[nuc.chem_label].append(
+                    aniso_curie_r1_rates[nuc.label]
+                )
+        avg_aniso_curie_by_chem_label = {
+            chem_label: np.mean(rate_list)
+            for chem_label, rate_list in aniso_curie_by_chem_label.items()
+        }
+
+    # ZFS anisotropic Dipolar decomposition
+    if config.relaxation_model == 'zfs_anisotropic_dipolar':
+        zfs_aniso_dipolar_by_chem_label = defaultdict(list)
+        for nuc in base_molecule.nuclei:
+            if 'zfs_aniso_dipolar_r1_rates' in locals() and nuc.label in zfs_aniso_dipolar_r1_rates:
+                zfs_aniso_dipolar_by_chem_label[nuc.chem_label].append(
+                    zfs_aniso_dipolar_r1_rates[nuc.label]
+                )
+        avg_zfs_aniso_dipolar_by_chem_label = {
+            chem_label: np.mean(rate_list)
+            for chem_label, rate_list in zfs_aniso_dipolar_by_chem_label.items()
         }
 
     # Save the relaxation data to CSV
@@ -1625,6 +1717,8 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         avg_dipolar_by_chem_label=avg_dipolar_by_chem_label,
         avg_contact_by_chem_label=avg_contact_by_chem_label,
         avg_curie_by_chem_label=avg_curie_by_chem_label,
+        avg_aniso_curie_by_chem_label=avg_aniso_curie_by_chem_label,
+        avg_zfs_aniso_dipolar_by_chem_label=avg_zfs_aniso_dipolar_by_chem_label
     )
 
     for nuc in base_molecule.nuclei:

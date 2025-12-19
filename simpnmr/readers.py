@@ -15,6 +15,7 @@ from . import string_tools as st
 from .__version__ import __version__
 from . import utils as ut
 
+
 class QCStructure(ABC):
     '''
     Abstract Base Class (template) for Quantum Chemistry Structure classes
@@ -471,6 +472,7 @@ class Gaussian09LogCS(QCCS):
 
         return cls(file_name, labels, coords, cs_iso, cs_aniso, cs_units)
 
+
 class QCSpin(ABC):
     """
     Abstract Base Class for Quantum Chemistry Spin Data classes.
@@ -522,6 +524,7 @@ class QCSpin(ABC):
     @abstractmethod
     def _read(cls, file_name: str) -> "QCSpin":
         raise NotImplementedError
+
 
 class GaussianLogSpin(QCSpin):
     """
@@ -631,10 +634,10 @@ class QCA(ABC):
         # Save hyperfine data to file
         out = np.array(
             [
-                '{}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}'.format( # noqa
+                '{}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}'.format(  # noqa
                     label, iso, *tensor[0, :], *tensor[1, 1:], tensor[2, 2]
                 )
-                for iso, (label, tensor) in zip(self.a_iso.values(), self.a_dip.items()) # noqa
+                for iso, (label, tensor) in zip(self.a_iso.values(), self.a_dip.items())  # noqa
             ]
         )
 
@@ -647,7 +650,7 @@ class QCA(ABC):
 
         _comments += comment + '\n'
 
-        header = f'atom_label, Aiso ({self.a_units}), Adip_xx ({self.a_units}), Adip_xy ({self.a_units}), Adip_xz ({self.a_units}), Adip_yy ({self.a_units}), Adip_yz ({self.a_units}), Adip_zz ({self.a_units})' # noqa
+        header = f'atom_label, Aiso ({self.a_units}), Adip_xx ({self.a_units}), Adip_xy ({self.a_units}), Adip_xz ({self.a_units}), Adip_yy ({self.a_units}), Adip_yz ({self.a_units}), Adip_zz ({self.a_units})'  # noqa
 
         # Save to file
         np.savetxt(
@@ -874,7 +877,7 @@ def read_gaussian_log_xyz(file_name: str) -> tuple[
     return labels, coords
 
 
-def read_gaussian_log_spin(file_name: str) -> int: # noqa
+def read_gaussian_log_spin(file_name: str) -> int:  # noqa
     '''
     Read Gaussian .log file to extract spin multiplicity (2S+1)
 
@@ -983,7 +986,7 @@ class Orca5OutputA(QCA):
     '''
     FILETYPE = 'Orca OUTPUT'
 
-    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#" # noqa
+    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"  # noqa
 
     @classmethod
     def _read(cls, file_name: str):
@@ -1029,7 +1032,7 @@ class Orca6OutputA(QCA):
     '''
     FILETYPE = 'Orca OUTPUT'
 
-    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#" # noqa
+    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#"  # noqa
 
     @classmethod
     def _read(cls, file_name: str):
@@ -1069,7 +1072,7 @@ class Orca6OutputA(QCA):
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
 
 
-def read_orca5_output_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]: # noqa
+def read_orca5_output_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:  # noqa
     '''
     Reads xyz coordinates from orca output file
 
@@ -1167,7 +1170,6 @@ def read_orca6_output_a_tensors(file_name: str) -> tuple[
 
                     a_iso[label] = 1 / 3 * np.trace(full)
                     a_dip[label] = full - np.eye(3) * a_iso[label]
-
 
     return a_iso, a_dip
 
@@ -1284,7 +1286,7 @@ class Orca5PropertyA(QCA):
     '''
     FILETYPE = 'Orca PROPERTY'
 
-    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#" # noqa
+    COMMON_STR = "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"  # noqa
 
     @classmethod
     def _read(cls, file_name: str):
@@ -1319,7 +1321,7 @@ class Orca5PropertyA(QCA):
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
 
 
-def read_orca5_property_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]: # noqa
+def read_orca5_property_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:  # noqa
     '''
     Reads xyz coordinates from orca property file
 
@@ -1545,6 +1547,71 @@ def read_gaussian16_log_cs(file_name):
     return cs_iso, cs_aniso
 
 
+def read_gaussian_09_16_log_shielding_tensors(
+        file_name: str,
+) -> dict[str, np.ndarray]:
+    '''
+    Reads full magnetic shielding tensors from Gaussian09 log file.
+    Note, Gaussian prints the TRANSPOSE of the magnetic shielding tensor;
+    i.e. it prints:
+
+        XX YX ZX
+        XY YY ZY
+        XZ YZ ZZ
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Full shielding tensors for each atom (key) as 3x3 array (val) in ppm
+    '''
+    shielding_tensors: dict[str, np.ndarray] = {}
+
+    with open(file_name, 'r') as f:
+        for line in f:
+            # Find start of shielding tensor section
+            if 'Magnetic shielding tensor (ppm)' in line:
+                while True:
+                    line = f.readline()
+                    if not line:
+                        break
+                    if 'Isotropic =' in line:
+                        parts = line.split()
+                        # parts[0] = atom index, parts[1] = atom label
+                        index = int(parts[0])
+                        element = parts[1]
+                        label = f"{element}{index}"
+
+                        # Read the next three lines for the tensor columns
+                        lxx = next(f)
+                        toks = lxx.replace("=", " ").split()
+                        xx = float(toks[1])
+                        yx = float(toks[3])
+                        zx = float(toks[5])
+
+                        lyy = next(f)
+                        toks = lyy.replace("=", " ").split()
+                        xy = float(toks[1])
+                        yy = float(toks[3])
+                        zy = float(toks[5])
+
+                        lzz = next(f)
+                        toks = lzz.replace("=", " ").split()
+                        xz = float(toks[1])
+                        yz = float(toks[3])
+                        zz = float(toks[5])
+
+                        # Assemble the tensor (note the transpose)
+                        tensor = np.array([
+                            [xx, xy, xz],
+                            [yx, yy, yz],
+                            [zx, zy, zz]
+                        ])
+
+                        shielding_tensors[label] = tensor
+
+    return shielding_tensors
+
+
 # def read_orca_susceptibility_method(file_name:str, section:str)->str:
 #     '''
 #     TODO:
@@ -1606,6 +1673,7 @@ def read_orca_susceptibility(file_name: str, section: str) -> dict[float, np.nda
 
     return susceptibilities
 
+
 def read_orca_spin(file_name: str) -> float:
     """
     Reads the spin quantum number S from an ORCA input-style line in the output,
@@ -1652,6 +1720,7 @@ def read_orca_spin(file_name: str) -> float:
 
     return spin
 
+
 def read_orca_g_tensor(file_name: str, section: str) -> np.ndarray | None:
     '''
     Extracts the electronic g-tensor from the effective Hamiltonian section in an ORCA output file.
@@ -1691,10 +1760,11 @@ def read_orca_g_tensor(file_name: str, section: str) -> np.ndarray | None:
                             break
                     break
     except Exception as e:
-         # Soft failure — let caller handle missing tensor
+        # Soft failure — let caller handle missing tensor
         ut.cprint(f'Warning: failed to parse ORCA g-tensor: {e}', 'cyan')
 
     return g_tensor
+
 
 def read_eff_hamiltonian_tensor(file_name: str, section: str) -> np.ndarray | None:
     '''

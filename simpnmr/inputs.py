@@ -723,7 +723,6 @@ class PredictConfig(FitSuscConfig):
         ],
         'relaxation': [
             'model',
-            'diamagnetic_tensor',
             'spectral_density_tensor_omega',
             'spectral_density_tensor_0',
             'electron_coords',
@@ -741,7 +740,6 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_format = ''
         self._susceptibility_temperatures = []
         self._relaxation_model = ''
-        self._relaxation_diamagnetic_tensor = None
         self._relaxation_spectral_density_tensor_omega = None
         self._relaxation_spectral_density_tensor_0 = None
         self._relaxation_electron_coords = None
@@ -797,42 +795,16 @@ class PredictConfig(FitSuscConfig):
 
     @relaxation_model.setter
     def relaxation_model(self, value: str):
-        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm', 'zfs_anisotropic_curie', 'zfs_anisotropic_dipolar']:
+        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm', 'curie_aniso', 'zfs_anisotropic_dipolar']:
             raise ValueError(f'Unknown relaxation: model {value}')
         else:
             self._relaxation_model = value.lower()
         return None
 
     @property
-    def relaxation_diamagnetic_tensor(self) -> list[list[float], list[float], list[float]] | None:
-        return self._relaxation_diamagnetic_tensor
-
-    @relaxation_diamagnetic_tensor.setter
-    def relaxation_diamagnetic_tensor(self, value: list[list[float], list[float], list[float]] | None):
-        if value is None:
-            self._relaxation_diamagnetic_tensor = None
-            return None
-        if isinstance(value, list) and len(value) == 3:
-            try:
-                tensor = []
-                for row in value:
-                    if not isinstance(row, (list, tuple)) or len(row) != 3:
-                        raise ValueError(
-                            f"Each row of diamagnetic_tensor must be a list of 3 floats")
-                    tensor.append([float(val) for val in row])
-                self._relaxation_diamagnetic_tensor = tensor
-            except Exception:
-                raise ValueError(
-                    f"Cannot convert diamagnetic_tensor {value} to 3x3 list of floats")
-        else:
-            raise ValueError(
-                f"diamagnetic_tensor must be a list of 3 lists, each with 3 floats")
-        return None
-    
-    @property
     def relaxation_spectral_density_tensor_omega(self) -> list[list[float], list[float], list[float]] | None:
         return self._relaxation_spectral_density_tensor_omega
-    
+
     @relaxation_spectral_density_tensor_omega.setter
     def relaxation_spectral_density_tensor_omega(self, value: list[list[float], list[float], list[float]] | None):
         if value is None:
@@ -854,11 +826,11 @@ class PredictConfig(FitSuscConfig):
             raise ValueError(
                 f"spectral_density_tensor_omega must be a list of 3 lists, each with 3 floats")
         return None
-    
+
     @property
     def relaxation_spectral_density_tensor_0(self) -> list[list[float], list[float], list[float]] | None:
         return self._relaxation_spectral_density_tensor_0
-    
+
     @relaxation_spectral_density_tensor_0.setter
     def relaxation_spectral_density_tensor_0(self, value: list[list[float], list[float], list[float]] | None):
         if value is None:
