@@ -1299,7 +1299,7 @@ def apply_relaxation_model(
             if nuc.label in nuclei_coords
         }
 
-    if config.relaxation_model in ('zfs_anisotropic_curie', 'zfs_anisotropic_dipolar'):
+    if config.relaxation_model in ('curie_aniso', 'zfs_anisotropic_dipolar'):
         if 'orca' in config.susceptibility_format.lower():
             susc_labels, susc_coords = rdrs.read_orca5_output_xyz(
                 config.susceptibility_file
