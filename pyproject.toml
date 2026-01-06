@@ -12,3 +12,9 @@ commit_message = "chore(release): {version}"
 
 [tool.semantic_release.remote]
 type = "gitlab"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

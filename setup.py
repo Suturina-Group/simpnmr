@@ -25,7 +25,6 @@ setuptools.setup(
         "scipy",
         "sympy",
         "matplotlib",
-        "xyz_py>=5.13.0",
         "pandas",
         "pathos",
         "pyyaml",
@@ -39,8 +38,8 @@ setuptools.setup(
             "plot_A_funcs = simpnmr.scripts.batch_hf_plot:main",
             "plot_chi_funcs = simpnmr.scripts.batch_susc_plot:main",
             "chi_plot = simpnmr.scripts.chi_plot:main",
-            "get_susc = simpnmr.scripts.get_susc:main",
-            "xyz_to_chemlabel = simpnmr.scripts.chemcraft_xyz_to_chemlabels:main",
+            "get_sh = simpnmr.scripts.get_sh:main",
+            "xyz_to_chemlabel = simpnmr.scripts.coords_tools.chemcraft_xyz:main",
         ]
     },
 )

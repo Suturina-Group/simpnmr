@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
+
 """
 Module for rotation, alignment, and chi-frame transformations in PCS-related
 coordinate mapping between NEVPT2 and DFT geometries. The public API works
@@ -5,40 +8,42 @@ from an already-parsed PredictConfig, uses it to read susceptibility and
 hyperfine data, and exposes `get_rotation_and_transformation` as its main
 entry point.
 """
-import re
-import os
+
 import datetime
+import os
+import re
+
 import numpy as np
 import numpy.linalg as la
-import xyz_py as xyzp
 
-from . import readers as rdrs
-from . import utils as ut
-from . import inputs as inps
-from .__version__ import __version__
+from ... import inputs as inps
+from ... import readers as rdrs
+from ... import utils as ut
+from ...__version__ import __version__
+from . import xyz_format as xyzf
+
 
 def access_input_data(cfg: inps.PredictConfig):
     """
-    Load and extract all PCS‑related input data using an already‑parsed PredictConfig.
+    Load and extract all PCS-related input data using an already parsed
+    PredictConfig instance.
 
-    Parameters
-    ----------
-    cfg : PredictConfig
-        Parsed YAML configuration object containing file paths and susceptibility settings.
+    Args:
+        cfg (PredictConfig): Parsed YAML configuration object containing file paths
+            and susceptibility settings.
 
-    Returns
-    -------
-    tuple
-        chiT : numpy.ndarray (3, 3)
-            Susceptibility tensor for the target temperature.
-        temperature : list[float]
-            Temperature values provided in the YAML configuration.
-        nevpt2_labels : list[str]
-            Atomic labels extracted from the NEVPT2 coordinate file.
-        nevpt2_coords : numpy.ndarray (N, 3)
-            NEVPT2 atomic Cartesian coordinates.
-        dft_coords : numpy.ndarray (N, 3)
-            DFT atomic Cartesian coordinates extracted from the hyperfine file.
+    Returns:
+        tuple[np.ndarray, list[float], list[str], np.ndarray, np.ndarray]:
+            - chiT (np.ndarray): Susceptibility tensor for the target temperature
+              with shape (3, 3).
+            - temperature (list[float]): Temperature values provided in the YAML
+              configuration.
+            - nevpt2_labels (list[str]): Atomic labels extracted from the NEVPT2
+              coordinate file.
+            - nevpt2_coords (np.ndarray): NEVPT2 atomic Cartesian coordinates with
+              shape (N, 3).
+            - dft_coords (np.ndarray): DFT atomic Cartesian coordinates extracted
+              from the hyperfine file with shape (N, 3).
     """
 
     # Temperatures come from YAML; we treat it as a single-element list for now
@@ -60,22 +65,19 @@ def access_input_data(cfg: inps.PredictConfig):
 
 def get_rotation_and_transformation(cfg: inps.PredictConfig):
     """
-    Compute and return both the rotation matrix (R) aligning NEVPT2 and DFT
-    coordinate sets, and the final transformation matrix (trans_mat) using
-    the susceptibility tensor.
+    Compute and return both the rotation matrix aligning NEVPT2 and DFT
+    geometries and the final transformation matrix used for PCS mapping.
 
-    Parameters
-    ----------
-    cfg : PredictConfig
-        Parsed YAML configuration containing susceptibility and geometry inputs.
+    Args:
+        cfg (PredictConfig): Parsed YAML configuration containing susceptibility
+            and geometry inputs.
 
-    Returns
-    -------
-    tuple of numpy.ndarray
-        R : (3, 3)
-            Rotation matrix that aligns NEVPT2 geometry to DFT geometry.
-        trans_mat : (3, 3)
-            Transformation matrix used for PCS-related coordinate mapping.
+    Returns:
+        tuple[np.ndarray, np.ndarray]:
+            - R (np.ndarray): Rotation matrix with shape (3, 3) that aligns the
+              NEVPT2 geometry to the DFT geometry.
+            - trans_mat (np.ndarray): Transformation matrix with shape (3, 3) used
+              for PCS-related coordinate mapping.
     """
 
     chiT, temperature, _, nevpt2_coords, dft_coords = access_input_data(cfg)
@@ -92,7 +94,7 @@ def get_rotation_and_transformation(cfg: inps.PredictConfig):
         )
 
     # Compute rotation aligning NEVPT2 → DFT
-    rot_mat, rmsd = xyzp.find_rotation(nevpt2_coords, dft_coords)
+    rot_mat, rmsd = xyzf.find_rotation(nevpt2_coords, dft_coords)
 
     # Temperature-normalised tensor
     chi = chiT / temperature[0]
@@ -104,31 +106,33 @@ def get_rotation_and_transformation(cfg: inps.PredictConfig):
     trans_mat = evecs.T @ rot_mat
 
     ut.cprint(
-        f' Distinct Susceptibility and DFT geometries detected; applied rotational alignment (RMSD = {rmsd:.6f}). \n',
-          'cyan'
-          )
-    
-    # Need to add an additional functional to check if the HFC coords are in chi frame because it leads to the wrong prediction
+        f"\n Distinct Susceptibility and DFT geometries detected;"
+        f"\n applied rotational alignment (RMSD = {rmsd:.6f}). \n",
+        "cyan",
+    )
+
+    # Need to add an additional functional to check if the HFC coords are in chi frame
+    # because it leads to the wrong prediction
 
     return rot_mat, trans_mat
 
+
 def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
     """
-    Rotate NEVPT2 coordinates into the susceptibility (chi) principal‑axis frame
-    and write the resulting structure to an XYZ file.
+    Rotate NEVPT2 coordinates into the principal-axis frame of the
+    susceptibility (chi) tensor and write the resulting structure to an
+    XYZ file.
 
-    Parameters
-    ----------
-    file_path : str
-        Directory in which the output chi‑frame XYZ file should be saved.
-    cfg : PredictConfig
-        Parsed YAML configuration containing susceptibility and geometry inputs.
+    Args:
+        file_path (str): Directory in which the output chi-frame XYZ file
+            should be saved.
+        cfg (PredictConfig): Parsed YAML configuration containing susceptibility
+            and geometry inputs.
 
-    Returns
-    -------
-    list of tuple
-        A list of (label, coordinate) pairs representing the rotated structure,
-        suitable for downstream processing.
+    Returns:
+        list[tuple[str, np.ndarray]]: A list of (label, coordinate) pairs
+        representing the rotated structure, suitable for downstream
+        processing.
     """
 
     chiT, _, nevpt2_labels, nevpt2_coords, _ = access_input_data(cfg)
@@ -152,11 +156,7 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
     else:
         a = cross / np.linalg.norm(cross)
         theta = np.arccos(np.dot(u, z_axis))
-        A = np.array([
-            [0.0, -a[2], a[1]],
-            [a[2], 0.0, -a[0]],
-            [-a[1], a[0], 0.0]
-        ])
+        A = np.array([[0.0, -a[2], a[1]], [a[2], 0.0, -a[0]], [-a[1], a[0], 0.0]])
 
         R = np.eye(3) + np.sin(theta) * A + (1.0 - np.cos(theta)) * (A @ A)
 
@@ -168,8 +168,7 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
 
     # Convert NEVPT2 coordinates to chi frame
     nevpt2_coords_chi_frame = (
-        nevpt2_coords_centerless @ eigenvecs_sort_traceless
-        + nevpt2_coords_center
+        nevpt2_coords_centerless @ eigenvecs_sort_traceless + nevpt2_coords_center
     )
 
     # Clean labels (remove numeric indices, if any)
@@ -186,8 +185,8 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
         f"at {datetime.datetime.now().strftime('%H:%M:%S %d-%m-%Y')}."
     )
 
-    # Save XYZ using the helper from xyz_py
-    xyzp.save_xyz(
+    # Save XYZ
+    xyzf.save_xyz(
         xyz_filename,
         labels=clean_labels,
         coords=nevpt2_coords_chi_frame,
@@ -195,9 +194,12 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
         comment=_comment,
     )
 
-    ut.cprint(f"\n Chi-frame coordinates saved to {xyz_filename}\n", "cyan")
+    ut.cprint(
+        f"\n Chi-frame coordinates saved to {xyz_filename}\n",
+        "cyan",
+    )
 
     # Return list of (label, coord) tuples for possible downstream use
     coords_chi_frame_out = list(zip(clean_labels, nevpt2_coords_chi_frame))
-    
+
     return coords_chi_frame_out

@@ -1,20 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
 
-"""
-This module contains utility objects and methods
+"""Utility helpers for SimpNMR.
+
+This module provides constants, parsing helpers, formatting utilities, and
+relaxation-rate helper functions used across the package.
 """
 
-import numpy as np
-from numpy.typing import NDArray
-import scipy.constants as consts
-import sys
-from extto.core import find_lines
 import math
 import re
+import sys
+
+import numpy as np
+import scipy.constants as consts
+from extto.core import find_lines
+from numpy.typing import NDArray
 from scipy import constants
-from collections import defaultdict
-from . import string_tools as st
-from . import readers as rdrs
-from . import inputs as inps
+
+from .scripts.coords_tools import label_format as lf
 
 # Physical constants
 MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
@@ -29,160 +32,144 @@ EGAMMA = consts.physical_constants["electron gyromag. ratio in MHz/T"][0]
 # Values from easyspin, most abundant isotope taken
 # unless otherwise stated
 NUCLEAR_GAMMAS = {  # MHz / T
-    'H': 42.57747844,
-    'He': 0,
-    'Li': 16.54827639,
-    'Be': -5.983354553,
-    'B': 13.6629846,
-    'C': 10.70839886,  # 13C
-    'N': 3.077705864,
-    'O': 0,
-    'F': 40.07758282,
-    'Ne': 0,
-    'Na': 11.26884545,
-    'Mg': 0,
-    'Al': 11.10309064,
-    'Si': 0,
-    'P': 17.25145299,
-    'S': 0,
-    'Cl': 4.176542315,
-    'Ar': 0,
-    'K': 1.98934438,
-    'Ca': 0,
-    'Sc': 10.35902797,
-    'Ti': 0,
-    'V': 11.21329199,
-    'Cr': 0,
-    'Mn': 10.52908802,
-    'Co': 10.07706825,
-    'Ni': 0,
-    'Ni': 0,
-    'Cu': 11.2997322,
-    'Zn': 0,
-    'Ga': 13.0207613,
-    'Ge': 0,
-    'As': 7.31502159,
-    'Se': 0,
-    'Br': 10.70415612,
-    'Kr': 0,
-    'Rb': 4.125286474,
-    'Sr': 0,
-    'Y': -2.094923395,
-    'Zr': 0,
-    'Nb': 10.45209983,
-    'Mo': 0,
-    'Tc': 9.628859764,
-    'Ru': 0,
-    'Rh': -1.347674483,
-    'Pd': 0,
-    'Ag': -1.731395826,
-    'Cd': 0,
-    'In': 9.38569904,
-    'Sn': 0,
-    'Sb': 10.25543693,
-    'Te': 0,
-    'I': 8.577780384,
-    'Xe': 0,
-    'Cs': 5.623350147,
-    'Ba': 0,
-    'La': 6.06115074,
-    'Ce': 0,
-    'Pr': 13.03615894,
-    'Nd': 0,
-    'Pm': 5.617851208,
-    'Sm': 0,
-    'Eu': 4.675698685,
-    'Gd': 0,
-    'Tb': 10.2371427,
-    'Dy': 0,
-    'Ho': 12.7144855,
-    'Er': 0,
-    'Tm': -3.521638071,
-    'Yb': 0,
-    'Lu': 4.86168996,
-    'Hf': 0,
-    'Ta': 5.162706167,
-    'W': 0,
-    'Re': 9.817137817,
-    'Os': 0,
-    'Ir': 0.831624921,
-    'Pt': 0,
-    'Au': 0.740641648,
-    'Hg': 0,
-    'Tl': 24.97488703,
-    'Pb': 0,
-    'Bi': 6.962476653
+    "H": 42.57747844,
+    "He": 0,
+    "Li": 16.54827639,
+    "Be": -5.983354553,
+    "B": 13.6629846,
+    "C": 10.70839886,  # 13C
+    "N": 3.077705864,
+    "O": 0,
+    "F": 40.07758282,
+    "Ne": 0,
+    "Na": 11.26884545,
+    "Mg": 0,
+    "Al": 11.10309064,
+    "Si": 0,
+    "P": 17.25145299,
+    "S": 0,
+    "Cl": 4.176542315,
+    "Ar": 0,
+    "K": 1.98934438,
+    "Ca": 0,
+    "Sc": 10.35902797,
+    "Ti": 0,
+    "V": 11.21329199,
+    "Cr": 0,
+    "Mn": 10.52908802,
+    "Co": 10.07706825,
+    "Ni": 0,
+    "Cu": 11.2997322,
+    "Zn": 0,
+    "Ga": 13.0207613,
+    "Ge": 0,
+    "As": 7.31502159,
+    "Se": 0,
+    "Br": 10.70415612,
+    "Kr": 0,
+    "Rb": 4.125286474,
+    "Sr": 0,
+    "Y": -2.094923395,
+    "Zr": 0,
+    "Nb": 10.45209983,
+    "Mo": 0,
+    "Tc": 9.628859764,
+    "Ru": 0,
+    "Rh": -1.347674483,
+    "Pd": 0,
+    "Ag": -1.731395826,
+    "Cd": 0,
+    "In": 9.38569904,
+    "Sn": 0,
+    "Sb": 10.25543693,
+    "Te": 0,
+    "I": 8.577780384,
+    "Xe": 0,
+    "Cs": 5.623350147,
+    "Ba": 0,
+    "La": 6.06115074,
+    "Ce": 0,
+    "Pr": 13.03615894,
+    "Nd": 0,
+    "Pm": 5.617851208,
+    "Sm": 0,
+    "Eu": 4.675698685,
+    "Gd": 0,
+    "Tb": 10.2371427,
+    "Dy": 0,
+    "Ho": 12.7144855,
+    "Er": 0,
+    "Tm": -3.521638071,
+    "Yb": 0,
+    "Lu": 4.86168996,
+    "Hf": 0,
+    "Ta": 5.162706167,
+    "W": 0,
+    "Re": 9.817137817,
+    "Os": 0,
+    "Ir": 0.831624921,
+    "Pt": 0,
+    "Au": 0.740641648,
+    "Hg": 0,
+    "Tl": 24.97488703,
+    "Pb": 0,
+    "Bi": 6.962476653,
 }
 
 DEFAULT_ISOTOPES = {
-    'H': '1H',
-    'C': '13C',
-    'P': '31P',
-    'N': '15N',
-    'Si': '29Si',
-    'B': '10B',
-    'Li': '6Li',
+    "H": "1H",
+    "C": "13C",
+    "P": "31P",
+    "N": "15N",
+    "Si": "29Si",
+    "B": "10B",
+    "Li": "6Li",
 }
 
-OTHER_ISOTOPES = [
-    '2H'
-]
+OTHER_ISOTOPES = ["2H"]
 
 SUPPORTED_ISOTOPES = list(DEFAULT_ISOTOPES.values()) + OTHER_ISOTOPES
 
 
-def a_tensor_mhz_to_angstrom(a_tensors: dict[str: NDArray]) -> dict[
-        str: NDArray]:
-    """
-    Converts A tensor from MHz to ppm angstrom^-3 using gyromagnetic ratio of
-    given nucleus
+def a_tensor_mhz_to_angstrom(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
+    """Converts hyperfine A tensors from MHz to ``ppm Å^-3``.
 
-    Parameters
-    ----------
-    a_tensors: dict[str: np.array]
-        Key is atomic label with global (1...N_total) indexing number
-        (e.g key=H34), and value is raw A tensor as 3x3 np.array in units of
-        MHz
+    Uses the gyromagnetic ratio of each nucleus (looked up from `NUCLEAR_GAMMAS`).
 
-    Returns
-    -------
-    dict[str: np.array]
-        Key is atomic label with global (1...N_total) indexing number
-        (e.g key=H34), and value is raw A tensor as 3x3 np.array in units of
-        Angstrom^-3
+    Args:
+        a_tensors: Mapping from atom label (with global index, e.g. ``"H34"``) to a
+            ``(3, 3)`` hyperfine tensor in MHz.
+
+    Returns:
+        Mapping from atom label to hyperfine tensor in ``ppm Å^-3``. Labels whose
+        element has no gamma defined (gamma=0) are omitted.
     """
 
     a_tensors_ang = {
-        key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[st.remove_numbers(key)])
+        key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[lf.remove_numbers(key)])
         for key, val in a_tensors.items()
-        if st.remove_numbers(key) in NUCLEAR_GAMMAS.keys() and NUCLEAR_GAMMAS[st.remove_numbers(key)]  # noqa
+        if lf.remove_numbers(key) in NUCLEAR_GAMMAS.keys()
+        and NUCLEAR_GAMMAS[lf.remove_numbers(key)]  # noqa
     }
 
     return a_tensors_ang
 
 
 def _mhz_to_angstrom(val_mhz: NDArray | float, nuclear_gamma: float) -> NDArray | float:  # noqa
-    """
-    Converts A tensor in MHz to ppm Angstrom^-3 using specified nuclear
-    gyromagnetic ratio
+    """Converts a hyperfine coupling value from MHz to ``ppm Å^-3``.
 
-    Parameters
-    ----------
-    val_mhz: array_like | float
-        3x3 array containing A tensor, or isotropic A value in MHz
-    nuclear_gamm: float
-        Nuclear gyromagnetic ratio for current nucleus in MHz/T
+    Args:
+        val_mhz: Hyperfine tensor as a ``(3, 3)`` array or an isotropic value in MHz.
+        nuclear_gamma: Nuclear gyromagnetic ratio for the nucleus (MHz/T).
 
-    Returns
-    -------
-    ndarray of floats | float
-        3x3 array containing A tensor, or isotropic A value in ppm Angstrom^-3
+    Returns:
+        The converted value in ``ppm Å^-3`` with the same shape as `val_mhz`.
     """
 
     val_mhz = np.asarray(val_mhz)
 
     # Conversion factor for MHz to ppm Angstrom^-3
-    val = 1E-18 / (H * EGAMMA * nuclear_gamma * 1E12 * MU0)
+    val = 1e-18 / (H * EGAMMA * nuclear_gamma * 1e12 * MU0)
 
     val_ang = val_mhz * val
 
@@ -190,41 +177,28 @@ def _mhz_to_angstrom(val_mhz: NDArray | float, nuclear_gamma: float) -> NDArray 
 
 
 def flatten(biglist: list) -> list:
-    '''
-    Recursively flattens list
+    """Flattens a nested list by one level.
 
-    Parameters
-    ----------
-    biglist: list[list]
+    Args:
+        biglist: A list of lists.
 
-    Returns
-    -------
-    list
-        Flattened list
-    '''
+    Returns:
+        A single list containing the concatenated elements.
+    """
     return [item for sublist in biglist for item in sublist]
 
 
 def find_mean_values(values: list[float], thresh: float = 0.1) -> list[int]:
-    '''
-    Finds mean value from a list of values by locating values for which
-    step size is >= `thresh`
+    """Finds indices where a 1D sequence changes by at least a threshold.
 
-    Returns list of same length with all values replaced by mean(s)
+    Args:
+        values: Values to analyze.
+        thresh: Threshold for identifying a step change.
 
-    Parameters
-    ----------
-    values: list[float]
-        Values to look at
-    thresh: float, default 0.1
-        Threshold used to discriminate between values
-
-    Returns
-    -------
-    list[int]
-        indices of original list at which value changes by more than
-        0.1
-    '''
+    Returns:
+        Indices at which the step size ``abs(diff(values))`` is greater than or equal
+        to `thresh`.
+    """
 
     # Find values for which step size is >= thresh
     mask = np.abs(np.diff(values)) >= thresh
@@ -235,98 +209,77 @@ def find_mean_values(values: list[float], thresh: float = 0.1) -> list[int]:
 
 
 def comp2ind(comp_str: str) -> list[int]:
-    '''
-    Convert component string to element indices of 3x3 tensor
+    """Converts a tensor component label into matrix indices.
 
-    Parameters
-    ----------
-    comp_str: str
-        Component string e.g. xy
+    Args:
+        comp_str: Component string, e.g. ``"xy"``.
 
-    Returns
-    -------
-    list[int]
-        row and column index of component
-    '''
+    Returns:
+        A tuple ``(row, col)`` for the corresponding element of a ``(3, 3)`` tensor.
+    """
 
     _c2i = {
-        'xx': [0, 0],
-        'xy': [0, 1],
-        'xz': [0, 2],
-        'yx': [1, 0],
-        'yy': [1, 1],
-        'yz': [1, 2],
-        'zx': [2, 0],
-        'zy': [2, 1],
-        'zz': [2, 2],
+        "xx": [0, 0],
+        "xy": [0, 1],
+        "xz": [0, 2],
+        "yx": [1, 0],
+        "yy": [1, 1],
+        "yz": [1, 2],
+        "zx": [2, 0],
+        "zy": [2, 1],
+        "zz": [2, 2],
     }
 
     return _c2i[comp_str][0], _c2i[comp_str][1]
 
 
 def cstr(string: str, color: str):
-    '''
-    Produces colorised string
+    """Applies ANSI color codes to a string.
 
-    Parameters
-    ----------
-    string: str
-        String to print
-    color: str {'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'black_yellowbg', 'black_bluebg'}
-        String name of color
+    Args:
+        string: String to colorize.
+        color: Color name. Supported values are ``red``, ``green``, ``yellow``,
+            ``blue``, ``magenta``, ``cyan``, ``white``, ``black_yellowbg``, and
+            ``black_bluebg``.
 
-    Returns
-    -------
-    str
-        Input string with colours
-    '''  # noqa
+    Returns:
+        The input string wrapped in ANSI escape codes.
+    """
 
     ccodes = {
-        'red': '\u001b[31m',
-        'green': '\u001b[32m',
-        'yellow': '\u001b[33m',
-        'blue': '\u001b[34m',
-        'magenta': '\u001b[35m',
-        'cyan': '\u001b[36m',
-        'white': '\u001b[37m',
-        'black_yellowbg': '\u001b[30;43m\u001b[K',
-        'black_bluebg': '\u001b[30;44m\u001b[K',
+        "red": "\u001b[31m",
+        "green": "\u001b[32m",
+        "yellow": "\u001b[33m",
+        "blue": "\u001b[34m",
+        "magenta": "\u001b[35m",
+        "cyan": "\u001b[36m",
+        "white": "\u001b[37m",
+        "black_yellowbg": "\u001b[30;43m\u001b[K",
+        "black_bluebg": "\u001b[30;44m\u001b[K",
     }
-    end = '\033[0m\u001b[K'
+    end = "\033[0m\u001b[K"
 
     # Count newlines at neither beginning nor end
-    num_c_nl = string.rstrip('\n').lstrip('\n').count('\n')
+    num_c_nl = string.rstrip("\n").lstrip("\n").count("\n")
 
     # Remove right new lines to count left new lines
-    num_l_nl = string.rstrip('\n').count('\n') - num_c_nl
-    l_nl = ''.join(['\n'] * num_l_nl)
+    num_l_nl = string.rstrip("\n").count("\n") - num_c_nl
+    l_nl = "".join(["\n"] * num_l_nl)
 
     # Remove left new lines to count right new lines
-    num_r_nl = string.lstrip('\n').count('\n') - num_c_nl
-    r_nl = ''.join(['\n'] * num_r_nl)
+    num_r_nl = string.lstrip("\n").count("\n") - num_c_nl
+    r_nl = "".join(["\n"] * num_r_nl)
 
     # Remove left and right newlines, will add in again later
-    _string = string.rstrip('\n').lstrip('\n')
+    _string = string.rstrip("\n").lstrip("\n")
 
-    out = '{}{}{}{}{}'.format(l_nl, ccodes[color], _string, end, r_nl)
+    out = "{}{}{}{}{}".format(l_nl, ccodes[color], _string, end, r_nl)
 
     return out
 
 
 def can_float(s: str) -> bool:
-    '''
-    For a given string, checks if conversion to float is possible
-
-    Parameters
-    ----------
-    s: str
-        string to check
-
-    Returns
-    -------
-    bool
-        True if value can be converted to float
-    '''
+    """Returns whether a string can be parsed as a float."""
     out = True
     try:
         s = float(s.strip())
@@ -337,142 +290,118 @@ def can_float(s: str) -> bool:
 
 
 def cprint(string: str, color: str):
-    '''
-    Prints colored output to screen
+    """Prints a colorized string to stdout.
 
-    Parameters
-    ----------
-    string: str
-        String to print
-    color: str {'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'black_yellowbg', 'black_bluebg'}
-        String name of color
+    Args:
+        string: String to print.
+        color: Color name supported by `cstr`.
 
-    Returns
-    -------
-    None
-    '''  # noqa
-
+    Returns:
+        None.
+    """
     return print(cstr(string, color))
 
 
 def red_exit(string: str) -> None:
-    '''
-    Prints a red string and then exits with return code of -1
+    """Prints an error message in red and exits with code ``-1``.
 
-    Parameters
-    ----------
-    string: str
-        String to print
-    '''
-    cprint(string, 'red')
+    Args:
+        string: Message to print.
+
+    Returns:
+        None.
+    """
+    cprint(string, "red")
     sys.exit(-1)
     return
 
 
 def read_exp_metadata(file_name: str) -> tuple[float, float, str]:
-    '''
-    Reads metadata from experiment files. Metadata is stored as single lines\n
-    beginning with comment character # and formatted as\n
-    NAME=VALUE
-    where NAME is one of temperature, magnetic_field, or isotope
+    """Reads metadata from an experiment CSV file.
 
-    Parameters
-    ----------
-    file_name: str
-        File to read
+    Metadata is stored as single comment lines beginning with ``#`` and formatted as
+    ``name value``. Supported keys are ``temperature``, ``magnetic_field``, and
+    ``isotope``.
 
-    Returns
-    -------
-    float
-        Temperature in Kelvin
-    float
-        Magnetic field in Tesla
-    str
-        Isotope symbol formatted as nucleon number followed by atomic symbol\n
-        e.g 1H or 13C
-    '''
+    Args:
+        file_name: Path to the experiment file.
+
+    Returns:
+        A tuple ``(temperature, magnetic_field, isotope)`` where temperature is in K,
+        magnetic field is in T, and isotope is formatted like ``"1H"`` or ``"13C"``.
+
+    Raises:
+        IndexError: If a required metadata line is missing.
+        ValueError: If a numeric metadata value cannot be parsed.
+    """
 
     temperature, magnetic_field, isotope = None, None, None
 
-    temperature = float(find_lines(
-        file_name,
-        r'# *temperature (\d*\.*\d*)',
-        re.IGNORECASE
-    )[0])
+    temperature = float(
+        find_lines(file_name, r"# *temperature (\d*\.*\d*)", re.IGNORECASE)[0]
+    )
 
-    magnetic_field = float(find_lines(
-        file_name,
-        r'# *magnetic_field (\d*\.*\d*)',
-        re.IGNORECASE
-    )[0])
+    magnetic_field = float(
+        find_lines(file_name, r"# *magnetic_field (\d*\.*\d*)", re.IGNORECASE)[0]
+    )
 
     isotope = find_lines(
-        file_name,
-        r'# *isotope (\d{0,3}[A-Za-z]{0,2})',
-        re.IGNORECASE
+        file_name, r"# *isotope (\d{0,3}[A-Za-z]{0,2})", re.IGNORECASE
     )[0]
 
     return temperature, magnetic_field, isotope
 
 
 def find_index_of_nearest(array, value):
+    """Returns the index of the nearest value in a sorted array."""
     idx = np.searchsorted(array, value, side="left")
-    if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):  # noqa
+    if idx > 0 and (
+        idx == len(array)
+        or math.fabs(value - array[idx - 1]) < math.fabs(value - array[idx])
+    ):  # noqa
         return idx - 1
     else:
         return idx
 
 
 def isotope_format(isotope_string: str) -> str:
-    r'''
-    Converts isotope string into Mathtext, compatible with matplotlib
+    r"""Formats an isotope label as Matplotlib mathtext.
 
-    Parameters
-    ----------
-    isotope_string: str
-        e.g. 1H, 13C
+    Args:
+        isotope_string: Isotope label, e.g. ``"1H"`` or ``"13C"``.
 
-    Returns
-    -------
-    str
-        Mathtext formatted string with enclosing $$\n
-        e.g. $^\mathregular{13}\mathregular{C}$
-    '''  # noqa
+    Returns:
+        A mathtext string, e.g. ``$^\mathregular{13} \mathregular{C}$``.
+    """
 
     # Split at number letter boundary
     for it, char in enumerate(isotope_string):
-        if char not in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+        if char not in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
             split_at = it
             break
     nums = isotope_string[:split_at]
     lets = isotope_string[split_at:]
 
-    return r'$^\mathregular{{{}}} \mathregular{{{}}}$'.format(nums, lets)
+    return r"$^\mathregular{{{}}} \mathregular{{{}}}$".format(nums, lets)
+
 
 def calc_g_eff(spin: float, orbit: float, total_momentum_J: float | None):
-    """Compute an effective electron g-factor.
+    """Computes an effective electron g-factor.
 
-    For spin-only systems (transition metals, organic radicals) where no
-    total J is defined, this returns the free-electron g value GE.
+    For spin-only systems (transition metals, organic radicals) where no total J is
+    defined, this returns the free-electron g value `GE`.
 
-    For lanthanides (or any system with well-defined L, S, J), this returns
-    the Landé g_J factor computed from the supplied spin (S), orbital
-    angular momentum (L = orbit) and total angular momentum J.
+    For systems with well-defined ``L``, ``S``, and ``J`` (e.g. lanthanides), this
+    returns the Landé ``g_J`` factor.
 
-    Parameters
-    ----------
-    spin : float
-        Spin quantum number S.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J. If None or zero, the
-        function falls back to GE.
+    Args:
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum quantum number ``J``. If ``None`` or
+            ``0``, the function falls back to `GE`.
 
-    Returns
-    -------
-    float
-        Effective g-factor (GE or g_J, depending on total_momentum_J).
+    Returns:
+        Effective g-factor (either `GE` or ``g_J``).
     """
 
     # Spin-only case: no total J provided or explicitly zero
@@ -481,68 +410,40 @@ def calc_g_eff(spin: float, orbit: float, total_momentum_J: float | None):
 
     # Landé g_J expression using S, L and J
     J = float(total_momentum_J)
-    # return 1.5 + (spin * (spin + 1) - orbit * (orbit + 1)) / (2.0 * J * (J + 1)) # -> see 6:47 EQ.
+
     return 1.5 + (spin * (spin + 1) - orbit * (orbit + 1)) / (2.0 * J * (J + 1))
 
 
 def choose_S_eff(spin: float, total_momentum_J: float | None):
-    """Return the effective angular momentum quantum number S_eff.
+    """Returns the effective angular momentum quantum number used in prefactors.
 
-    In the relaxation and Curie expressions used here we want a single
-    "effective" quantum number that controls the size of the magnetic
-    moment:
+    Args:
+        spin: Spin quantum number ``S``.
+        total_momentum_J: Total angular momentum ``J``. If ``None``, `spin` is used.
 
-    * For spin-only centres (transition metals, organic radicals), this is
-      just the spin quantum number S.
-    * For lanthanides (or other systems with well-defined J), we use the
-      total angular momentum J instead.
-
-    Parameters
-    ----------
-    spin : float
-        Spin quantum number S.
-    total_momentum_J : float | None
-        Total angular momentum J. If None, spin is returned.
-
-    Returns
-    -------
-    float
-        S for spin-only systems, or J for lanthanides.
+    Returns:
+        ``S`` for spin-only systems, or ``J`` when `total_momentum_J` is provided.
     """
 
     return spin if total_momentum_J is None else total_momentum_J
-    
+
+
 def get_spin_only_susceptibility(
-    spin: float,
-    orbit: float,
-    total_momentum_J: float | None,
-    temperature: float
+    spin: float, orbit: float, total_momentum_J: float | None, temperature: float
 ) -> float:
-    """Compute spin-only isotropic molar susceptibility in Å^3.
+    """Computes the spin-only isotropic molar susceptibility in Å³.
 
-    This uses the Curie law with an effective g-factor and effective
-    angular momentum quantum number S_eff (S for transition metals,
-    J for lanthanides) at the supplied temperature. The susceptibility
-    is first computed in SI units (m^3 mol^-1) and then converted to
-    Å^3, which is the internal unit used in the rest of the code.
+    Uses the Curie law with an effective g-factor and an effective angular momentum
+    quantum number (``S`` for spin-only systems, ``J`` when defined).
 
-    Parameters
-    ----------
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J. If None, a pure
-        spin-only description is assumed.
-    temperature : float
-        Temperature in Kelvin at which the spin-only susceptibility is
-        evaluated.
+    Args:
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum ``J`` or ``None`` for spin-only.
+        temperature: Temperature in Kelvin.
 
-    Returns
-    -------
-    float
-        Spin-only isotropic molar susceptibility in Å^3.
+    Returns:
+        Spin-only isotropic molar susceptibility in Å³.
     """
 
     # Landé g-factor uses S, L, J
@@ -555,10 +456,7 @@ def get_spin_only_susceptibility(
     T = float(temperature)
 
     # Chi (SI, m^3 mol^-1)
-    chi_only_iso_SI = (
-        MU0 * MUB**2 * g_eff**2 * S_eff * (S_eff + 1)
-        / (3 * KB * T)
-    )
+    chi_only_iso_SI = MU0 * MUB**2 * g_eff**2 * S_eff * (S_eff + 1) / (3 * KB * T)
 
     # Convert m^3 to Å^3: 1 Å^3 = 1e-30 m^3
     chi_only_iso = chi_only_iso_SI * 1e30
@@ -574,34 +472,25 @@ def get_true_iso_susceptibility(
     total_momentum_J: float | None,
     temperature: float,
 ) -> float:
-    """Return the "true" isotropic susceptibility χ_true,iso in Å^3.
+    """Computes a g-tensor-corrected isotropic susceptibility in Å³.
 
-    This applies a correction for the anisotropic g-tensor using ORCA
-    output. The susceptibility tensor is read from the ORCA file and
-    combined with the g-tensor to give an effective isotropic value:
+    Uses susceptibility principal components (from `chi_tensors`) and the supplied
+    g-tensor to compute an effective isotropic value.
 
-        χ_true,iso ≈ (g_eff / 3) * Σ_i χ_i / g_i,
+    Args:
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        g_tensor: g-tensor as a ``(3, 3)`` array.
+        chi_tensors: Mapping from temperature (K) to susceptibility tensor (typically
+            ``chi*T`` in the ORCA output).
+        total_momentum_J: Total angular momentum ``J`` or ``None``.
+        temperature: Temperature in Kelvin at which to evaluate the tensor.
 
-    where χ_i and g_i are principal components of the susceptibility and
-    g-tensors, respectively. The final value is returned in Å^3 per mole.
+    Returns:
+        Corrected isotropic susceptibility in Å³.
 
-    Parameters
-    ----------
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J. If None, a spin-only
-        description for g_eff is used.
-    temperature : float
-        Temperature in Kelvin at which the susceptibility tensor is
-        evaluated.
-
-    Returns
-    -------
-    float
-        "True" isotropic susceptibility χ_true,iso in Å^3 per mole.
+    Raises:
+        KeyError: If `temperature` is not present in `chi_tensors`.
     """
 
     T = float(temperature)
@@ -613,14 +502,10 @@ def get_true_iso_susceptibility(
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
 
     # Trace-based expression with g correction (cm^3 mol^-1)
-    chi_true_iso = g_eff / 3.0 * np.trace(
-        chi_tensors * np.linalg.inv(g_tensor.T)
-    )
+    chi_true_iso = g_eff / 3.0 * np.trace(chi_tensors * np.linalg.inv(g_tensor.T))
 
     # Convert from cm^3 mol^-1 to Å^3 per mole
-    chi_true_iso = chi_true_iso * (
-        1 / (1e-24 * constants.Avogadro / (4 * np.pi))
-    )
+    chi_true_iso = chi_true_iso * (1 / (1e-24 * constants.Avogadro / (4 * np.pi)))
 
     return chi_true_iso
 
@@ -636,48 +521,28 @@ def sbm_r1_dipolar(
     tau_c2,
     spin,
     orbit,
-    total_momentum_J
+    total_momentum_J,
 ):
-    """Compute SBM R1 dipolar relaxation rates for each nucleus.
+    """Computes SBM dipolar R1 relaxation rates for each nucleus.
 
-    Implements the Solomon-Bloembergen-Morgan (SBM) expression for the
-    nuclear longitudinal relaxation rate R1 arising from electron-nucleus
-    dipolar interactions. The expression is evaluated for each nucleus
-    in the system using its distance to the paramagnetic centre and the
-    appropriate spectral density terms.
+    Implements the Solomon-Bloembergen-Morgan expression for the longitudinal
+    relaxation rate due to electron-nucleus dipolar interactions.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    nuclei_coords : dict[str, np.ndarray]
-        Cartesian coordinates (in Å) of each nucleus.
-    electron_coords : np.ndarray
-        Cartesian coordinates (in Å) of the effective electron spin
-        centre.
-    gamma_I_dict : dict[str, float]
-        Nuclear gyromagnetic ratios (rad s^-1 T^-1) for each label.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    omega_S : float
-        Electron Larmor angular frequency (rad s^-1).
-    tau_c1 : float
-        Correlation time for the electron-nuclear dipolar interaction
-        (usually rotational correlation time) in seconds.
-    tau_c2 : float
-        Correlation time entering the cross terms (often tau_c1 or
-        an effective electronic correlation time) in seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        nuclei_coords: Mapping from label to Cartesian coordinates (Å).
+        electron_coords: Cartesian coordinates (Å) of the effective electron center.
+        gamma_I_dict: Nuclear gyromagnetic ratios (rad s^-1 T^-1) by label.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        omega_S: Electron Larmor angular frequency (rad s^-1).
+        tau_c1: Correlation time for the dipolar interaction (s).
+        tau_c2: Correlation time entering cross terms (s).
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum quantum number ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R1 dipolar relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to dipolar R1 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -697,9 +562,10 @@ def sbm_r1_dipolar(
         prefactor = (
             (1 / 10)
             * (1 / r**6)
-            * (MU0 / (4 * np.pi))**2
-            * (gamma_I * g_eff * MUB)**2
-            * S_eff * (S_eff + 1)
+            * (MU0 / (4 * np.pi)) ** 2
+            * (gamma_I * g_eff * MUB) ** 2
+            * S_eff
+            * (S_eff + 1)
         )
         spectral_density = (
             3 * J(omega_I, tau_c1)
@@ -713,57 +579,38 @@ def sbm_r1_dipolar(
 
 
 def sbm_r2_dipolar(
-        nuclei_labels,
-        nuclei_coords,
-        electron_coords,
-        gamma_I_dict,
-        omega_I_dict,
-        omega_S,
-        tau_c1,
-        tau_c2,
-        spin,
-        orbit,
-        total_momentum_J
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    gamma_I_dict,
+    omega_I_dict,
+    omega_S,
+    tau_c1,
+    tau_c2,
+    spin,
+    orbit,
+    total_momentum_J,
 ):
-    """Compute SBM R2 dipolar relaxation rates for each nucleus.
+    """Computes SBM dipolar R2 relaxation rates for each nucleus.
 
-    Implements the Solomon-Bloembergen-Morgan (SBM) expression for the
-    nuclear transverse relaxation rate R2 arising from electron-nucleus
-    dipolar interactions. The expression includes both zero- and
-    non-zero-frequency spectral density terms.
+    Implements the Solomon-Bloembergen-Morgan expression for the transverse
+    relaxation rate due to electron-nucleus dipolar interactions.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    nuclei_coords : dict[str, np.ndarray]
-        Cartesian coordinates (in Å) of each nucleus.
-    electron_coords : np.ndarray
-        Cartesian coordinates (in Å) of the effective electron spin
-        centre.
-    gamma_I_dict : dict[str, float]
-        Nuclear gyromagnetic ratios (rad s^-1 T^-1) for each label.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    omega_S : float
-        Electron Larmor angular frequency (rad s^-1).
-    tau_c1 : float
-        Correlation time for the electron-nuclear dipolar interaction
-        (usually rotational correlation time) in seconds.
-    tau_c2 : float
-        Correlation time entering the cross terms (often tau_c1 or an
-        effective electronic correlation time) in seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        nuclei_coords: Mapping from label to Cartesian coordinates (Å).
+        electron_coords: Cartesian coordinates (Å) of the effective electron center.
+        gamma_I_dict: Nuclear gyromagnetic ratios (rad s^-1 T^-1) by label.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        omega_S: Electron Larmor angular frequency (rad s^-1).
+        tau_c1: Correlation time for the dipolar interaction (s).
+        tau_c2: Correlation time entering cross terms (s).
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum quantum number ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R2 dipolar relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to dipolar R2 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -783,9 +630,10 @@ def sbm_r2_dipolar(
         prefactor = (
             (1 / 15)
             * (1 / r**6)
-            * (MU0 / (4 * np.pi))**2
-            * (gamma_I * g_eff * MUB)**2
-            * S_eff * (S_eff + 1)
+            * (MU0 / (4 * np.pi)) ** 2
+            * (gamma_I * g_eff * MUB) ** 2
+            * S_eff
+            * (S_eff + 1)
         )
         spectral_density = (
             4 * J(0, tau_c1)
@@ -801,43 +649,25 @@ def sbm_r2_dipolar(
 
 
 def sbm_r1_contact(
-    nuclei_labels,
-    Aiso_dict,
-    omega_I_dict,
-    omega_S,
-    tau_e2,
-    spin,
-    total_momentum_J
+    nuclei_labels, Aiso_dict, omega_I_dict, omega_S, tau_e2, spin, total_momentum_J
 ):
-    """Compute SBM R1 contact relaxation rates for each nucleus.
+    """Computes SBM contact R1 relaxation rates for each nucleus.
 
-    Implements the Solomon-Bloembergen-Morgan (SBM) expression for the
-    nuclear longitudinal relaxation rate R1 arising from isotropic
-    Fermi-contact hyperfine coupling to the electron spin.
+    Implements the Solomon-Bloembergen-Morgan expression for the longitudinal
+    relaxation rate due to isotropic Fermi-contact hyperfine coupling.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    Aiso_dict : dict[str, float]
-        Isotropic hyperfine coupling constants A_iso (in angular
-        frequency units) for each nucleus.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    omega_S : float
-        Electron Larmor angular frequency (rad s^-1).
-    tau_e2 : float
-        Electronic correlation time entering the spectral density in
-        seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        Aiso_dict: Isotropic hyperfine couplings ``A_iso`` (angular frequency units)
+            by label.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        omega_S: Electron Larmor angular frequency (rad s^-1).
+        tau_e2: Electronic correlation time entering the spectral density (s).
+        spin: Spin quantum number ``S``.
+        total_momentum_J: Total angular momentum ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R1 contact relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to contact R1 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -852,61 +682,41 @@ def sbm_r1_contact(
     for label in nuclei_labels:
         Aiso = Aiso_dict[label]
         omega_I = omega_I_dict[label]
-        prefactor = (
-            (2 / 3)
-            * Aiso**2
-            * S_eff * (S_eff + 1)
-        )
-        spectral_density = (
-            J(omega_I - omega_S, tau_e2)
-        )
+        prefactor = (2 / 3) * Aiso**2 * S_eff * (S_eff + 1)
+        spectral_density = J(omega_I - omega_S, tau_e2)
         rate = prefactor * spectral_density
         rates[label] = rate
     return rates
 
 
 def sbm_r2_contact(
-        nuclei_labels,
-        Aiso_dict,
-        omega_I_dict,
-        omega_S,
-        tau_e1,
-        tau_e2,
-        spin,
-        total_momentum_J
+    nuclei_labels,
+    Aiso_dict,
+    omega_I_dict,
+    omega_S,
+    tau_e1,
+    tau_e2,
+    spin,
+    total_momentum_J,
 ):
-    """Compute SBM R2 contact relaxation rates for each nucleus.
+    """Computes SBM contact R2 relaxation rates for each nucleus.
 
-    Implements the Solomon-Bloembergen-Morgan (SBM) expression for the
-    nuclear transverse relaxation rate R2 arising from isotropic
-    Fermi-contact hyperfine coupling to the electron spin.
+    Implements the Solomon-Bloembergen-Morgan expression for the transverse
+    relaxation rate due to isotropic Fermi-contact hyperfine coupling.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    Aiso_dict : dict[str, float]
-        Isotropic hyperfine coupling constants A_iso (in angular
-        frequency units) for each nucleus.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    omega_S : float
-        Electron Larmor angular frequency (rad s^-1).
-    tau_e1 : float
-        Electronic correlation time entering the zero-frequency term,
-        in seconds.
-    tau_e2 : float
-        Electronic correlation time entering the finite-frequency term,
-        in seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        Aiso_dict: Isotropic hyperfine couplings ``A_iso`` (angular frequency units)
+            by label.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        omega_S: Electron Larmor angular frequency (rad s^-1).
+        tau_e1: Electronic correlation time entering the zero-frequency term (s).
+        tau_e2: Electronic correlation time entering the finite-frequency term (s).
+        spin: Spin quantum number ``S``.
+        total_momentum_J: Total angular momentum ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R2 contact relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to contact R2 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -921,15 +731,8 @@ def sbm_r2_contact(
     for label in nuclei_labels:
         Aiso = Aiso_dict[label]
         omega_I = omega_I_dict[label]
-        prefactor = (
-            (1 / 3)
-            * Aiso**2
-            * S_eff * (S_eff + 1)
-        )
-        spectral_density = (
-            J(0, tau_e1)
-            + J(omega_I - omega_S, tau_e2)
-        )
+        prefactor = (1 / 3) * Aiso**2 * S_eff * (S_eff + 1)
+        spectral_density = J(0, tau_e1) + J(omega_I - omega_S, tau_e2)
         rate = prefactor * spectral_density
         rates[label] = rate
     return rates
@@ -944,41 +747,26 @@ def gueron_r1_curie(
     tau_R,
     spin,
     orbit,
-    total_momentum_J
+    total_momentum_J,
 ):
-    """Compute Guéron R1 Curie relaxation rates for each nucleus.
+    """Computes Guéron Curie R1 relaxation rates for each nucleus.
 
-    Implements the Guéron expression for nuclear longitudinal
-    relaxation (R1) due to the Curie (static) dipolar interaction with
-    an anisotropic electron magnetic susceptibility tensor. The formula
-    is evaluated in the point-dipole approximation.
+    Implements the Guéron expression for longitudinal relaxation due to the Curie
+    (static) dipolar interaction in the point-dipole approximation.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    nuclei_coords : dict[str, np.ndarray]
-        Cartesian coordinates (in Å) of each nucleus.
-    electron_coords : np.ndarray
-        Cartesian coordinates (in Å) of the effective electron spin
-        centre.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    T : float
-        Temperature in Kelvin.
-    tau_R : float
-        Rotational correlation time in seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        nuclei_coords: Mapping from label to Cartesian coordinates (Å).
+        electron_coords: Cartesian coordinates (Å) of the effective electron center.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        T: Temperature in Kelvin.
+        tau_R: Rotational correlation time (s).
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum quantum number ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R1 Curie relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to Curie R1 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -997,12 +785,12 @@ def gueron_r1_curie(
         prefactor = (
             (2 / 5)
             * (1 / r**6)
-            * (MU0 / (4 * np.pi))**2
-            * (omega_I / (3 * consts.k * T))**2
-            * (g_eff * MUB)**4
-            * (S_eff * (S_eff + 1))**2
+            * (MU0 / (4 * np.pi)) ** 2
+            * (omega_I / (3 * consts.k * T)) ** 2
+            * (g_eff * MUB) ** 4
+            * (S_eff * (S_eff + 1)) ** 2
         )
-        spectral_density = (3 * J(omega_I, tau_R))
+        spectral_density = 3 * J(omega_I, tau_R)
         rate = prefactor * spectral_density
         rates[label] = rate
 
@@ -1010,49 +798,34 @@ def gueron_r1_curie(
 
 
 def gueron_r2_curie(
-        nuclei_labels,
-        nuclei_coords,
-        electron_coords,
-        omega_I_dict,
-        T,
-        tau_R,
-        spin,
-        orbit,
-        total_momentum_J
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    omega_I_dict,
+    T,
+    tau_R,
+    spin,
+    orbit,
+    total_momentum_J,
 ):
-    """Compute Guéron R2 Curie relaxation rates for each nucleus.
+    """Computes Guéron Curie R2 relaxation rates for each nucleus.
 
-    Implements the Guéron expression for nuclear transverse relaxation
-    (R2) due to the Curie (static) dipolar interaction with an
-    anisotropic electron magnetic susceptibility tensor, in the
-    point-dipole approximation.
+    Implements the Guéron expression for transverse relaxation due to the Curie
+    (static) dipolar interaction in the point-dipole approximation.
 
-    Parameters
-    ----------
-    nuclei_labels : list[str]
-        Labels of the nuclei for which rates are computed.
-    nuclei_coords : dict[str, np.ndarray]
-        Cartesian coordinates (in Å) of each nucleus.
-    electron_coords : np.ndarray
-        Cartesian coordinates (in Å) of the effective electron spin
-        centre.
-    omega_I_dict : dict[str, float]
-        Nuclear Larmor angular frequencies (rad s^-1) for each label.
-    T : float
-        Temperature in Kelvin.
-    tau_R : float
-        Rotational correlation time in seconds.
-    spin : float
-        Spin quantum number S of the paramagnetic centre.
-    orbit : float
-        Orbital angular momentum quantum number L.
-    total_momentum_J : float | None
-        Total angular momentum quantum number J, if defined.
+    Args:
+        nuclei_labels: Labels of nuclei for which rates are computed.
+        nuclei_coords: Mapping from label to Cartesian coordinates (Å).
+        electron_coords: Cartesian coordinates (Å) of the effective electron center.
+        omega_I_dict: Nuclear Larmor angular frequencies (rad s^-1) by label.
+        T: Temperature in Kelvin.
+        tau_R: Rotational correlation time (s).
+        spin: Spin quantum number ``S``.
+        orbit: Orbital angular momentum quantum number ``L``.
+        total_momentum_J: Total angular momentum quantum number ``J`` or ``None``.
 
-    Returns
-    -------
-    dict[str, float]
-        Mapping from nucleus label to R2 Curie relaxation rate (s^-1).
+    Returns:
+        Mapping from nucleus label to Curie R2 relaxation rate (s^-1).
     """
 
     def J(omega, tau):
@@ -1071,12 +844,12 @@ def gueron_r2_curie(
         prefactor = (
             (1 / 5)
             * (1 / r**6)
-            * (MU0 / (4 * np.pi))**2
-            * (omega_I / (3 * consts.k * T))**2
-            * (g_eff * MUB)**4
-            * (S_eff * (S_eff + 1))**2
+            * (MU0 / (4 * np.pi)) ** 2
+            * (omega_I / (3 * consts.k * T)) ** 2
+            * (g_eff * MUB) ** 4
+            * (S_eff * (S_eff + 1)) ** 2
         )
-        spectral_density = (4 * J(0, tau_R) + 3 * J(omega_I, tau_R))
+        spectral_density = 4 * J(0, tau_R) + 3 * J(omega_I, tau_R)
         rate = prefactor * spectral_density
         rates[label] = rate
 

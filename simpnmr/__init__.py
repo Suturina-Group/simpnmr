@@ -1,6 +1,7 @@
-from simpnmr.cli import *
+"""
+SimpNMR is a package for working with paramagnetic NMR spectra.
+"""
+
 from .__version__ import __version__
 
-"""
-SimpNMR is a package for working with paramagnetic NMR spectra
-"""
+__all__ = ["__version__"]

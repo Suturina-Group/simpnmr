@@ -1,46 +1,39 @@
-'''
-            SimpNMR
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
 
-        Copyright (C) 2025
+"""
+Plot fitted magnetic susceptibility tensor metrics across multiple sources.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published
-by the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-This script contains a program to split rate (ac and dc *_params.csv) files
-'''
+This script reads per-source susceptibility fit results (chi_iso, chi_ax, chi_rho,
+and fit quality metrics) and produces quick comparison plots across sources.
+"""
 
 import argparse
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
 
 
-def load_susceptibility_data(sources: dict[str, str],
-                             index: int) -> list[dict[str, float]]:
-    '''
-    Loads susceptibility data from a range of sources
+def load_susceptibility_data(
+    sources: dict[str, str], index: int
+) -> list[dict[str, float]]:
+    """
+    Load susceptibility data for a given component index across multiple sources.
 
-    Parameters
-    ----------
-    sources: dict[str, str]
-        Keys are name of sources e.g. functional name\n
-        Values are file in which data is stored
+    Each source file is expected to be a whitespace-delimited table readable by
+    `numpy.loadtxt`. The function loads each file (skipping the first row) and
+    returns the selected row at `index`.
 
-    Returns
-    -------
-    list[dict[str, float]]
-    '''
+    Args:
+        sources (dict[str, str]): Mapping from source name (e.g. a functional) to the
+            corresponding input file path.
+        index (int): Row index to extract from each loaded table.
+
+    Returns:
+        dict[str, np.ndarray]: Mapping from source name to the extracted row values.
+    """
 
     all_molecules = dict.fromkeys(sources, None)
 
@@ -53,44 +46,40 @@ def load_susceptibility_data(sources: dict[str, str],
     return all_molecules
 
 
-def plot_component(func_comps: dict[str, dict[str, float]], ylabel: str,
-                   show: bool = True, save: bool = True,
-                   fig: plt.Figure = None, ax: plt.Axes = None,
-                   savename: str = 'hyperfines.png',
-                   figure_title: str = 'Hyperfine coupling constants'):
-    '''
-    Plots hyperfine data for a set of different functionals
+def plot_component(
+    func_comps: dict[str, dict[str, float]],
+    ylabel: str,
+    show: bool = True,
+    save: bool = True,
+    fig: plt.Figure = None,
+    ax: plt.Axes = None,
+    savename: str = "hyperfines.png",
+    figure_title: str = "Hyperfine coupling constants",
+):
+    """
+    Plot a simple comparison chart for a scalar susceptibility metric across sources.
 
-    Parameters
-    ----------
-    func_comps: dict[str, dict[str, float]]
-        Outer dictionary keys are functional name\n
-        values are susceptibility component
-    ylabel: str
-        ylabel of plot
-    show: bool, default True
-        Show plot
-    show: bool, default True
-        Save plot to `savename`
-    figure_title: str, default 'Hyperfine coupling constants'
-        Title of figure window
+    Args:
+        func_comps (dict[str, float]): Mapping from source name to the scalar value
+            to plot.
+        ylabel (str): Y-axis label.
+        show (bool): If True, display the plot window.
+        save (bool): If True, save the figure to `savename`.
+        fig (plt.Figure | None): Existing figure to plot into. If None, a new figure
+            is created.
+        ax (plt.Axes | None): Existing axes to plot into. If None, new axes are
+            created.
+        savename (str): Output filename for the saved figure.
+        figure_title (str): Figure title used for the matplotlib window.
 
-    Returns
-    -------
-    plt.Figure
-        Figure
-    plt.Axes
-        Axes
-    '''
+    Returns:
+        tuple[plt.Figure, plt.Axes]: The figure and axes containing the plot.
+    """
 
     if None in [fig, ax]:
-        fig, ax = plt.subplots(
-            1,
-            1,
-            num=figure_title
-        )
+        fig, ax = plt.subplots(1, 1, num=figure_title)
 
-    ax.plot(func_comps.values(), lw=0, marker='x', color='k')
+    ax.plot(func_comps.values(), lw=0, marker="x", color="k")
 
     ax.set_xticks(np.arange(len(func_comps)))
     ax.set_xticklabels(func_comps.keys(), rotation=45)
@@ -99,7 +88,7 @@ def plot_component(func_comps: dict[str, dict[str, float]], ylabel: str,
     fig.tight_layout()
 
     if save:
-        plt.savefig(f'{savename}', dpi=500)
+        plt.savefig(f"{savename}", dpi=500)
     if show:
         plt.show()
 
@@ -108,77 +97,66 @@ def plot_component(func_comps: dict[str, dict[str, float]], ylabel: str,
 
 def main():
     parser = argparse.ArgumentParser(
-        description=(
-            'This script allows you to plot multiple sets of Hyperfine data'
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description=("This script allows you to plot multiple sets of Hyperfine data"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
-        'input_file',
-        type=str,
-        help='.csv file containing source file information'
+        "input_file", type=str, help=".csv file containing source file information"
     )
 
     parser.add_argument(
-        '-w',
-        '--window_append',
-        type=str,
-        help='Appends to window titles',
-        default=''
+        "-w", "--window_append", type=str, help="Appends to window titles", default=""
     )
 
     uargs = parser.parse_args()
 
     # Load input file
     config = pd.read_csv(
-        uargs.input_file,
-        skip_blank_lines=True,
-        skipinitialspace=True,
-        comment='#'
+        uargs.input_file, skip_blank_lines=True, skipinitialspace=True, comment="#"
     )
 
     # Make table each functional name and chi, r2a, and resid
     table = {}
-    for name, folder in zip(config['name'], config['folder']):
+    for name, folder in zip(config["name"], config["folder"]):
         # Load susceptibility data
         _susc = pd.read_csv(
-            os.path.join(folder, 'susceptibility_tensor.csv'),
+            os.path.join(folder, "susceptibility_tensor.csv"),
             skip_blank_lines=True,
             skipinitialspace=True,
-            comment='#'
+            comment="#",
         )
 
         table[name] = {
-            'chi_iso': _susc['chi_iso (Å^3)'][0],
-            'chi_ax': _susc['chi_ax (Å^3)'][0],
-            'chi_rho': _susc['chi_rho (Å^3)'][0],
-            'r2_adjusted': _susc['r2_adjusted ()'][0],
-            'MAE': _susc['MAE (ppm)'][0]
+            "chi_iso": _susc["chi_iso (Å^3)"][0],
+            "chi_ax": _susc["chi_ax (Å^3)"][0],
+            "chi_rho": _susc["chi_rho (Å^3)"][0],
+            "r2_adjusted": _susc["r2_adjusted ()"][0],
+            "MAE": _susc["MAE (ppm)"][0],
         }
 
     # Isotropic parts
     plot_component(
-        {name: val['chi_iso'] for name, val in table.items()},
-        r'$\chi_\mathregular{iso} \mathregular{(\AA^{3})}$',
+        {name: val["chi_iso"] for name, val in table.items()},
+        r"$\chi_\mathregular{iso} \mathregular{(\AA^{3})}$",
         show=False,
-        figure_title='isotropic susceptibility ' + uargs.window_append
+        figure_title="isotropic susceptibility " + uargs.window_append,
     )
 
     # Ax parts
     plot_component(
-        {name: val['chi_ax'] for name, val in table.items()},
-        r'$\Delta\chi_\mathregular{ax} \mathregular{(\AA^{3})}$',
+        {name: val["chi_ax"] for name, val in table.items()},
+        r"$\Delta\chi_\mathregular{ax} \mathregular{(\AA^{3})}$",
         show=False,
-        figure_title='axial susceptibility ' + uargs.window_append
+        figure_title="axial susceptibility " + uargs.window_append,
     )
 
     # rhombic parts
     plot_component(
-        {name: val['chi_rho'] for name, val in table.items()},
-        r'$\Delta\chi_\mathregular{rho} \mathregular{(\AA^{3})}$',
+        {name: val["chi_rho"] for name, val in table.items()},
+        r"$\Delta\chi_\mathregular{rho} \mathregular{(\AA^{3})}$",
         show=False,
-        figure_title='rhombic susceptibility ' + uargs.window_append
+        figure_title="rhombic susceptibility " + uargs.window_append,
     )
 
     plt.show()

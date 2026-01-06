@@ -1,62 +1,63 @@
-from . import utils as ut
-import sys
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
+
+import copy
+import csv
 import multiprocessing as mp
+import os
+import sys
+from abc import ABC, abstractmethod
+from glob import glob
+
+import numpy as np
 import yaml
 import yaml_include
-from abc import ABC, abstractmethod
-import copy
-import os
-from glob import glob
-import numpy as np
-import csv
+
+from . import utils as ut
 
 
 class Config(ABC):
-
     @property
     @abstractmethod
     def REQ_KEYWORDS() -> dict[str, list[str]]:
-        'Required keywords and subkeywords'
+        """Required keywords and subkeywords."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def KEYWORDS() -> dict[str, list[str]]:
-        'All keywords and subkeywords'
+        """All keywords and subkeywords."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def KEYWORD_PARTNERS() -> dict[str, list[str]]:
-        'Specifies groups of subkeywords which are mututally required'
+        """Specifies groups of subkeywords which are mutually required."""
         raise NotImplementedError
 
     @classmethod
-    def from_file(cls, file_name) -> 'Config':
-        '''
-        Creates class from input file
+    def from_file(cls, file_name) -> "Config":
+        """Creates a configuration object from a YAML input file.
 
-        Parameters
-        ----------
-        file_name: str
-            Name of file to read
+        Args:
+            file_name: Path to the YAML file to read.
 
-        Returns
-        -------
-        Config
-            Configuration object
-        '''
+        Returns:
+            A configuration object of type `cls`.
 
-        yaml.add_constructor(
-            "!inc", yaml_include.Constructor(base_dir='.')
-        )
+        Raises:
+            KeyError: If a required keyword or subkeyword is missing.
+            FileNotFoundError: If the input file cannot be opened.
+        """
 
-        f = open(file_name, 'r')
+        yaml.add_constructor("!inc", yaml_include.Constructor(base_dir="."))
+
+        f = open(file_name, "r")
         parsed = yaml.full_load(f)
-        if 'master' in parsed:
-            for key, value in parsed['master'].items():
+        if "master" in parsed:
+            for key, value in parsed["master"].items():
                 parsed[key] = value
-            parsed.pop('master')
+            parsed.pop("master")
 
         # Check for unsupported keywords
         unsupported = [key for key in parsed if key not in cls.KEYWORDS]
@@ -69,30 +70,26 @@ class Config(ABC):
         ]
         if any(unsupported):
             for us in unsupported:
-                ut.cprint(
-                    f'Error: input keyword {us} unknown',
-                    'black_yellowbg'
-                )
+                ut.cprint(f"Error: input keyword {us} unknown", "black_yellowbg")
                 parsed.pop(us)
 
         # missing required (mandatory) keywords
         for keyword in cls.REQ_KEYWORDS:
             if keyword not in parsed:
-                raise KeyError(f'Error: missing keyword {keyword}')
+                raise KeyError(f"Error: missing keyword {keyword}")
             for subkeyword in cls.REQ_KEYWORDS[keyword]:
                 if subkeyword not in parsed[keyword]:
-                    # Allow nuclei:include to be omitted if nuclei:include_groups is provided
-                    if keyword == 'nuclei' and subkeyword == 'include':
-                        nuclei_block = parsed.get(
-                            'nuclei', {}) if isinstance(parsed, dict) else {}
+                    # Allow nuclei: include to be omitted if
+                    # nuclei: include_groups is provided
+                    if keyword == "nuclei" and subkeyword == "include":
+                        nuclei_block = (
+                            parsed.get("nuclei", {}) if isinstance(parsed, dict) else {}
+                        )
                         if isinstance(nuclei_block, dict):
-                            include_groups_val = nuclei_block.get(
-                                'include_groups', [])
-                            if include_groups_val not in (None, [], ''):
+                            include_groups_val = nuclei_block.get("include_groups", [])
+                            if include_groups_val not in (None, [], ""):
                                 continue
-                    raise KeyError(
-                        f'Error: missing keyword {keyword}:{subkeyword}'
-                    )
+                    raise KeyError(f"Error: missing keyword {keyword}:{subkeyword}")
 
         # and missing partner keywords
         # for keyword in parsed:
@@ -110,7 +107,7 @@ class Config(ABC):
         parsed = _parsed
 
         parsed_to_cls = {
-            f'{keyword}_{subkeyword}': parsed[keyword][subkeyword]
+            f"{keyword}_{subkeyword}": parsed[keyword][subkeyword]
             for keyword in parsed
             for subkeyword in parsed[keyword]
         }
@@ -121,126 +118,87 @@ class Config(ABC):
 
 
 class FitSuscConfig(Config):
-
     REQ_KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file'
+        "hyperfine": ["method", "file"],
+        "experiment": ["files"],
+        "assignment": [
+            "method",
         ],
-        'experiment': [
-            'files'
-        ],
-        'assignment': [
-            'method',
-        ],
-        'nuclei': [
-            'include'
-        ],
-        'susc_fit': [
-            'type',
-            'variables'
-        ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ]
+        "nuclei": ["include"],
+        "susc_fit": ["type", "variables"],
+        "project": ["name"],
+        "chem_labels": ["file"],
     }
 
     KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file',
-            'average',
-            'pdip_centres',
-            'spin',
-            'orbit',
-            'total_momentum_J'
+        "hyperfine": [
+            "method",
+            "file",
+            "average",
+            "pdip_centres",
+            "spin",
+            "orbit",
+            "total_momentum_J",
         ],
-        'experiment': [
-            'files'
+        "experiment": ["files"],
+        "assignment": ["method", "groups"],
+        "nuclei": ["include", "include_groups"],
+        "susc_fit": ["type", "variables", "average_shifts"],
+        "project": ["name"],
+        "chem_labels": ["file"],
+        "diamagnetic": [
+            "method",
+            "file",
         ],
-        'assignment': [
-            'method',
-            'groups'
-        ],
-        'nuclei': [
-            'include',
-            'include_groups'
-        ],
-        'susc_fit': [
-            'type',
-            'variables',
-            'average_shifts'
-        ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ],
-        'diamagnetic': [
-            'method',
-            'file',
-        ],
-        'diamagnetic_ref': [
-            'method',
-            'file'
-        ]
+        "diamagnetic_ref": ["method", "file"],
+        "susc_vt": ["method", "variables", "tip_file", "tip_format"],
     }
 
     KEYWORD_PARTNERS = {
-        'hyperfine': [
-            'method',
-            'file'
+        "hyperfine": ["method", "file"],
+        "assignment": [
+            "method",
+            "groups",
         ],
-        'assignment': [
-            'method',
-            'groups',
+        "susc_fit": ["type", "variables"],
+        "diamagnetic": [
+            "method",
+            "file",
         ],
-        'susc_fit': [
-            'type',
-            'variables'
-        ],
-        'diamagnetic': [
-            'method',
-            'file',
-        ],
-        'diamagnetic_ref': [
-            'method',
-            'file'
-        ]
+        "diamagnetic_ref": ["method", "file"],
     }
 
     def __init__(self, **kwargs) -> None:
-
-        self._num_threads = 'auto'
-        self._hyperfine_method = ''
-        self._hyperfine_file = ''
+        self._num_threads = "auto"
+        self._hyperfine_method = ""
+        self._hyperfine_file = ""
         self._hyperfine_average = []
         self._hyperfine_pdip_centres = []
         self._hyperfine_rotate = []
-        self._project_name = ''
+        self._project_name = ""
         self._experiment_files = []
         self._experiment_spectrum_files = []
-        self._diamagnetic_file = ''
-        self._diamagnetic_method = ''
-        self._diamagnetic_ref_method = ''
-        self._diamagnetic_ref_file = ''
-        self._assignment_method = ''
+        self._diamagnetic_file = ""
+        self._diamagnetic_method = ""
+        self._diamagnetic_ref_method = ""
+        self._diamagnetic_ref_file = ""
+        self._assignment_method = ""
         self._assignment_groups = []
-        self._nuclei_include = ''
+        self._nuclei_include = ""
         self._nuclei_include_groups = []
-        self._susc_fit_type = ''
-        self._susc_fit_variables = ''
+        self._susc_fit_type = ""
+        self._susc_fit_variables = ""
         self._susc_fit_average_shifts = []
-        self._chem_labels_file = ''
+        self._chem_labels_file = ""
         self._spin_S = None
         self._spin_multiplicity = None
-        self._spin_file = ''
+        self._spin_file = ""
         self._orbit = None
         self._total_momentum_J = None
+        self._susc_vt_method = None
+        self._susc_vt_variables = None
+        self._susc_vt_tip_file = ""
+        self._susc_vt_tip_format = ""
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -260,34 +218,60 @@ class FitSuscConfig(Config):
             self._nuclei_include_groups = [values]
         else:
             self._nuclei_include_groups = list(values)
-        # Do not expand here because chem_labels_file may not yet be set; expansion happens in _resolve_nuclei_include_groups()
         return
 
     def _resolve_nuclei_include_groups(self):
-        """Expand nuclei include groups (chem_labels) into atom labels using chem_labels_file.
-        Merge the expanded atoms into self._nuclei_include. Remove duplicates preserving order.
-        Safe to call multiple times.
+        """Expands `nuclei:include_groups` into atom labels.
+
+        Uses `chem_labels_file` to map `chem_label` values to `atom_label` values.
+        The expanded atoms are merged into `self._nuclei_include` with duplicates
+        removed while preserving order.
+
+        This method is safe to call multiple times.
+
+        Raises:
+            FileNotFoundError: If `chem_labels_file` does not exist.
         """
-        groups = getattr(self, '_nuclei_include_groups', []) or []
+        raw_groups = getattr(self, "_nuclei_include_groups", [])
+        if raw_groups is None:
+            raw_groups = []
+        if isinstance(raw_groups, str):
+            raw_groups = [raw_groups]
+        # Normalise groups to stripped strings to avoid whitespace mismatches.
+        groups = [str(g).strip() for g in raw_groups if str(g).strip()]
         if not groups:
             return
         # If chem_labels_file is not set yet, skip silently
-        chem_file = getattr(self, '_chem_labels_file', '')
+        chem_file = getattr(self, "_chem_labels_file", "")
         if not chem_file:
             return
         expanded_atoms: list[str] = []
         try:
-            with open(chem_file, newline='') as csvfile:
-                reader = csv.DictReader(csvfile)
+            with open(chem_file, newline="") as csvfile:
+                reader = csv.DictReader(csvfile, skipinitialspace=True)
+
+                # Strip header whitespace by matching keys after .strip().
+                def _get(row: dict, key: str):
+                    for k, v in row.items():
+                        if k is not None and k.strip() == key:
+                            return v
+                    return None
+
                 for row in reader:
-                    clabel = row.get('chem_label')
-                    alabel = row.get('atom_label')
+                    clabel = (_get(row, "chem_label") or "").strip()
+                    alabel = (_get(row, "atom_label") or "").strip()
                     if clabel in groups and alabel:
                         expanded_atoms.append(alabel)
         except FileNotFoundError:
-            raise FileNotFoundError(f'chem_labels_file not found: {chem_file}')
+            raise FileNotFoundError(f"chem_labels_file not found: {chem_file}")
         except Exception as e:
             raise e
+        if not expanded_atoms:
+            raise ValueError(
+                "No nuclei selected: nuclei:include_groups did not match any "
+                "chem_label entries in chem_labels_file. "
+                f"Requested groups={groups}."
+            )
         # Merge with existing nuclei_include
         current = self._nuclei_include
         if isinstance(current, str) and current:
@@ -349,8 +333,8 @@ class FitSuscConfig(Config):
 
     @hyperfine_method.setter
     def hyperfine_method(self, value: str):
-        if value not in ['dft', 'pdip', 'csv']:
-            raise ValueError(f'Unknown hyperfine:method {value}')
+        if value not in ["dft", "pdip", "csv"]:
+            raise ValueError(f"Unknown hyperfine:method {value}")
         else:
             self._hyperfine_method = value
         return None
@@ -390,8 +374,8 @@ class FitSuscConfig(Config):
         value = int(value[0])
         if value > mp.cpu_count():
             ut.cprint(
-                'Warning: Number of threads > system number, resetting',
-                'black_yellowbg'
+                "Warning: Number of threads > system number, resetting",
+                "black_yellowbg",
             )
             self._num_threads = mp.cpu_count() - 1
         else:
@@ -404,8 +388,8 @@ class FitSuscConfig(Config):
 
     @assignment_method.setter
     def assignment_method(self, value: str):
-        if value not in ['fixed', 'permute']:
-            ut.cprint(f'Unknown assignment:method {value}', 'red')
+        if value not in ["fixed", "permute"]:
+            ut.cprint(f"Unknown assignment:method {value}", "red")
             sys.exit()
         self._assignment_method = value
         return None
@@ -426,7 +410,7 @@ class FitSuscConfig(Config):
     @chem_labels_file.setter
     def chem_labels_file(self, value: str):
         if not isinstance(value, str):
-            raise ValueError('chem_labels_file file should be string')
+            raise ValueError("chem_labels_file file should be string")
         self._chem_labels_file = os.path.abspath(value)
         return None
 
@@ -468,17 +452,15 @@ class FitSuscConfig(Config):
         # Use glob to expand wildcards
         if isinstance(value, list):
             self._experiment_files = [
-                glob(os.path.abspath(val))
-                if '*' in val
-                else os.path.abspath(val)
+                glob(os.path.abspath(val)) if "*" in val else os.path.abspath(val)
                 for val in value
             ]
-            self._experiment_files = np.concatenate(
-                [self._experiment_files]
-            ).flatten().tolist()
+            self._experiment_files = (
+                np.concatenate([self._experiment_files]).flatten().tolist()
+            )
 
         elif isinstance(value, str):
-            if '*' in value:
+            if "*" in value:
                 value = glob(os.path.abspath(value))
             self._experiment_files = [os.path.abspath(value)]
         else:
@@ -492,9 +474,7 @@ class FitSuscConfig(Config):
     @experiment_spectrum_files.setter
     def experiment_spectrum_files(self, value: list[str]):
         if isinstance(value, list):
-            self._experiment_spectrum_files = [
-                os.path.abspath(val) for val in value
-            ]
+            self._experiment_spectrum_files = [os.path.abspath(val) for val in value]
         elif isinstance(value, str):
             self._experiment_spectrum_files = [os.path.abspath(value)]
         else:
@@ -508,7 +488,7 @@ class FitSuscConfig(Config):
     @diamagnetic_file.setter
     def diamagnetic_file(self, value: str):
         if not isinstance(value, str):
-            raise ValueError('Diamagnetic file should be string')
+            raise ValueError("Diamagnetic file should be string")
         self._diamagnetic_file = os.path.abspath(value)
         return
 
@@ -518,8 +498,8 @@ class FitSuscConfig(Config):
 
     @diamagnetic_method.setter
     def diamagnetic_method(self, value: str):
-        if value not in ['dft', 'csv']:
-            raise ValueError(f'Unknown diamagnetic:method {value}')
+        if value not in ["dft", "csv"]:
+            raise ValueError(f"Unknown diamagnetic:method {value}")
         else:
             self._diamagnetic_method = value
         return
@@ -530,8 +510,8 @@ class FitSuscConfig(Config):
 
     @diamagnetic_ref_method.setter
     def diamagnetic_ref_method(self, value: str):
-        if value not in ['dft', 'csv']:
-            raise ValueError(f'Unknown diamagnetic_reference:method {value}')
+        if value not in ["dft", "csv"]:
+            raise ValueError(f"Unknown diamagnetic_reference:method {value}")
         else:
             self._diamagnetic_ref_method = value
         return
@@ -543,7 +523,7 @@ class FitSuscConfig(Config):
     @diamagnetic_ref_file.setter
     def diamagnetic_ref_file(self, value: str):
         if not isinstance(value, str):
-            raise ValueError('Diamagnetic reference file should be string')
+            raise ValueError("Diamagnetic reference file should be string")
         self._diamagnetic_ref_file = os.path.abspath(value)
         return
 
@@ -562,7 +542,7 @@ class FitSuscConfig(Config):
     @spin_multiplicity.setter
     def spin_multiplicity(self, value: float | None):
         self._spin_multiplicity = value
-        
+
     @property
     def spin_file(self) -> str:
         return self._spin_file
@@ -574,7 +554,7 @@ class FitSuscConfig(Config):
     @property
     def hyperfine_spin(self) -> float | None:
         return self._spin_S
-    
+
     @hyperfine_spin.setter
     def hyperfine_spin(self, value):
         if isinstance(value, (list, tuple)):
@@ -582,20 +562,20 @@ class FitSuscConfig(Config):
         try:
             self._spin_S = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: spin={value} to float')
-        
+            raise ValueError(f"Cannot convert hyperfine: spin={value} to float")
+
     @property
     def orbit(self) -> float | None:
         return self._orbit
-    
+
     @orbit.setter
     def orbit(self, value: float | None):
         self._orbit = value
-    
+
     @property
     def hyperfine_orbit(self) -> float | None:
         return self._orbit
-    
+
     @hyperfine_orbit.setter
     def hyperfine_orbit(self, value: float | None):
         if value is None:
@@ -604,12 +584,12 @@ class FitSuscConfig(Config):
         try:
             self._orbit = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: orbit={value} to float')
+            raise ValueError(f"Cannot convert hyperfine: orbit={value} to float")
 
     @property
     def total_momentum_J(self) -> float | None:
         return self._total_momentum_J
-    
+
     @total_momentum_J.setter
     def total_momentum_J(self, value: float | None):
         self._total_momentum_J = value
@@ -626,116 +606,248 @@ class FitSuscConfig(Config):
         try:
             self._total_momentum_J = float(value)
         except Exception:
-            raise ValueError(f'Cannot convert hyperfine: total momentum J={value} to float')
+            raise ValueError(
+                f"Cannot convert hyperfine: total momentum J={value} to float"
+            )
 
+    @property
+    def susc_vt_method(self) -> str | None:
+        return self._susc_vt_method
+
+    @susc_vt_method.setter
+    def susc_vt_method(self, value: str | None):
+        if value is None or value == "":
+            self._susc_vt_method = None
+            return
+        if not isinstance(value, str):
+            raise ValueError("susc_vt: method must be a string or None")
+
+        method = value.strip().lower()
+        allowed = {"ht_limit", "vt_2nd_order"}
+        if method not in allowed:
+            raise ValueError(
+                "Invalid susc_vt:method '"
+                + str(value)
+                + "'. Allowed values are: 'vt_2nd_order' or 'ht_limit'."
+            )
+
+        self._susc_vt_method = method
+
+    @property
+    def susc_vt_variables(self) -> dict[str, list[object]] | None:
+        return self._susc_vt_variables
+
+    @susc_vt_variables.setter
+    def susc_vt_variables(self, value: dict[str, object] | None):
+        if value is None or value == "":
+            self._susc_vt_variables = None
+            return
+        if not isinstance(value, dict):
+            raise ValueError("susc_vt: variables must be a dict or None")
+
+        required_keys = {
+            "iso_intercept",
+            "iso_slope",
+            "ax_intercept",
+            "ax_slope",
+            "rho_intercept",
+            "rho_slope",
+        }
+
+        unknown = set(value) - required_keys
+        if unknown:
+            raise ValueError(
+                "susc_vt: variables contains unknown key(s): "
+                + ", ".join(sorted(unknown))
+            )
+
+        missing = required_keys - set(value)
+        if missing:
+            raise ValueError(
+                "susc_vt: variables is missing required key(s): "
+                + ", ".join(sorted(missing))
+            )
+
+        normalised: dict[str, list[object]] = {}
+        for key in sorted(required_keys):
+            entry = value.get(key)
+            if not (isinstance(entry, (list, tuple)) and len(entry) == 2):
+                raise ValueError(
+                    "susc_vt: variables entries must be 2-item sequences like "
+                    "['fit'|'fix', value]; bad entry for '"
+                    + str(key)
+                    + "': "
+                    + repr(entry)
+                )
+
+            mode, val = entry
+            if not isinstance(mode, str):
+                raise ValueError(
+                    "susc_vt: variables mode must be a string 'fit' or 'fix'; "
+                    "bad mode for '" + str(key) + "': " + repr(mode)
+                )
+
+            mode_norm = mode.strip().lower()
+            if mode_norm not in {"fit", "fix"}:
+                raise ValueError(
+                    "susc_vt: variables mode must be 'fit' or 'fix'; bad mode for '"
+                    + str(key)
+                    + "': "
+                    + repr(mode)
+                )
+
+            try:
+                fval = float(val)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "susc_vt: variables value must be numeric; bad value for '"
+                    + str(key)
+                    + "': "
+                    + repr(val)
+                ) from exc
+
+            normalised[key] = [mode_norm, fval]
+
+        self._susc_vt_variables = normalised
+
+    @property
+    def susc_vt_tip_file(self) -> str:
+        """Optional susceptibility file used by VT workflows."""
+        return self._susc_vt_tip_file
+
+    @susc_vt_tip_file.setter
+    def susc_vt_tip_file(self, value: str | None):
+        if value is None or value == "":
+            self._susc_vt_tip_file = ""
+            return None
+        if not isinstance(value, str):
+            raise ValueError("susc_vt:tip_file must be a string")
+        self._susc_vt_tip_file = os.path.abspath(value)
+        return None
+
+    @property
+    def susc_vt_tip_format(self) -> str:
+        """Format of the optional VT susceptibility file."""
+        return self._susc_vt_tip_format
+
+    @susc_vt_tip_format.setter
+    def susc_vt_tip_format(self, value: str | None):
+        if value is None or value == "":
+            self._susc_vt_tip_format = ""
+            return None
+        if not isinstance(value, str):
+            raise ValueError("susc_vt:tip_format must be a string")
+        fmt = value.strip()
+        if fmt not in ["csv", "txt", "orca_nev", "orca_cas", "molcas"]:
+            raise ValueError(f"Unknown susc_vt:tip_format {fmt}")
+        self._susc_vt_tip_format = fmt
+        return None
 
     @classmethod
-    def from_file(cls, file_name) -> 'FitSuscConfig':
-        '''
-        Creates class from input file
+    def from_file(cls, file_name) -> "FitSuscConfig":
+        """Creates a `FitSuscConfig` from a YAML input file.
 
-        Parameters
-        ----------
-        file_name: str
-            Name of file to read
+        Args:
+            file_name: Path to the YAML file to read.
 
-        Returns
-        -------
-        Config
-            Configuration object
-        '''
+        Returns:
+            A populated `FitSuscConfig` instance.
+        """
 
         config = super().from_file(file_name)
 
-        if config.assignment_method == 'permute':
+        # If an optional VT susceptibility file is provided, require a tip_format.
+        if getattr(config, "susc_vt_tip_file", ""):
+            if not getattr(config, "susc_vt_tip_format", ""):
+                raise ValueError(
+                    " Invalid VT configuration: 'susc_vt:tip_file' was provided "
+                    "but 'susc_vt:tip_format' is missing."
+                )
+
+        if config.susc_vt_method == "ht_limit" and config.susc_vt_variables is not None:
+            raise ValueError(
+                " Invalid VT configuration: method 'ht_limit' "
+                "does not use 'susc_vt:variables' "
+                "or the optional susceptibility input ('susc_vt:tip_file/tip_format'). "
+                "Remove the 'variables' block (no linear intercept/slope "
+                "fitting is performed in ht_limit).\n"
+            )
+
+        if config.susc_vt_method == "vt_2nd_order" and config.susc_vt_variables is None:
+            ut.cprint(
+                "Warning: 'susc_vt:variables' not provided. Using defaults: "
+                "all VT parameters set to ['fit', 0.0].\n",
+                "black_yellowbg",
+            )
+            config.susc_vt_variables = {
+                "iso_intercept": ["fit", 0.0],
+                "iso_slope": ["fit", 0.0],
+                "ax_intercept": ["fit", 0.0],
+                "ax_slope": ["fit", 0.0],
+                "rho_intercept": ["fit", 0.0],
+                "rho_slope": ["fit", 0.0],
+            }
+
+        if config.assignment_method == "permute":
             if not len(config.assignment_groups):
                 ut.cprint(
-                    'Warning, Missing permutation groups in input',
-                    'black_yellowbg'
+                    "Warning, Missing permutation groups in input", "black_yellowbg"
                 )
-        elif config.assignment_method == 'fixed':
+        elif config.assignment_method == "fixed":
             if len(config.assignment_groups):
                 ut.cprint(
-                    'Warning, groups provided with fixed assignment',
-                    'black_yellowbg'
+                    "Warning, groups provided with fixed assignment", "black_yellowbg"
                 )
 
         return config
 
 
 class PredictConfig(FitSuscConfig):
-
     REQ_KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file'
+        "hyperfine": ["method", "file"],
+        "nuclei": [
+            "include",
         ],
-        'nuclei': [
-            'include',
-        ],
-        'susceptibility': [
-            'file',
-            'format',
-            'temperatures'
-        ],
-        'project': [
-            'name'
-        ]
+        "susceptibility": ["file", "format", "temperatures"],
+        "project": ["name"],
     }
 
     KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file',
-            'average',
-            'pdip_centres',
-            'spin',
-            'orbit',
-            'total_momentum_J'
+        "hyperfine": [
+            "method",
+            "file",
+            "average",
+            "pdip_centres",
+            "spin",
+            "orbit",
+            "total_momentum_J",
         ],
-        'experiment': [
-            'files',
-            'spectrum_files'
+        "experiment": ["files", "spectrum_files"],
+        "nuclei": ["include"],
+        "project": ["name"],
+        "chem_labels": ["file"],
+        "diamagnetic": [
+            "method",
+            "file",
         ],
-        'nuclei': [
-            'include'
+        "diamagnetic_ref": ["method", "file"],
+        "susceptibility": ["file", "format", "temperatures"],
+        "relaxation": [
+            "model",
+            "electron_coords",
+            "magnetic_field_tesla",
+            "temperature",
+            "T1e",
+            "T2e",
+            "tR",
         ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ],
-        'diamagnetic': [
-            'method',
-            'file',
-        ],
-        'diamagnetic_ref': [
-            'method',
-            'file'
-        ],
-        'susceptibility': [
-            'file',
-            'format',
-            'temperatures'
-        ],
-        'relaxation': [
-            'model',
-            'electron_coords',
-            'magnetic_field_tesla',
-            'temperature',
-            'T1e',
-            'T2e',
-            'tR'
-        ]
     }
 
     def __init__(self, **kwargs):
-
-        self._susceptibility_file = ''
-        self._susceptibility_format = ''
+        self._susceptibility_file = ""
+        self._susceptibility_format = ""
         self._susceptibility_temperatures = []
-        self._relaxation_model = ''
+        self._relaxation_model = ""
         self._relaxation_electron_coords = None
         self._relaxation_magnetic_field_tesla = None
         self._relaxation_temperature = None
@@ -760,9 +872,8 @@ class PredictConfig(FitSuscConfig):
 
     @susceptibility_format.setter
     def susceptibility_format(self, value: str):
-        # if value not in ['csv', 'txt', 'orca', 'molcas']:
-        if value not in ['csv', 'txt', 'orca_nev', 'orca_cas', 'molcas']:
-            raise ValueError(f'Unknown susceptibility_format: {value}')
+        if value not in ["csv", "txt", "orca_nev", "orca_cas", "molcas"]:
+            raise ValueError(f"Unknown susceptibility_format: {value}")
         else:
             self._susceptibility_format = value
         return None
@@ -780,7 +891,7 @@ class PredictConfig(FitSuscConfig):
         elif isinstance(value, list):
             self._susceptibility_temperatures = [float(val) for val in value]
         else:
-            raise ValueError(f'Cannot set temperature to {value}')
+            raise ValueError(f"Cannot set temperature to {value}")
         return None
 
     @property
@@ -789,8 +900,8 @@ class PredictConfig(FitSuscConfig):
 
     @relaxation_model.setter
     def relaxation_model(self, value: str):
-        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm']:
-            raise ValueError(f'Unknown relaxation: model {value}')
+        if value.lower() not in ["sbm", "curie", "sbm curie", "curie sbm"]:
+            raise ValueError(f"Unknown relaxation: model {value}")
         else:
             self._relaxation_model = value.lower()
         return None
@@ -805,17 +916,17 @@ class PredictConfig(FitSuscConfig):
     def relaxation_electron_coords(self, value: list[float] | float):
         if value is None:
             raise ValueError(
-                f"If 'relaxation' is specified, Cartesian 'electron_coords' must be set")
+                "If 'relaxation' is specified, Cartesian 'electron_coords' must be set"
+            )
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
-                self._relaxation_electron_coords = [
-                    float(val) for val in value]
+                self._relaxation_electron_coords = [float(val) for val in value]
             except Exception:
                 raise ValueError(
-                    f"Cannot convert electron coordinates {value} to list of floats")
+                    f"Cannot convert electron coordinates {value} to list of floats"
+                )
         else:
-            raise ValueError(
-                f"Electron coordinates must be a list of 3 floats")
+            raise ValueError("Electron coordinates must be a list of 3 floats")
         return None
 
     @property
@@ -824,17 +935,26 @@ class PredictConfig(FitSuscConfig):
 
     @relaxation_magnetic_field_tesla.setter
     def relaxation_magnetic_field_tesla(self, value: float | None):
+        # Allow omission: default to 0.0 T (no external field)
         if value is None:
-            self._relaxation_magnetic_field_tesla = float(0.0)
-        else:
-            try:
-                if float(value) < 0:
-                    raise ValueError(
-                        f'magnetic_field must be zero or positive')
-                self._relaxation_magnetic_field_tesla = float(value)
-            except:
-                raise ValueError(
-                    f'Cannot convert magnetic_field value {value} to float')
+            self._relaxation_magnetic_field_tesla = 0.0
+            return None
+
+        # Accept scalar or a single-element list/tuple (YAML sometimes produces lists)
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+
+        try:
+            field = float(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Cannot convert magnetic_field value {value} to float"
+            ) from e
+
+        if field < 0:
+            raise ValueError("magnetic_field must be zero or positive")
+
+        self._relaxation_magnetic_field_tesla = field
         return None
 
     @property
@@ -844,17 +964,17 @@ class PredictConfig(FitSuscConfig):
     @relaxation_temperature.setter
     def relaxation_temperature(self, value: float | None):
         # Only require temperature if 'curie' is in the relaxation model
-        if hasattr(self, '_relaxation_model') and 'curie' in self._relaxation_model:
+        if hasattr(self, "_relaxation_model") and "curie" in self._relaxation_model:
             if value is None:
                 raise ValueError(
-                    f"If 'curie' relaxation is specified, 'temperature' must be set")
+                    "If 'curie' relaxation is specified, 'temperature' must be set"
+                )
             try:
                 if float(value) <= 0:
-                    raise ValueError(f'Temperature must be positive')
+                    raise ValueError("Temperature must be positive")
                 self._relaxation_temperature = float(value)
             except Exception:
-                raise ValueError(
-                    f"Cannot convert temperature value {value} to float")
+                raise ValueError(f"Cannot convert temperature value {value} to float")
         else:
             # If 'curie' is not in the model, temperature is not required
             self._relaxation_temperature = None
@@ -867,11 +987,10 @@ class PredictConfig(FitSuscConfig):
     @relaxation_T1e.setter
     def relaxation_T1e(self, value: float | None):
         if value is None:
-            raise ValueError(
-                f"If 'relaxation' is specified, 'T1e' must be set")
+            raise ValueError("If 'relaxation' is specified, 'T1e' must be set")
         try:
             if float(value) <= 0:
-                raise ValueError(f'T1e must be positive')
+                raise ValueError("T1e must be positive")
             self._relaxation_T1e = float(value)
         except Exception:
             raise ValueError(f"Cannot convert T1e value {value} to float")
@@ -884,11 +1003,10 @@ class PredictConfig(FitSuscConfig):
     @relaxation_T2e.setter
     def relaxation_T2e(self, value: float | None):
         if value is None:
-            raise ValueError(
-                f"If 'relaxation' is specified, 'T2e' must be set")
+            raise ValueError("If 'relaxation' is specified, 'T2e' must be set")
         try:
             if float(value) <= 0:
-                raise ValueError(f'T2e must be positive')
+                raise ValueError("T2e must be positive")
             self._relaxation_T2e = float(value)
         except Exception:
             raise ValueError(f"Cannot convert T2e value {value} to float")
@@ -901,83 +1019,69 @@ class PredictConfig(FitSuscConfig):
     @relaxation_tR.setter
     def relaxation_tR(self, value: float | None):
         if value is None:
-            raise ValueError(f"If 'relaxation' is specified, 'tR' must be set")
+            raise ValueError("If 'relaxation' is specified, 'tR' must be set")
         try:
             if float(value) <= 0:
-                raise ValueError(f'tR must be positive')
+                raise ValueError("tR must be positive")
             self._relaxation_tR = float(value)
         except Exception:
             raise ValueError(f"Cannot convert tR value {value} to float")
         return None
 
     @classmethod
-    def from_file(cls, file_name: str) -> 'PredictConfig':
+    def from_file(cls, file_name: str) -> "PredictConfig":
+        """Creates a `PredictConfig` from a YAML input file.
+
+        Args:
+            file_name: Path to the YAML file to read.
+
+        Returns:
+            A populated `PredictConfig` instance.
+        """
         cls: PredictConfig = super().from_file(file_name)
         return cls
 
 
 class FitCorrTimeConfig(FitSuscConfig):
-
     REQ_KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file'
+        "hyperfine": ["method", "file"],
+        "nuclei": [
+            "include",
         ],
-        'nuclei': [
-            'include',
+        "experiment": ["files"],
+        "fit_corr_time": [
+            "tau_R",
+            "tau_E",
         ],
-        'experiment': [
-            'files'
+        "relaxation": [
+            "model",
+            "electron_coords",
         ],
-        'fit_corr_time': [
-            'tau_R',
-            'tau_E',
-        ],
-        'relaxation': [
-            'model',
-            'electron_coords',
-        ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ]
+        "project": ["name"],
+        "chem_labels": ["file"],
     }
 
     KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file',
-            'average',
-            'pdip_centre'],
-        'nuclei': [
-            'include'
+        "hyperfine": ["method", "file", "average", "pdip_centre"],
+        "nuclei": ["include"],
+        "experiment": ["files"],
+        "fit_corr_time": [
+            "tau_R",
+            "tau_E",
         ],
-        'experiment': [
-            'files'
+        "relaxation": [
+            "model",
+            "electron_coords",
         ],
-        'fit_corr_time': [
-            'tau_R',
-            'tau_E',
-        ],
-        'relaxation': [
-            'model',
-            'electron_coords',
-        ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ]
+        "project": ["name"],
+        "chem_labels": ["file"],
     }
 
     def __init__(self, **kwargs):
         self._fit_corr_time_tau_R = None
         self._fit_corr_time_tau_E = None
-        self._fit_corr_time_fix = ''
-        self._relaxation_model = ''
+        self._fit_corr_time_fix = ""
+        self._relaxation_model = ""
         self._relaxation_electron_coords = None
 
         super().__init__(**kwargs)
@@ -991,39 +1095,41 @@ class FitCorrTimeConfig(FitSuscConfig):
     def fit_corr_time_tau_R(self, value):
         if not isinstance(value, (list, tuple)):
             raise ValueError(
-                f'tau_R must take the form: [fit/fix, guess, [lower-bound, upper-bound]], with bounds optional')
+                "tau_R must take the form: [fit/fix, guess, "
+                "[lower-bound, upper-bound]], with bounds optional"
+            )
         if len(value) < 2:
             raise ValueError(
-                f'tau_R must take the form: [fit/fix, guess, [lower-bound, upper-bound]], with bounds optional')
+                "tau_R must take the form: [fit/fix, guess, "
+                "[lower-bound, upper-bound]], with bounds optional"
+            )
         mode = value[0].lower()
-        if mode not in ['fit', 'fix']:
-            raise ValueError(f'tau_R first element must be "fit" or "fix"')
+        if mode not in ["fit", "fix"]:
+            raise ValueError('tau_R first element must be "fit" or "fix"')
         try:
             guess = float(value[1])
         except Exception:
-            raise ValueError(
-                f"Cannot convert tau_R guess value {value[1]} to float")
+            raise ValueError(f"Cannot convert tau_R guess value {value[1]} to float")
         if guess <= 0:
-            raise ValueError(f'tau_R guess must be positive')
+            raise ValueError("tau_R guess must be positive")
         bounds = value[2] if len(value) == 3 else None
         if bounds is not None:
             if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
                 raise ValueError(
-                    f'tau_R bounds must be a list: [upper-bound, lower-bound]')
+                    "tau_R bounds must be a list: [upper-bound, lower-bound]"
+                )
             try:
                 lower = float(bounds[0])
                 upper = float(bounds[1])
             except Exception:
-                raise ValueError(
-                    f"Cannot convert tau_R bounds {bounds} to floats")
+                raise ValueError(f"Cannot convert tau_R bounds {bounds} to floats")
             if upper <= lower:
-                raise ValueError(
-                    f'tau_R upper bound must be greater than lower bound')
+                raise ValueError("tau_R upper bound must be greater than lower bound")
             if lower <= 0 or upper <= 0:
-                raise ValueError(f'tau_R bounds must be positive')
+                raise ValueError("tau_R bounds must be positive")
             self._fit_corr_time_tau_R = [mode, guess, [lower, upper]]
-        if mode == 'fix' and bounds is not None:
-            raise ValueError(f'Remove bounds if correlation time is fixed.')
+        if mode == "fix" and bounds is not None:
+            raise ValueError("Remove bounds if correlation time is fixed.")
         else:
             self._fit_corr_time_tau_R = [mode, guess]
         return None
@@ -1037,38 +1143,41 @@ class FitCorrTimeConfig(FitSuscConfig):
     def fit_corr_time_tau_E(self, value):
         if not isinstance(value, (list, tuple)):
             raise ValueError(
-                f'tau_E must take the form: [fit/fix, guess, [upper-bound, lower-bound]], with bounds optional')
+                "tau_E must take the form: "
+                "[fit/fix, guess, [upper-bound, lower-bound]], with bounds optional"
+            )
         if len(value) < 2:
             raise ValueError(
-                f'tau_E must take the form: [fit/fix, guess, [upper-bound, lower-bound]], with bounds optional')
+                "tau_E must take the form: "
+                "[fit/fix, guess, [upper-bound, lower-bound]], with bounds optional"
+            )
         mode = value[0].lower()
-        if mode not in ['fit', 'fix']:
-            raise ValueError(f'tau_E: first element must be "fit" or "fix"')
+        if mode not in ["fit", "fix"]:
+            raise ValueError('tau_E: first element must be "fit" or "fix"')
         try:
             guess = float(value[1])
         except Exception:
             raise ValueError(f"Cannot convert {value[1]} to float")
         if guess <= 0:
-            raise ValueError(f'{value[1]} is negative; tau_E must be positive')
+            raise ValueError(f"{value[1]} is negative; tau_E must be positive")
         bounds = value[2] if len(value) == 3 else None
         if bounds is not None:
             if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
                 raise ValueError(
-                    f'tau_E bounds must be a list: [upper-bound, lower-bound]')
+                    "tau_E bounds must be a list: [upper-bound, lower-bound]"
+                )
             try:
                 lower = float(bounds[0])
                 upper = float(bounds[1])
             except Exception:
-                raise ValueError(
-                    f"Cannot convert tau_E bounds {bounds} to floats")
+                raise ValueError(f"Cannot convert tau_E bounds {bounds} to floats")
             if upper <= lower:
-                raise ValueError(
-                    f'tau_E upper bound must be greater than lower bound')
+                raise ValueError("tau_E upper bound must be greater than lower bound")
             if lower <= 0 or upper <= 0:
-                raise ValueError(f'tau_E bounds must be positive')
+                raise ValueError("tau_E bounds must be positive")
             self._fit_corr_time_tau_E = [mode, guess, [lower, upper]]
-        if mode == 'fix' and bounds is not None:
-            raise ValueError(f'Remove bounds if correlation time is fixed.')
+        if mode == "fix" and bounds is not None:
+            raise ValueError("Remove bounds if correlation time is fixed.")
         else:
             self._fit_corr_time_tau_E = [mode, guess]
         return None
@@ -1079,8 +1188,8 @@ class FitCorrTimeConfig(FitSuscConfig):
 
     @relaxation_model.setter
     def relaxation_model(self, value: str):
-        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm']:
-            raise ValueError(f'Unknown relaxation: model {value}')
+        if value.lower() not in ["sbm", "curie", "sbm curie", "curie sbm"]:
+            raise ValueError(f"Unknown relaxation: model {value}")
         else:
             self._relaxation_model = value.lower()
         return None
@@ -1093,57 +1202,47 @@ class FitCorrTimeConfig(FitSuscConfig):
     def relaxation_electron_coords(self, value: list[float] | float):
         if value is None:
             raise ValueError(
-                f"If 'relaxation' is specified, Cartesian 'electron_coords' must be set")
+                "If 'relaxation' is specified, Cartesian 'electron_coords' must be set"
+            )
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
-                self._relaxation_electron_coords = [
-                    float(val) for val in value]
+                self._relaxation_electron_coords = [float(val) for val in value]
             except Exception:
                 raise ValueError(
-                    f"Cannot convert electron coordinates {value} to list of floats")
+                    f"Cannot convert electron coordinates {value} to list of floats"
+                )
         else:
-            raise ValueError(
-                f"Electron coordinates must be a list of 3 floats")
+            raise ValueError("Electron coordinates must be a list of 3 floats")
         return None
 
     @classmethod
-    def from_file(cls, file_name: str) -> 'FitCorrTimeConfig':
+    def from_file(cls, file_name: str) -> "FitCorrTimeConfig":
+        """Creates a `FitCorrTimeConfig` from a YAML input file.
+
+        Args:
+            file_name: Path to the YAML file to read.
+
+        Returns:
+            A populated `FitCorrTimeConfig` instance.
+        """
         cls: FitCorrTimeConfig = super().from_file(file_name)
         return cls
 
 
 class PlotAConfig(FitSuscConfig):
-
     REQ_KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file'
+        "hyperfine": ["method", "file"],
+        "nuclei": [
+            "include",
         ],
-        'nuclei': [
-            'include',
-        ],
-        'project': [
-            'name'
-        ]
+        "project": ["name"],
     }
 
     KEYWORDS = {
-        'hyperfine': [
-            'method',
-            'file',
-            'average',
-            'pdip_centres'
-        ],
-        'nuclei': [
-            'include',
-            'include_groups'
-        ],
-        'project': [
-            'name'
-        ],
-        'chem_labels': [
-            'file'
-        ]
+        "hyperfine": ["method", "file", "average", "pdip_centres"],
+        "nuclei": ["include", "include_groups"],
+        "project": ["name"],
+        "chem_labels": ["file"],
     }
 
     @property
@@ -1188,8 +1287,8 @@ class PlotAConfig(FitSuscConfig):
 
     @hyperfine_method.setter
     def hyperfine_method(self, value: str):
-        if value not in ['dft', 'pdip', 'csv']:
-            raise ValueError(f'Unknown hyperfine:method {value}')
+        if value not in ["dft", "pdip", "csv"]:
+            raise ValueError(f"Unknown hyperfine:method {value}")
         else:
             self._hyperfine_method = value
         return None

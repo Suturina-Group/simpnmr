@@ -13,4 +13,3 @@ pip install -e .
 ```
 
 in the repository HEAD.
-
