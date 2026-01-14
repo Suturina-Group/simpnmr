@@ -427,8 +427,8 @@ def save_slope_intercept(
 
     if verbose:
         ut.cprint(
-            f"\n Slope/intercept + data written to \n {file_name}\n",
-            "cyan",  # NEED TO CHANGE
+            f"\n Temperature dependence data is written to \n {file_name}\n",
+            "cyan",
         )
 
     return

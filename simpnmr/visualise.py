@@ -1143,7 +1143,7 @@ def plot_isoaxrho(
     vals: dict,
     errs: dict,
     params: dict | None,
-    temperatures: NDArray,
+    temperatures: np.ndarray,
     show: bool = True,
     save: bool = True,
     y_label: str = "ChiT",
@@ -1158,15 +1158,16 @@ def plot_isoaxrho(
     """
 
     def plot_component(
-        vals,
-        errs,
-        params,
-        temperatures,
-        y_label,
+        vals: np.ndarray,
+        errs: np.ndarray,
+        params: dict | None,
+        temperatures: np.ndarray,
+        y_label: str,
         ax: plt.Axes,
         bax: plt.Axes,
         name: str,
     ):
+        # Plot experimental chiT values with error bars
         ax.errorbar(
             temperatures,
             vals,
@@ -1190,7 +1191,7 @@ def plot_isoaxrho(
                 temperatures,
                 params["intercept"] + params["slope"] / temperatures,
             )
-
+            # Build annotation string with fitted parameters and uncertainties
             annotation = (
                 rf"$Intercept = {params['intercept']:.1f} "
                 rf"\pm {params['intercept_err']:.1f}$"
@@ -1205,6 +1206,7 @@ def plot_isoaxrho(
             else:
                 _adj_r2_txt = f"{_adj_r2:.3f}"
 
+            # Display adj_r2 and fit parameters in the bottom annotation panel
             bax.annotate(
                 text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + annotation,  # noqa
                 xy=(0.1, 0.5),
@@ -1232,6 +1234,7 @@ def plot_isoaxrho(
         gridspec_kw={"height_ratios": [10, 1]},
     )
 
+    # Loop over susceptibility components (iso, ax, rho) and populate columns
     for col, component in enumerate(vals.keys()):
         p = None if params is None else params.get(component)
         plot_component(
@@ -1254,9 +1257,9 @@ def plot_isoaxrho(
     if show:
         plt.show()
 
+    # Save fitted intercept and slope values to a CSV file if requested
     if params is not None and out_file is not None:
         fits_list = [params.get("iso"), params.get("ax"), params.get("rho")]
-        # csv_path = os.path.join(os.path.dirname(save_name), out_file)
         outputs.save_slope_intercept(fits_list, out_file)
 
     return fig, ax

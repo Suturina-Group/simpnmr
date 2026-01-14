@@ -2,11 +2,17 @@
 # Copyright (C) 2025 Suturina Group
 
 """
-Compute Curie-normalised susceptibility (chiT) linear-fit parameters.
+Fit Curie-normalised susceptibility chiT(T) data and extract linear model parameters
 
-This module provides small helpers used by plotting and fitting scripts to
-normalise susceptibility data by the Curie prefactor and to extract linear
-model parameters for chiT(T) data.
+This module provides routines to compute reduced Curie-normalised susceptibility values
+chiT_reduced and their uncertainties chi_errT_reduced, and to perform linear fits of the form
+
+    chiT = intercept + slope / T
+
+The main outputs of the fitting workflow are
+    - chiT_reduced
+    - chi_errT_reduced
+    - fit_results containing intercept, slope, their uncertainties, and adj_r2
 """
 
 import numpy as np
@@ -19,18 +25,31 @@ MU_B = physical_constants["Bohr magneton"][0]
 
 
 def fit_chit_linear_model(
-    spin,
-    fit_temps,
-    chi_vals,
-    chi_errors,
-    tip_corrections,
-    susc_vt_variables,
-) -> tuple[np.ndarray, np.ndarray | None, dict[str, float | None]]:
+    spin: float,
+    fit_temps: np.ndarray,
+    chi_vals: np.ndarray,
+    chi_errors: np.ndarray,
+    tip_corrections: float,
+    susc_vt_variables: dict,
+) -> tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
     """
-    Fit a linear chiT = A + B / T model to Curie-normalised susceptibility data.
+    Fit a linear chiT = A + B / T model to Curie-normalised susceptibility data
 
-    If valid error estimates are provided, a weighted least-squares fit is used.
+    If valid error estimates are provided, a weighted least-squares fit is performed
 
+    Args:
+        spin (float): Total spin quantum number S.
+        fit_temps (np.ndarray): Temperature values.
+        chi_vals (np.ndarray): Susceptibility values for a single chi_component.
+        chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array of the same shape.
+        tip_corrections (float): Temperature-independent paramagnetism corrections.
+        susc_vt_variables (dict): Variables controlling fit modes and initial values.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+            - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless).
+            - chi_errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`.
+            - fit_results (dict[str, float | None]): Fit parameters and statistics.
     """
 
     def _model(T, A, B):
@@ -76,19 +95,19 @@ def fit_chit_linear_model(
             params[name] = float(val)
         return _model(T, params["intercept"], params["slope"])
 
-    # Compute chiT, chiT errors and TIP corrections from available temperatures
+    # Compute chiT values, chiT errors, and TIP corrections at the given temperatures
     chiT = chi_vals * fit_temps
-    chi_errT = chi_errors * fit_temps if chi_errors is not None else None
+    chi_errT = chi_errors * fit_temps
     tip_corrections_T = tip_corrections * fit_temps
 
-    # Curie-normalised (dimensionless) output
+    # Curie-normalised (dimensionless) values
     chiT_reduced = chiT / norm_factor
     chi_errT_reduced = chi_errT / norm_factor
 
     # Apply TIP corrections (0 if not available)
     chiT_reduced = chiT_reduced - tip_corrections_T
 
-    # Detect degenerate case: identically zero chiT
+    # Detect the degenerate case of identically zero chiT
     if np.allclose(chiT_reduced, 0.0):
         fit_results: dict[str, float | None] = {
             "intercept": 0.0,
@@ -100,14 +119,13 @@ def fit_chit_linear_model(
 
         return chiT_reduced, chi_errT_reduced, fit_results
 
-    # Prepare sigma only if there are positive errors; otherwise, fit unweighted
+    # Prepare sigma only if there are positive errors; otherwise perform an unweighted fit
     sigma = None
     abs_sigma = False
-    if chi_errT_reduced is not None:
-        _errs = np.asarray(chi_errT_reduced, dtype=float)
-        if np.any(_errs > 0):
-            sigma = _errs
-            abs_sigma = True
+    _errs = np.asarray(chi_errT_reduced, dtype=float)
+    if np.any(_errs > 0):
+        sigma = _errs
+        abs_sigma = True
 
     if not fit_param_names:
         yhat = _model(fit_temps, fixed_intercept, fixed_slope)
@@ -184,42 +202,37 @@ def fit_chit_linear_model(
 
 
 def compute_chit_high_t_limit(
-    spin,
-    fit_temps,
-    chi_vals,
-    chi_errors,
-) -> tuple[np.ndarray, np.ndarray | None, dict[str, float | None]]:
+    spin: float,
+    fit_temps: np.ndarray,
+    chi_vals: np.ndarray,
+    chi_errors: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
     """
-    Evaluate the high-temperature chiT limit assuming a zero slope.
+    Evaluate the high-temperature chiT limit assuming a zero slope
 
     This handler assumes B = 0 and takes the intercept from the
-    highest-temperature data point.
+    highest-temperature data point
 
     Args:
-        temperature (array_like): Temperature values.
-        chi_value (array_like): Susceptibility values for a single chi_component.
-        chi_errors (array_like | None): Uncertainties associated with `chi_value`.
-        norm_factor (float): Curie prefactor used for normalisation.
+        temperature (array_like): Temperature values
+        chi_value (array_like): Susceptibility values for a single chi_component
+        chi_errors: Uncertainties associated with `chi_vals` as an array of the same shape
 
     Returns:
-        tuple[np.ndarray, np.ndarray | None, dict[str, float | None]]:
-            - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless).
-            - errT_reduced (np.ndarray | None): Uncertainties for `chiT_reduced`,
-              or None if unavailable.
+        tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+            - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless)
+            - errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`
             - fit_results (dict[str, float | None]): Fit parameters for the
             fixed-slope branch (intercept from max(T) point,
-            slope=0, uncertainties, adj_r2=1).
+            slope=0, uncertainties, adj_r2=1)
     """
-
     norm_factor = compute_curie_prefactor(spin)
 
     # chiT in internal units -> Curie-normalised (dimensionless)
     chiT_reduced = (chi_vals * fit_temps) / norm_factor
 
-    errT_reduced = None
-    if chi_errors is not None:
-        chi_errors = np.asarray(chi_errors, dtype=float)
-        errT_reduced = (chi_errors * fit_temps) / norm_factor
+    chi_errors = np.asarray(chi_errors, dtype=float)
+    errT_reduced = (chi_errors * fit_temps) / norm_factor
 
     idx = int(np.nanargmax(fit_temps))
 
@@ -237,9 +250,9 @@ def compute_chit_high_t_limit(
 
 
 def compute_analytic_component(
-    chi_component,
+    chi_component: str,
     t_max: float,
-    g_tensor,
+    g_tensor: np.ndarray,
     D_J: float,
     E_J: float,
     spin: float,
@@ -282,14 +295,14 @@ def calculate_E_D_components(
     eff_H: np.ndarray,
 ) -> tuple[float, float]:
     """
-    Calculate E and D Effective Hamiltonian matrix components
+    Calculate the E and D components of the effective Hamiltonian matrix
 
     Args:
         rotated_eff_H_tensors (list of ndarray): 3×3 Effective Hamiltonian matrix
 
     Returns:
-        D (float): Axial component of the Effective Hamiltonian matrix
-        E (float): Rhombic component of the Effective Hamiltonian matrix
+        D (float): Axial component converted to Joules
+        E (float): Rhombic component converted to Joules
     """
 
     eff_H_iso = np.trace(eff_H) / 3.0
@@ -312,11 +325,11 @@ def calculate_E_D_components(
 def compute_tip_correction(
     ab_initio_chi: float,
     analytic_chi: float,
-    spin,
+    spin: float,
 ) -> float:
     norm_factor = compute_curie_prefactor(spin)
 
-    # Convert A3 -> reduced units
+    # Convert Å^3 to reduced units
     ab_initio_chi = ab_initio_chi / norm_factor
 
     chi_tip = ab_initio_chi - analytic_chi
