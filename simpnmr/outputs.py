@@ -383,7 +383,7 @@ def save_slope_intercept(
         component type.
     """
 
-    labels = ["iso", "ax", "rh"]
+    labels = ["iso", "ax", "rho"]
 
     types = []
     intercepts = []

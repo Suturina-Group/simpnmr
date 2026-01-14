@@ -15,8 +15,8 @@ from numpy.typing import ArrayLike, NDArray
 
 from . import main, models, outputs
 from . import utils as ut
-from .scripts import fit_vt
 from .scripts.coords_tools import atoms
+from .scripts.coords_tools import label_format as lf
 
 SAFE_COLOURS = [
     "C0",
@@ -437,20 +437,24 @@ def plot_pred_spectrum(
         A tuple ``(fig, ax)``.
     """
 
-    ppm_grid = np.linspace(np.min(shift_range), np.max(shift_range), 100000)
-    _total = np.zeros(np.shape(ppm_grid))
+    # Construct common ppm axis for the spectrum (x-axis)
+    x_grid = np.linspace(np.min(shift_range), np.max(shift_range), 100000)
+
+    # Construct spectrum intensities (y-axis)
+    y_intensity = np.zeros(np.shape(x_grid))
+
     for nuc in molecule.nuclei:
         if nuc.isotope == isotope:
-            _total += lorentzian(ppm_grid, nuc.shift.lw, nuc.shift.avg, 1)
+            y_intensity += lorentzian(x_grid, nuc.shift.lw, nuc.shift.avg, 1)
 
     # Normalise spectrum
-    _total /= np.max(_total)
+    y_intensity /= np.max(y_intensity)
 
     # Make plot
     fig, ax = plt.subplots(1, 1, num=window_title, figsize=(8, 5.5))
 
     # Spectrum trace
-    ax.plot(ppm_grid, _total, color="k")
+    ax.plot(x_grid, y_intensity, color="k")
 
     # Labels
     avg_shifts = {
@@ -465,15 +469,17 @@ def plot_pred_spectrum(
     sorted_shifts = [shift for _, shift in sorted_shifts_labels]
 
     # Grid y value closest to peak position
-    closest_y = [_total[ut.find_index_of_nearest(ppm_grid, sh)] for sh in sorted_shifts]
+    closest_y = [
+        y_intensity[ut.find_index_of_nearest(x_grid, sh)] for sh in sorted_shifts
+    ]
 
     # Marker at shift peak position
     ax.plot(sorted_shifts, closest_y, lw=0, marker="x", color="k", markersize=7)
 
-    # Horizontal line 10% above the highest peak
-    hline_y = 1.1 * np.max(_total)
+    # Draw text-label barrier 10% above the highest peak
+    label_barrier = 1.1 * np.max(y_intensity)
     ax.hlines(
-        hline_y,
+        label_barrier,
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
@@ -482,16 +488,13 @@ def plot_pred_spectrum(
         alpha=0.7,
     )
 
-    # Minimum acceptable distance between labels
-    label_mindist = 0.03 * (np.max(shift_range) - np.min(shift_range))
-
-    # Iteratively shift all label x positions so that they will not touch
-    # (i.e. are not within label_mindist)
-
     # Calculate initial distance matrix
     adj_label_xvals = copy.copy(sorted_shifts)
     distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
     np.fill_diagonal(distance, np.inf)
+
+    # Define minimum acceptable distance between text-labels
+    label_mindist = 0.03 * (np.max(shift_range) - np.min(shift_range))
 
     # Shift points until distance matrix has no values less than minimum dist
     while len(np.where(abs(distance) < label_mindist)[0]):
@@ -505,7 +508,7 @@ def plot_pred_spectrum(
         np.fill_diagonal(distance, np.inf)
 
     # Peak label y position (20% above max peak)
-    label_y = 1.2 * np.max(_total)
+    label_y = 1.15 * np.max(y_intensity)
 
     # Add label and dashed lines
     for shift, label, label_x in zip(sorted_shifts, sorted_labels, adj_label_xvals):  # noqa
@@ -521,10 +524,10 @@ def plot_pred_spectrum(
         )
 
         # Draw segmented line from peak to label via horizontal line
-        peak_index = ut.find_index_of_nearest(ppm_grid, shift)
+        peak_index = ut.find_index_of_nearest(x_grid, shift)
         ax.plot(
-            [ppm_grid[peak_index], ppm_grid[peak_index], label_x],
-            [_total[peak_index], hline_y, label_y],
+            [x_grid[peak_index], x_grid[peak_index], label_x],
+            [y_intensity[peak_index], label_barrier, label_y],
             linestyle="--",
             color="black",
             linewidth=0.8,
@@ -556,7 +559,7 @@ def plot_pred_spectrum(
         plt.show()
 
     # Write spectrum (ppm and normalized intensity) to CSV for external visualization
-    df = pd.DataFrame({"shift (ppm)": ppm_grid, "intensity (a.u.)": _total})
+    df = pd.DataFrame({"shift (ppm)": x_grid, "intensity (a.u.)": y_intensity})
     csv_path = os.path.join(
         os.path.dirname(save_name),
         f"shift_vs_intensity_{molecule.susc.temperature:.2f}_K.csv",
@@ -1137,109 +1140,73 @@ def plot_shift_tdep(
 
 
 def plot_isoaxrho(
-    spin: float,
-    molecules: list[main.Molecule],
-    save: bool = True,
-    method: str | None = None,
-    vt_variables: dict | None = None,
+    vals: dict,
+    errs: dict,
+    params: dict | None,
+    temperatures: NDArray,
     show: bool = True,
+    save: bool = True,
+    y_label: str = "ChiT",
     save_name: str = "iso_ax_rho_tdep.png",
     window_title: str = "Isotropic, Axial, and Rhombic susceptibilities",  # noqa
     verbose: bool = True,
-    y_mode: str = "chiT",
-    out_file: str = "slope_intercept.csv",
-    susc_models: list[models.SusceptibilityModel] = [],
-    tip_corrections=None,
+    out_file: str = "isoaxrho_fit.csv",
 ) -> tuple[plt.Figure, tuple[plt.Axes]]:  # noqa
     """Plots temperature dependence of isotropic/axial/rhombic susceptibility.
 
     The function supports plotting either ``chi*T`` or ``chi`` versus temperature.
-
-    Args:
-        spin: Spin quantum number used by the spin-Hamiltonian model.
-        molecules: Molecules containing non-empty `susc` attributes.
-        save: If ``True``, saves the plot to `save_name`.
-        method: Spin-Hamiltonian fitting method.
-        show: If ``True``, shows the plot.
-        save_name: Output image file name.
-        window_title: Figure window title.
-        verbose: If ``True``, prints the output file name when saving.
-        y_mode: Quantity to plot on the y-axis (``"chiT"`` or ``"chi"``).
-        out_file: Output CSV file name for slope/intercept results when `y_mode` is
-            ``"chiT"``.
-        susc_models: Optional fitted susceptibility models used to provide parameter
-            uncertainties.
-
-    Returns:
-        A tuple ``(fig, ax)``.
     """
 
     def plot_component(
-        temperature,
-        chi_component,
-        y_mode: str,
+        vals,
+        errs,
+        params,
+        temperatures,
+        y_label,
         ax: plt.Axes,
         bax: plt.Axes,
         name: str,
-        use_errors: bool = False,
-        chi_errors=None,
-        fit_results: dict | None = None,
     ):
-        y_labels = {
-            "chiT": {
-                "iso": r"$\chi_\mathregular{iso}T$ (reduced)",
-                "axial": r"$\Delta\chi_\mathregular{ax}T$ (reduced)",
-                "rhombic": r"$\Delta\chi_\mathregular{rh}T$ (reduced)",
-            },
-            "chi": {
-                "iso": r"$\chi_\mathregular{iso}$ (reduced)",
-                "axial": r"$\Delta\chi_\mathregular{ax}$ (reduced)",
-                "rhombic": r"$\Delta\chi_\mathregular{rh}$ (reduced)",
-            },
-        }
-
-        if not use_errors:
-            ax.plot(temperature, chi_component, lw=0, marker="x", ms=5, color="black")
-        else:
-            ax.errorbar(
-                temperature,
-                chi_component,
-                yerr=chi_errors,
-                lw=0,
-                elinewidth=1.5,
-                fillstyle="none",
-                color="black",
-                capsize=1.5,
-                marker="x",
-                ms=5,
-            )
+        ax.errorbar(
+            temperatures,
+            vals,
+            yerr=errs,
+            lw=0,
+            elinewidth=1.5,
+            fillstyle="none",
+            color="black",
+            capsize=1.5,
+            marker="x",
+            ms=5,
+        )
 
         ax.set_xlabel(r"$T$ / K")
-        ax.set_ylabel(y_labels[y_mode][name])
+        ax.set_ylabel(f"{y_label} {name}")
 
         ax.spines[["right", "top"]].set_visible(False)
 
-        if fit_results is not None:
+        if params is not None:
             ax.plot(
-                temperature,
-                fit_results["intercept"] + fit_results["slope"] / temperature,
+                temperatures,
+                params["intercept"] + params["slope"] / temperatures,
             )
 
-            params = (
-                rf"$Intercept = {fit_results['intercept']:.1f} "
-                rf"\pm {fit_results['intercept_err']:.1f}$"
+            annotation = (
+                rf"$Intercept = {params['intercept']:.1f} "
+                rf"\pm {params['intercept_err']:.1f}$"
                 + "\n"
-                + rf"$Slope = {fit_results['slope']:.1f} "
-                rf"\pm {fit_results['slope_err']:.1f}$"
+                + rf"$Slope = {params['slope']:.1f} "
+                rf"\pm {params['slope_err']:.1f}$"
             )  # noqa
-            _adj_r2 = fit_results.get("adj_r2")
-            if _adj_r2 is None or (isinstance(_adj_r2, float) and np.isnan(_adj_r2)):
+
+            _adj_r2 = params.get("adj_r2")
+            if _adj_r2 is None or np.isnan(_adj_r2):
                 _adj_r2_txt = "N/A"
             else:
                 _adj_r2_txt = f"{_adj_r2:.3f}"
 
             bax.annotate(
-                text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + params,  # noqa
+                text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + annotation,  # noqa
                 xy=(0.1, 0.5),
                 xycoords="axes fraction",
             )
@@ -1253,9 +1220,9 @@ def plot_isoaxrho(
         bax.xaxis.set_ticks([])
         bax.yaxis.set_ticks([])
 
-        if fit_results is not None:
-            return fit_results["intercept"], fit_results["slope"]
-        return 0, 0
+        if params is None:
+            return 0, 0
+        return params["intercept"], params["slope"]
 
     fig, ax = plt.subplots(
         2,
@@ -1265,131 +1232,32 @@ def plot_isoaxrho(
         gridspec_kw={"height_ratios": [10, 1]},
     )
 
-    isotropic = np.array([molecule.susc.iso for molecule in molecules])
-    temperature = np.array([molecule.susc.temperature for molecule in molecules])  # noqa
-
-    axial = np.array([molecule.susc.axiality for molecule in molecules])
-    rhombic = np.array([molecule.susc.rhombicity for molecule in molecules])
-
-    if len(susc_models) and isinstance(susc_models[0], models.IsoAxRhoFitter):
-        if "iso" in susc_models[0].fix_vars:
-            iso_err = np.zeros(len(susc_models))
-        else:
-            iso_err = np.array([model.fit_stdev["iso"] for model in susc_models])  # noqa
-        if "ax" in susc_models[0].fix_vars:
-            axial_err = np.zeros(len(susc_models))
-        else:
-            axial_err = np.array([model.fit_stdev["ax"] for model in susc_models])  # noqa
-        if "rho_over_ax" in susc_models[0].fix_vars:
-            rhombic_over_ax_err = np.zeros(len(susc_models))
-        else:
-            rhombic_over_ax_err = np.array(
-                [model.fit_stdev["rho_over_ax"] for model in susc_models]
-            )  # noqa
-        use_errors = True
-    else:
-        use_errors = False
-        iso_err = np.zeros(len(susc_models))
-        axial_err = np.zeros(len(susc_models))
-        rhombic_over_ax_err = np.zeros(len(susc_models))
-
-    # Use per-component weighting flags: do not weight if the parameter was fixed
-    if len(susc_models) and isinstance(susc_models[0], models.IsoAxRhoFitter):
-        _fix = susc_models[0].fix_vars
-    else:
-        _fix = {}
-    use_iso_errors = use_errors and ("iso" not in _fix)
-    use_ax_errors = use_errors and ("ax" not in _fix)
-    use_rh_errors = use_errors and ("rho_over_ax" not in _fix)
-
-    # Isotropic
-    iso_vals, iso_errs, iso_fit = fit_vt.compute_chit_linear_parameters(
-        method,
-        vt_variables,
-        "iso",
-        spin,
-        temperature,
-        isotropic,
-        y_mode,
-        use_errors=use_iso_errors,
-        chi_errors=iso_err,
-        tip_corrections=tip_corrections,
-    )
-    plot_component(
-        temperature,
-        iso_vals,
-        y_mode,
-        ax[0, 0],
-        ax[1, 0],
-        "iso",
-        use_errors=use_iso_errors,
-        chi_errors=iso_errs,
-        fit_results=iso_fit,
-    )
-
-    # Axial
-    axial_vals, axial_errs, axial_fit = fit_vt.compute_chit_linear_parameters(
-        method,
-        vt_variables,
-        "ax",
-        spin,
-        temperature,
-        axial,
-        y_mode,
-        use_errors=use_ax_errors,
-        chi_errors=axial_err,
-        tip_corrections=tip_corrections,
-    )
-    plot_component(
-        temperature,
-        axial_vals,
-        y_mode,
-        ax[0, 1],
-        ax[1, 1],
-        "axial",
-        use_errors=use_ax_errors,
-        chi_errors=axial_errs,
-        fit_results=axial_fit,
-    )
-
-    # Rhombic
-    rh_vals, rh_errs, rh_fit = fit_vt.compute_chit_linear_parameters(
-        method,
-        vt_variables,
-        "rho",
-        spin,
-        temperature,
-        rhombic,
-        y_mode,
-        use_errors=use_rh_errors,
-        chi_errors=rhombic_over_ax_err,
-        tip_corrections=tip_corrections,
-    )
-    plot_component(
-        temperature,
-        rh_vals,
-        y_mode,
-        ax[0, 2],
-        ax[1, 2],
-        "rhombic",
-        use_errors=use_rh_errors,
-        chi_errors=rh_errs,
-        fit_results=rh_fit,
-    )
+    for col, component in enumerate(vals.keys()):
+        p = None if params is None else params.get(component)
+        plot_component(
+            vals=vals[component],
+            errs=errs[component],
+            params=p,
+            temperatures=temperatures,
+            y_label=y_label,
+            ax=ax[0, col],
+            bax=ax[1, col],
+            name=component,
+        )
 
     fig.tight_layout()
 
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint(f"\n {y_mode} vs T plots saved to \n {save_name}\n", "cyan")
+            ut.cprint(f"\n {y_label} vs T plots saved to \n {save_name}\n", "cyan")
     if show:
         plt.show()
 
-    fits = [iso_fit, axial_fit, rh_fit]
-
-    if y_mode.lower() == "chit":
-        outputs.save_slope_intercept(fits, out_file)
+    if params is not None and out_file is not None:
+        fits_list = [params.get("iso"), params.get("ax"), params.get("rho")]
+        # csv_path = os.path.join(os.path.dirname(save_name), out_file)
+        outputs.save_slope_intercept(fits_list, out_file)
 
     return fig, ax
 
@@ -1555,10 +1423,12 @@ def plot_hyperfine_spread(
 
 def plot_raw_deconv_pred(
     molecule: main.Molecule,
+    isotope: str,
+    shift_range: ArrayLike,
     experiment: main.Experiment,
     save: bool = True,
     show: bool = True,
-    save_name: str = "iso_ax_rho_tdep.png",
+    save_name: str = "pred_and_exp_spectrum.png",
     window_title: str = "Raw, Deconvoluted, and Predicted Spectra",  # noqa
     verbose: bool = True,
 ) -> tuple[plt.Figure, tuple[plt.Axes]]:  # noqa
@@ -1566,6 +1436,8 @@ def plot_raw_deconv_pred(
 
     Args:
         molecule: Molecule containing theoretical shift data.
+        isotope: TODO
+        shift_range: TODO
         experiment: Experiment containing the raw spectrum and deconvolution results.
         save: If ``True``, saves the plot to `save_name`.
         show: If ``True``, shows the plot.
@@ -1577,97 +1449,93 @@ def plot_raw_deconv_pred(
         A tuple ``(fig, ax)``.
     """
 
-    fig, ax = plt.subplots(3, 1, figsize=(8, 5.5), num=window_title, sharex=True)
+    # Determine the number of subplots (include raw spectrum if available)
+    n_subplots = 3 if experiment.spectrum is not None else 2
 
-    ax[0].set_title(
-        "Simulation",
-        loc="left",
-        fontdict={"size": "smaller"},
-        pad=-6,
-    )
-    ax[1].set_title(
-        "Paramagnetic Signals",
-        loc="left",
-        fontdict={"size": "smaller"},
-        pad=-6,
-    )
-    ax[2].set_title(
-        "Full Spectrum",
-        loc="left",
-        fontdict={"size": "smaller"},
-        pad=-6,
-    )
+    # Construct common ppm axis for all spectra (x-axis)
+    x_grid = np.linspace(np.min(shift_range), np.max(shift_range), 100000)
 
-    isotope = experiment.isotope  # e.g. "1H"
-    element = "".join(filter(str.isalpha, isotope))  # e.g. "H"
-
-    ppm_min = np.min(experiment.spectrum[::4, 0])
-    ppm_max = np.max(experiment.spectrum[::4, 0])
-    ppm_grid = np.linspace(ppm_min, ppm_max, 100000)
-
-    sim_total = np.zeros_like(ppm_grid)
+    # Construct simulated (predicted) spectrum intensities (y-axis)
+    y_sim_intensity = np.zeros_like(x_grid)
     for nucleus in molecule.nuclei:
         if nucleus.isotope == isotope:
-            # `nucleus.shift.lw` is already a linewidth in ppm (FWHM)
-            sim_total += lorentzian(ppm_grid, nucleus.shift.lw, nucleus.shift.avg, 1)
+            y_sim_intensity += lorentzian(
+                x_grid, nucleus.shift.lw, nucleus.shift.avg, 1
+            )
 
-    if np.max(sim_total) != 0:
-        sim_total /= np.max(sim_total)
-
-    # Marker positions for labels (same logic as plot_pred_spectrum)
+    # Map each nucleus text-label to its simulated (predicted) peak position
     avg_shifts = {
         nucleus.chem_math_label: nucleus.shift.avg
         for nucleus in molecule.nuclei
         if nucleus.isotope == isotope
     }
 
+    # Ensure nucleus text-label match simulated (predicted) shifts in sorted order
     sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
     labels = [label for label, _ in sorted_shifts_labels]
     shifts = [shift for _, shift in sorted_shifts_labels]
-    closest_y = [sim_total[ut.find_index_of_nearest(ppm_grid, sh)] for sh in shifts]
 
-    ax[0].plot(ppm_grid, sim_total, lw=1, color="k")
-    ax[0].plot(shifts, closest_y, lw=0, marker="x", color="k", markersize=7)
-
-    # ---- Label placement/leader lines (match plot_pred_spectrum, but do NOT change y-scale) ----
-    # Ensure labels match shifts in sorted order (already sorted above, but keep explicit)
-    sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
-    sorted_labels = [label for label, _ in sorted_shifts_labels]
-    sorted_shifts = [shift for _, shift in sorted_shifts_labels]
-
-    # Grid y value closest to peak position
-    closest_y = [
-        sim_total[ut.find_index_of_nearest(ppm_grid, sh)] for sh in sorted_shifts
+    # Extract simulated peak heights at the nearest grid points to each shift
+    sim_peak_heights = [
+        y_sim_intensity[ut.find_index_of_nearest(x_grid, sh)] for sh in shifts
     ]
 
-    # Marker at shift peak position
-    ax[0].plot(sorted_shifts, closest_y, lw=0, marker="x", color="k", markersize=7)
+    # Construct deconvoluted (processed experimental) spectrum intensities (y-axis)
+    y_deconv_intensity = np.zeros_like(x_grid)
 
-    # Use current y-limits so we do not rescale/compress the spectrum
-    y_bottom, y_top = ax[0].get_ylim()
+    # Accumulate deconvoluted spectrum intensities
+    for signal in experiment.signals:
+        # Convert experimental linewidth from Hz to ppm
+        exp_width_ppm = signal.width / (
+            ut.NUCLEAR_GAMMAS[lf.remove_numbers(isotope)] * experiment.magnetic_field
+        )
+        # Add Lorentzian contribution
+        y_deconv_intensity += signal.l_to_g * lorentzian(
+            x_grid, exp_width_ppm, signal.shift, signal.area
+        )
+        # Add Gaussian contribution
+        y_deconv_intensity += (1 - signal.l_to_g) * gaussian(
+            x_grid, exp_width_ppm, signal.shift, signal.area
+        )
 
-    # Horizontal guide line kept within existing y-limits (so it can't change scaling)
-    hline_y = y_bottom + 0.98 * (y_top - y_bottom)
+    # Define plot space
+    fig, ax = plt.subplots(
+        n_subplots, 1, figsize=(8, 5.5), num=window_title, sharex=True
+    )
+
+    # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
+
+    ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
+    ax[0].plot(x_grid, y_sim_intensity, lw=1, color="k")
+    ax[0].plot(shifts, sim_peak_heights, lw=0, marker="x", color="k")
+
+    # Draw text-label barrier 10% above the highest simulated (predicted) peak
+    label_barrier = 1.1 * np.max(y_sim_intensity)
+
     ax[0].hlines(
-        hline_y,
-        ppm_min,
-        ppm_max,
+        label_barrier,
+        np.min(shift_range),
+        np.max(shift_range),
         linestyle="-",
         color="black",
-        linewidth=0.8,
+        linewidth=0.5,
         alpha=0.7,
     )
 
-    # Minimum acceptable distance between labels (in ppm)
-    label_mindist = 0.03 * (ppm_max - ppm_min)
+    # Vertical position for peak text-labels (10% above the label barrier)
+    labels_position_y = 1.05 * label_barrier
 
-    # Iteratively shift all label x positions so that they will not touch
-    adj_label_xvals = copy.copy(sorted_shifts)
+    # Define minimum acceptable distance between text-labels
+    label_mindist = 0.03 * (np.max(shift_range) - np.min(shift_range))
+
+    # Calculate initial distance matrix
+    adj_label_xvals = copy.copy(shifts)
     distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
     np.fill_diagonal(distance, np.inf)
 
+    # Shift points until distance matrix has no values less than minimum dist
     while len(np.where(abs(distance) < label_mindist)[0]):
-        xlocs, ylocs = np.where(abs(distance) < label_mindist)
+        [xlocs, ylocs] = np.where(abs(distance) < label_mindist)
         for x, y in zip(xlocs, ylocs):
             if y > x:
                 adj_label_xvals[x] -= label_mindist / 2
@@ -1676,97 +1544,70 @@ def plot_raw_deconv_pred(
         distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
         np.fill_diagonal(distance, np.inf)
 
-    # Place labels slightly above the axis (axes fraction > 1) so scaling is unchanged
-    label_y_axes = 1.02
-    xaxis_transform = ax[0].get_xaxis_transform()  # x in data, y in axes fraction
-
-    for shift, label, label_x in zip(sorted_shifts, sorted_labels, adj_label_xvals):
-        if not (ppm_min < shift < ppm_max):
-            continue
-
-        # Label text above the axis
+    for peak_x, peak_y, label_x, label in zip(
+        shifts, sim_peak_heights, adj_label_xvals, labels
+    ):
+        # Add label
         ax[0].text(
             label_x,
-            label_y_axes,
+            labels_position_y,
             label,
+            fontsize="9",
             rotation="vertical",
-            ha="center",
             va="bottom",
-            fontsize=15,
-            transform=xaxis_transform,
-            clip_on=False,
+            ha="center",
         )
 
-        # Leader lines: peak -> hline (data coords), then hline -> label (mixed coords)
-        peak_index = ut.find_index_of_nearest(ppm_grid, shift)
-        peak_y = sim_total[peak_index]
-
-        # Segment 1: vertical to the hline
+        # Draw segmented line from peak to label via horizontal barrier
         ax[0].plot(
-            [ppm_grid[peak_index], ppm_grid[peak_index]],
-            [peak_y, hline_y],
+            [peak_x, peak_x, label_x],
+            [peak_y, label_barrier, labels_position_y],
             linestyle="--",
             color="black",
-            linewidth=0.8,
-            alpha=0.6,
+            linewidth=0.7,
+            alpha=0.4,
         )
 
-        # Segment 2: horizontal along the hline to the label x-position
-        ax[0].plot(
-            [ppm_grid[peak_index], label_x],
-            [hline_y, hline_y],
-            linestyle="--",
-            color="black",
-            linewidth=0.8,
-            alpha=0.6,
-        )
-
-        # Segment 3: from hline up to the label (doesn't affect data scaling)
-        ax[0].annotate(
-            "",
-            xy=(label_x, hline_y),
-            xycoords="data",
-            xytext=(label_x, label_y_axes),
-            textcoords=xaxis_transform,
-            arrowprops={
-                "arrowstyle": "-",
-                "linestyle": "--",
-                "color": "black",
-                "linewidth": 0.8,
-                "alpha": 0.6,
-            },
-            annotation_clip=False,
-        )
-
-    deconv_total = np.zeros_like(ppm_grid)
-    for signal in experiment.signals:
-        # `signal.width` is provided in Hz (FWHM)
-        width_ppm = signal.width / (
-            ut.NUCLEAR_GAMMAS[element] * experiment.magnetic_field
-        )
-
-        deconv_total += signal.l_to_g * lorentzian(
-            ppm_grid, width_ppm, signal.shift, signal.area
-        )
-        deconv_total += (1 - signal.l_to_g) * gaussian(
-            ppm_grid, width_ppm, signal.shift, signal.area
-        )
-
-    ax[1].plot(ppm_grid, deconv_total, lw=1, color="k")
-    ax[2].plot(
-        experiment.spectrum[::4, 0], experiment.spectrum[::4, 1], lw=1, color="k"
+    ax[0].set_title(
+        "Simulation",
+        loc="left",
+        fontdict={"size": "smaller"},
+        pad=-6,
     )
 
+    # SUBPLOT NUMBER 2 - Deconvoluted (processed experimental) spectrum
+    ax[1].plot(x_grid, y_deconv_intensity, lw=1, color="k")
+    ax[1].set_title(
+        "Paramagnetic Signals",
+        loc="left",
+        fontdict={"size": "smaller"},
+        pad=-6,
+    )
+
+    # SUBPLOT NUMBER 3 - Raw experimental spectrum if available
+    if n_subplots == 3:
+        ax[2].plot(
+            experiment.spectrum[:, 0],
+            experiment.spectrum[:, 1],
+            lw=1,
+            color="k",
+        )
+        ax[2].set_title(
+            "Full Spectrum",
+            loc="left",
+            fontdict={"size": "smaller"},
+            pad=-6,
+        )
+
+    # Set x-axis at the bottom of the plot
+    ax[-1].xaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(ut.isotope_format(isotope)))
+
+    # Remove y-axis ticks, labels, and spines for a cleaner stacked-spectra layout
     for axis in ax:
         axis.set_yticks([])
         axis.set_yticklabels([])
-        axis.set_xlim(
-            [np.max(experiment.spectrum[:, 0]), np.min(experiment.spectrum[:, 0])]
-        )
         axis.spines[["right", "top", "left"]].set_visible(False)
-
-    ax[2].set_xlabel(r"{} $\delta$ (ppm)".format(ut.isotope_format(isotope)))
-    ax[2].xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     fig.tight_layout()
 
@@ -1778,4 +1619,4 @@ def plot_raw_deconv_pred(
     if show:
         plt.show()
 
-    return
+    return fig, ax

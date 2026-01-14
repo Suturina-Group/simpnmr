@@ -8,6 +8,7 @@ spectra, hyperfine couplings, and magnetic susceptibility tensors.
 """
 
 import copy
+import csv
 import datetime
 import os
 import re
@@ -109,10 +110,15 @@ class Experiment:
         # Read spectrum supporting both comma and any whitespace as separators
         df = pd.read_csv(
             file_name,
-            sep=r"[,\s]+",
-            comment="#",
+            sep=r"\s+",  # tabs/spaces
             header=None,
+            comment="#",
             engine="python",
+            quoting=csv.QUOTE_NONE,  # treat quotes as normal characters
+            converters={
+                0: lambda s: float(s.strip("\"'")),
+                1: lambda s: float(s.strip("\"'")),
+            },
         )
 
         if df.shape[1] != 2:

@@ -15,7 +15,6 @@ import numpy as np
 import scipy.constants as consts
 from extto.core import find_lines
 from numpy.typing import NDArray
-from scipy import constants
 
 from .scripts.coords_tools import label_format as lf
 
@@ -453,10 +452,10 @@ def get_spin_only_susceptibility(
     # S for transition metals, J for lanthanides
     S_eff = choose_S_eff(spin, total_momentum_J)
 
-    T = float(temperature)
-
     # Chi (SI, m^3 mol^-1)
-    chi_only_iso_SI = MU0 * MUB**2 * g_eff**2 * S_eff * (S_eff + 1) / (3 * KB * T)
+    chi_only_iso_SI = (
+        MU0 * MUB**2 * g_eff**2 * S_eff * (S_eff + 1) / (3 * KB * temperature)
+    )
 
     # Convert m^3 to Å^3: 1 Å^3 = 1e-30 m^3
     chi_only_iso = chi_only_iso_SI * 1e30
@@ -470,7 +469,6 @@ def get_true_iso_susceptibility(
     g_tensor: NDArray,
     chi_tensors: dict[float, NDArray],
     total_momentum_J: float | None,
-    temperature: float,
 ) -> float:
     """Computes a g-tensor-corrected isotropic susceptibility in Å³.
 
@@ -481,31 +479,19 @@ def get_true_iso_susceptibility(
         spin: Spin quantum number ``S``.
         orbit: Orbital angular momentum quantum number ``L``.
         g_tensor: g-tensor as a ``(3, 3)`` array.
-        chi_tensors: Mapping from temperature (K) to susceptibility tensor (typically
-            ``chi*T`` in the ORCA output).
+        chi_tensors: chi tensors in A^3.
         total_momentum_J: Total angular momentum ``J`` or ``None``.
-        temperature: Temperature in Kelvin at which to evaluate the tensor.
 
     Returns:
-        Corrected isotropic susceptibility in Å³.
+        Corrected isotropic susceptibility in A^3.
 
-    Raises:
-        KeyError: If `temperature` is not present in `chi_tensors`.
     """
-
-    T = float(temperature)
-
-    # Lookup susceptibility tensor at temperature T, divide by T if file contains chi*T
-    chi_tensors = chi_tensors[T] / T
 
     # Use Landé g_J (or GE) to get an effective g-factor
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
 
     # Trace-based expression with g correction (cm^3 mol^-1)
     chi_true_iso = g_eff / 3.0 * np.trace(chi_tensors * np.linalg.inv(g_tensor.T))
-
-    # Convert from cm^3 mol^-1 to Å^3 per mole
-    chi_true_iso = chi_true_iso * (1 / (1e-24 * constants.Avogadro / (4 * np.pi)))
 
     return chi_true_iso
 

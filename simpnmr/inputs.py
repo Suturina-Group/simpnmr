@@ -151,7 +151,13 @@ class FitSuscConfig(Config):
             "file",
         ],
         "diamagnetic_ref": ["method", "file"],
-        "susc_vt": ["method", "variables", "tip_file", "tip_format"],
+        "susc_vt": [
+            "method",
+            "variables",
+            "tip_type",
+            "ab_initio_file",
+            "ab_initio_format",
+        ],
     }
 
     KEYWORD_PARTNERS = {
@@ -196,9 +202,10 @@ class FitSuscConfig(Config):
         self._orbit = None
         self._total_momentum_J = None
         self._susc_vt_method = None
+        self._susc_vt_tip_type = None
         self._susc_vt_variables = None
-        self._susc_vt_tip_file = ""
-        self._susc_vt_tip_format = ""
+        self._susc_vt_ab_initio_file = None
+        self._susc_vt_ab_initio_format = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -634,7 +641,30 @@ class FitSuscConfig(Config):
         self._susc_vt_method = method
 
     @property
-    def susc_vt_variables(self) -> dict[str, list[object]] | None:
+    def susc_vt_tip_type(self) -> str | None:
+        return self._susc_vt_tip_type
+
+    @susc_vt_tip_type.setter
+    def susc_vt_tip_type(self, value: str | None):
+        if value is None or value == "":
+            self._susc_vt_tip_type = None
+            return
+        if not isinstance(value, str):
+            raise ValueError("susc_vt: type must be a string or None")
+
+        type = value.strip().lower()
+        allowed = {"fit", "fix_tip_from_ab_initio"}
+        if type not in allowed:
+            raise ValueError(
+                "Invalid susc_vt:type '"
+                + str(value)
+                + "'. Allowed values are: 'fit', or 'fix_tip_from_ab_initio'."
+            )
+
+        self._susc_vt_tip_type = type
+
+    @property
+    def susc_vt_variables(self) -> dict[str, dict[str, list[object]]] | None:
         return self._susc_vt_variables
 
     @susc_vt_variables.setter
@@ -645,102 +675,126 @@ class FitSuscConfig(Config):
         if not isinstance(value, dict):
             raise ValueError("susc_vt: variables must be a dict or None")
 
-        required_keys = {
-            "iso_intercept",
-            "iso_slope",
-            "ax_intercept",
-            "ax_slope",
-            "rho_intercept",
-            "rho_slope",
-        }
-
-        unknown = set(value) - required_keys
-        if unknown:
+        required_components = {"iso", "ax", "rho"}
+        unknown_components = set(value) - required_components
+        if unknown_components:
             raise ValueError(
-                "susc_vt: variables contains unknown key(s): "
-                + ", ".join(sorted(unknown))
+                "susc_vt: variables contains unknown component(s): "
+                + ", ".join(sorted(unknown_components))
             )
 
-        missing = required_keys - set(value)
-        if missing:
+        missing_components = required_components - set(value)
+        if missing_components:
             raise ValueError(
-                "susc_vt: variables is missing required key(s): "
-                + ", ".join(sorted(missing))
+                "susc_vt: variables is missing component(s): "
+                + ", ".join(sorted(missing_components))
             )
 
-        normalised: dict[str, list[object]] = {}
-        for key in sorted(required_keys):
-            entry = value.get(key)
-            if not (isinstance(entry, (list, tuple)) and len(entry) == 2):
+        normalised: dict[str, dict[str, list[object]]] = {}
+        for comp in required_components:
+            block = value.get(comp)
+            if not isinstance(block, dict):
                 raise ValueError(
-                    "susc_vt: variables entries must be 2-item sequences like "
-                    "['fit'|'fix', value]; bad entry for '"
-                    + str(key)
-                    + "': "
-                    + repr(entry)
+                    "susc_vt: variables component '"
+                    + str(comp)
+                    + "' must be a mapping with keys 'intercept' and 'slope'"
                 )
 
-            mode, val = entry
-            if not isinstance(mode, str):
+            missing = {"intercept", "slope"} - set(block)
+            if missing:
                 raise ValueError(
-                    "susc_vt: variables mode must be a string 'fit' or 'fix'; "
-                    "bad mode for '" + str(key) + "': " + repr(mode)
+                    "susc_vt: variables component '"
+                    + str(comp)
+                    + "' is missing key(s): "
+                    + ", ".join(sorted(missing))
                 )
 
-            mode_norm = mode.strip().lower()
-            if mode_norm not in {"fit", "fix"}:
-                raise ValueError(
-                    "susc_vt: variables mode must be 'fit' or 'fix'; bad mode for '"
-                    + str(key)
-                    + "': "
-                    + repr(mode)
-                )
+            comp_vars: dict[str, list[object]] = {}
+            for key in ("intercept", "slope"):
+                entry = block.get(key)
+                if not (isinstance(entry, (list, tuple)) and len(entry) == 2):
+                    raise ValueError(
+                        "susc_vt: variables entries must be 2-item sequences like "
+                        "['fit'|'fix', value]; bad entry for '"
+                        + str(comp)
+                        + ":"
+                        + str(key)
+                        + "': "
+                        + repr(entry)
+                    )
 
-            try:
-                fval = float(val)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "susc_vt: variables value must be numeric; bad value for '"
-                    + str(key)
-                    + "': "
-                    + repr(val)
-                ) from exc
+                mode, val = entry
+                if not isinstance(mode, str):
+                    raise ValueError(
+                        "susc_vt: variables mode must be a string 'fit' or 'fix'; "
+                        "bad mode for '"
+                        + str(comp)
+                        + ":"
+                        + str(key)
+                        + "': "
+                        + repr(mode)
+                    )
 
-            normalised[key] = [mode_norm, fval]
+                mode_norm = mode.strip().lower()
+                if mode_norm not in {"fit", "fix"}:
+                    raise ValueError(
+                        "susc_vt: variables mode must be 'fit' or 'fix'; bad mode for '"
+                        + str(comp)
+                        + ":"
+                        + str(key)
+                        + "': "
+                        + repr(mode)
+                    )
+
+                try:
+                    fval = float(val)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "susc_vt: variables value must be numeric; bad value for '"
+                        + str(comp)
+                        + ":"
+                        + str(key)
+                        + "': "
+                        + repr(val)
+                    ) from exc
+
+                comp_vars[key] = [mode_norm, fval]
+
+            normalised[comp] = comp_vars
 
         self._susc_vt_variables = normalised
 
     @property
-    def susc_vt_tip_file(self) -> str:
+    def susc_vt_ab_initio_file(self) -> str:
         """Optional susceptibility file used by VT workflows."""
-        return self._susc_vt_tip_file
+        return self._susc_vt_ab_initio_file
 
-    @susc_vt_tip_file.setter
-    def susc_vt_tip_file(self, value: str | None):
+    @susc_vt_ab_initio_file.setter
+    def susc_vt_ab_initio_file(self, value: str | None):
         if value is None or value == "":
-            self._susc_vt_tip_file = ""
+            self._susc_vt_ab_initio_file = ""
             return None
         if not isinstance(value, str):
-            raise ValueError("susc_vt:tip_file must be a string")
-        self._susc_vt_tip_file = os.path.abspath(value)
+            raise ValueError("susc_vt:ab_initio_file must be a string")
+        self._susc_vt_ab_initio_file = os.path.abspath(value)
         return None
 
     @property
-    def susc_vt_tip_format(self) -> str:
+    def susc_vt_ab_initio_format(self) -> str:
         """Format of the optional VT susceptibility file."""
-        return self._susc_vt_tip_format
+        return self._susc_vt_ab_initio_format
 
-    @susc_vt_tip_format.setter
-    def susc_vt_tip_format(self, value: str | None):
+    @susc_vt_ab_initio_format.setter
+    def susc_vt_ab_initio_format(self, value: str | None):
         if value is None or value == "":
-            self._susc_vt_tip_format = ""
+            self._susc_vt_ab_initio_format = ""
             return None
         if not isinstance(value, str):
-            raise ValueError("susc_vt:tip_format must be a string")
+            raise ValueError("susc_vt:ab_initio_format must be a string")
         fmt = value.strip()
         if fmt not in ["csv", "txt", "orca_nev", "orca_cas", "molcas"]:
-            raise ValueError(f"Unknown susc_vt:tip_format {fmt}")
-        self._susc_vt_tip_format = fmt
+            raise ValueError(f"Unknown susc_vt:ab_initio_format {fmt}")
+        self._susc_vt_ab_initio_format = fmt
         return None
 
     @classmethod
@@ -756,19 +810,20 @@ class FitSuscConfig(Config):
 
         config = super().from_file(file_name)
 
-        # If an optional VT susceptibility file is provided, require a tip_format.
-        if getattr(config, "susc_vt_tip_file", ""):
-            if not getattr(config, "susc_vt_tip_format", ""):
+        # If an optional VT susceptibility file is provided, require a ab_initio_format.
+        if getattr(config, "susc_vt_ab_initio_file", ""):
+            if not getattr(config, "susc_vt_ab_initio_format", ""):
                 raise ValueError(
-                    " Invalid VT configuration: 'susc_vt:tip_file' was provided "
-                    "but 'susc_vt:tip_format' is missing."
+                    " Invalid VT configuration: 'susc_vt:ab_initio_file' was provided "
+                    "but 'susc_vt:ab_initio_format' is missing."
                 )
 
         if config.susc_vt_method == "ht_limit" and config.susc_vt_variables is not None:
             raise ValueError(
                 " Invalid VT configuration: method 'ht_limit' "
                 "does not use 'susc_vt:variables' "
-                "or the optional susceptibility input ('susc_vt:tip_file/tip_format'). "
+                "or the optional susceptibility input ('susc_vt:ab_initio_file/"
+                "ab_initio_format'). "
                 "Remove the 'variables' block (no linear intercept/slope "
                 "fitting is performed in ht_limit).\n"
             )
@@ -780,13 +835,19 @@ class FitSuscConfig(Config):
                 "black_yellowbg",
             )
             config.susc_vt_variables = {
-                "iso_intercept": ["fit", 0.0],
-                "iso_slope": ["fit", 0.0],
-                "ax_intercept": ["fit", 0.0],
-                "ax_slope": ["fit", 0.0],
-                "rho_intercept": ["fit", 0.0],
-                "rho_slope": ["fit", 0.0],
+                "iso": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
+                "ax": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
+                "rho": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
             }
+
+        if (
+            config.susc_vt_tip_type is None
+            and config.susc_vt_ab_initio_file is not None
+        ):
+            raise ValueError(
+                " Invalid VT configuration: TIP type is not provided, "
+                "Therefore 'susc_vt:ab_initio_file' variable can not be used"
+            )
 
         if config.assignment_method == "permute":
             if not len(config.assignment_groups):

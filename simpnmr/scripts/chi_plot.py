@@ -1,28 +1,3 @@
-# SimpNMR
-# Copyright (C) 2025
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-"""
-Module for plotting temperature-dependent magnetic susceptibility tensors.
-
-This script reads susceptibility tensors for CASSCF or NEVPT2 sections from an ORCA output file,
-calculates isotropic, axial, and rhombic components, normalizes them, and plots these components
-against inverse temperature with an optional secondary axis showing temperature in K.
-It can also perform linear regression on provided experimental standard deviations (where present) and display predicted uncertainty bands.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -872,12 +847,77 @@ def _lr_with_optional_csv(
             "rho"
         ]
 
+        # --- Compact TIP/LR table summary (CSV branch) ---
+        def _fmt_float(v: float | None) -> str:
+            if v is None:
+                return "—"
+            try:
+                if not np.isfinite(v):
+                    return "—"
+                return f"{v:.10g}"
+            except Exception:
+                return "—"
+
+        def _fmt_list(vals: list[float]) -> str:
+            # Keep output readable; CSV branch usually has ~10–20 points.
+            if vals is None:
+                return "—"
+            try:
+                return "[" + ", ".join(f"{float(x):.10g}" for x in vals) + "]"
+            except Exception:
+                return "—"
+
+        # --- DEBUG: log NEVPT2 axial chi at T_ref before TIP construction ---
+        try:
+            # T_ref is the maximum CSV temperature used for TIP anchoring
+            idx_ref = max(range(len(temps_csv)), key=lambda i: temps_csv[i])
+            T_ref = temps_csv[idx_ref]
+            chi_ax_nevpt2_ref = chi_ax_fit_csv_chi[idx_ref]
+            print("")
+            print("DEBUG NEVPT2 AX BEFORE TIP")
+            print(f"  T_ref = {T_ref}")
+            print(f"  chi_ax_NEVPT2(T_ref) = {chi_ax_nevpt2_ref}")
+            print(f"  chi_ax_NEVPT2(T_ref) [A^3] = {chi_ax_nevpt2_ref * 1e30}")
+            print("")
+        except Exception as _exc:
+            print("DEBUG NEVPT2 AX BEFORE TIP: FAILED", _exc)
+
+        # chi arrays are in chi-units (NOT chi*T) at the CSV temperatures
+        chi_iso_before = list(chi_iso_fit_csv_chi)
+        chi_ax_before = list(chi_ax_fit_csv_chi)
+
+        chi_iso_after = [float(v) - float(chi_iso_red_TIP) for v in chi_iso_before]
+        chi_ax_after = [float(v) - float(chi_ax_red_TIP) for v in chi_ax_before]
+
+        print("")
+        print("TIP/LR SUMMARY (chi_plot)")
+        print("-" * 92)
+        print(f"{'':34s} | {'iso':26s} | {'ax':26s}")
+        print("-" * 92)
         print(
-            "TIP DEBUG (chi_plot): "
-            f"iso_red_TIP={chi_iso_red_TIP}, "
-            f"ax_red_TIP={chi_ax_red_TIP}, "
-            f"rho_red_TIP=None"
+            f"{'TIP value (chi units)':34s} | {_fmt_float(chi_iso_red_TIP):26s} | {_fmt_float(chi_ax_red_TIP):26s}"
         )
+        print(
+            f"{'chi before TIP (chi)':34s} | {_fmt_list(chi_iso_before):26.26s} | {_fmt_list(chi_ax_before):26.26s}"
+        )
+        print(
+            f"{'slope a before TIP':34s} | {_fmt_float(a_iso):26s} | {_fmt_float(a_ax):26s}"
+        )
+        print(
+            f"{'intercept b before TIP':34s} | {_fmt_float(b_iso):26s} | {_fmt_float(b_ax):26s}"
+        )
+        print("-" * 92)
+        print(
+            f"{'chi after TIP (chi)':34s} | {_fmt_list(chi_iso_after):26.26s} | {_fmt_list(chi_ax_after):26.26s}"
+        )
+        print(
+            f"{'slope a after TIP':34s} | {_fmt_float(a_iso_TIP):26s} | {_fmt_float(a_ax_TIP):26s}"
+        )
+        print(
+            f"{'intercept b after TIP':34s} | {_fmt_float(b_iso_TIP):26s} | {_fmt_float(b_ax_TIP):26s}"
+        )
+        print("-" * 92)
+        print("")
         try:
             chi_iso_fit_csv_TIPcorr = [
                 (chi_val - chi_iso_red_TIP) * T_val

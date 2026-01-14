@@ -89,8 +89,8 @@ def compute_g_tensor(
 
     params = read_chiT_regression_csv(filename)
 
-    rh_intercept = float(params.get("rh_intercept", 0.0))
-    method_used = "axial" if np.isclose(rh_intercept, 0.0, atol=atol) else "full"
+    rho_intercept = float(params.get("rho_intercept", 0.0))
+    method_used = "axial" if np.isclose(rho_intercept, 0.0, atol=atol) else "full"
 
     solver = (
         _solve_g_principals_axial_only
@@ -106,17 +106,14 @@ def compute_g_tensor(
     if method_used == "axial":
         keys = ("iso_intercept", "ax_intercept")
     else:
-        keys = ("iso_intercept", "ax_intercept", "rh_intercept")
+        keys = ("iso_intercept", "ax_intercept", "rho_intercept")
 
     jac = np.zeros((3, len(keys)), dtype=float)
     sig = np.zeros((len(keys),), dtype=float)
 
     for i, key in enumerate(keys):
         val = float(params[key])
-        err = float(params.get(f"{key}_intercept_err", 0.0))
-        # Backward compat / defensive: allow err to be stored as `<key>_err`.
-        if err == 0.0:
-            err = float(params.get(f"{key}_err", 0.0))
+        err = float(params.get(f"{key}_err", 0.0))
 
         sig[i] = err
 
@@ -166,7 +163,7 @@ def _solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, fl
 
     iso_intercept = params["iso_intercept"]
     ax_intercept = params["ax_intercept"]
-    rh_intercept = params["rh_intercept"]
+    rho_intercept = params["rho_intercept"]
 
     gx, gy, gz = symbols("gx gy gz", real=True)
 
@@ -179,7 +176,7 @@ def _solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, fl
     eqs = [
         (gx + gy + gz) / 3.0 - g_iso_fit,
         g2_ax - ax_intercept,
-        g2_rh - rh_intercept,
+        g2_rh - rho_intercept,
     ]
 
     # Initial guess: nearly isotropic solution around g_iso
@@ -235,13 +232,13 @@ def solve_D_E(
     g_nominal,
 ) -> tuple[float | None, float | None]:
     """
-    Solve for axial (D) and rhombic (E) ZFS parameters from the ax_slope and rh_slope
+    Solve for axial (D) and rhombic (E) ZFS parameters from the ax_slope and rho_slope
 
     D and E are returned in cm^-1
     """
 
     ax_slope = params["ax_slope"]
-    rh_slope = params["rh_slope"]
+    rho_slope = params["rho_slope"]
 
     gx_val, gy_val, gz_val = g_nominal
 
@@ -254,7 +251,7 @@ def solve_D_E(
     coeff = f_S / (30.0 * K)
 
     rhs1 = -ax_slope / coeff
-    rhs2 = rh_slope / coeff
+    rhs2 = rho_slope / coeff
 
     A = np.array(
         [
@@ -329,6 +326,8 @@ def main():
 
     if spin != 0.5:
         D, E = solve_D_E(params, spin, g_nominal)
+        D = 0.0 if abs(D) < 1e-10 else D
+        E = 0.0 if abs(E) < 1e-10 else E
         print(f"D = {D:.3f} cm^-1")
         print(f"E = {E:.3f} cm^-1")
 

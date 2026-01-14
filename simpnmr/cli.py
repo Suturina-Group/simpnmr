@@ -9,6 +9,7 @@ pNMR prediction, susceptibility fitting, hyperfine plotting, and data extraction
 
 import argparse
 import copy
+import logging
 import os
 import re
 import sys
@@ -26,8 +27,11 @@ from . import outputs as out
 from . import readers as rdrs
 from . import utils as ut
 from . import visualise as vis
+from .scripts import fit_vt
 from .scripts.coords_tools import transform as tfm
 from .scripts.coords_tools import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 # Change figure save dialog to use current working directory
 mpl.rcParams["savefig.directory"] = ""
@@ -518,120 +522,234 @@ def fit_susc_func(uargs):
                 ),
             )
 
+    shift_range = [
+        np.min([nuc.shift.avg for nuc in molecule.nuclei]),
+        np.max([nuc.shift.avg for nuc in molecule.nuclei]),
+    ]
+
+    extras = [0.1 * abs(shift_range[0]), 0.1 * abs(shift_range[1])]
+
+    shift_range = [
+        shift_range[0] + np.negative(np.max(extras)),
+        shift_range[1] + np.positive(np.max(extras)),
+    ]
+
+    if config.susc_fit_type == "isoaxrho" and spin is not None:
+        fit_isoaxrho_vt(
+            uargs=uargs,
+            config=config,
+            molecules=molecules,
+            spin=spin,
+            susc_models=susc_models,
+        )
+
+    vis.plot_pred_spectrum(
+        molecule,
+        isotope=molecule.nuclei[0].isotope,
+        shift_range=shift_range,
+        save=True,
+        show=False,
+        save_name=os.path.join(
+            config.project_name,
+            f"pred_spectrum_{molecule.susc.temperature:.2f}_K{PFF}",
+        ),
+    )
+
+    return
+
+
+def fit_isoaxrho_vt(
+    uargs: argparse.Namespace,
+    config: inps.FitSuscConfig,
+    molecules: list[main.Molecule],
+    spin: float | None,
+    susc_models: list[models.SusceptibilityModel] | None,
+) -> None:
+    # Define the components to fit
+    fit_component = ["iso", "ax", "rho"]
+
+    # Load the VT method
     method = config.susc_vt_method or "vt_2nd_order"
 
+    # Read VT variables (may be None if not provided)
     susc_vt_variables = getattr(config, "susc_vt_variables", None)
 
-    tip_corrections = None
-    # Optional susceptibility model input used for TIP extraction.
-    if getattr(config, "susc_vt_tip_file", ""):
-        tip_file = config.susc_vt_tip_file
-        tip_format = config.susc_vt_tip_format
+    # Load the optional susceptibility-model input used for TIP extraction
+    tip_type = config.susc_vt_tip_type
 
-        if "orca" in tip_format:
-            suscs_ab_initio = main.Susceptibility.from_orca(
-                tip_file,
-                section=tip_format.split("orca_")[1],
-            )
-        elif "csv" in tip_format:
-            suscs_ab_initio = main.Susceptibility.from_csv(tip_file)
-        elif "molcas" in tip_format:
-            ut.red_exit("Molcas files are not currently supported")
-        else:
-            ut.red_exit(f"Unknown TIP susceptibility format: {tip_format}")
+    # Load temperatures from the fitted susceptibility tensors
+    temps_fit = np.array([mol.susc.temperature for mol in molecules])
 
-        # Attach a single model susceptibility to the highest-temperature
-        # fitted molecule. Strategy: pick T_max from the fitted data (CSV/fit side)
-        # and match the closest available temperature
-        if not len(suscs_ab_initio):
-            ut.red_exit("Error: TIP susceptibility file was read but contains no data")
+    # Load the fitted Iso/Ax/Rho components
+    chi_vals = {
+        "iso": np.array([mol.susc.iso for mol in molecules]),
+        "ax": np.array([mol.susc.axiality for mol in molecules]),
+        "rho": np.array([mol.susc.rhombicity for mol in molecules]),
+    }
 
-        # Find the fitted molecule at the highest temperature.
-        mol_temps = [mol.susc.temperature for mol in molecules if mol.susc is not None]
-        if not len(mol_temps):
-            ut.red_exit(
-                "Error: No fitted susceptibility data found to match TIP model against"
-            )
+    # Initialize default TIP corrections to 0.0
+    tip_corrections = {comp: 0.0 for comp in fit_component}
 
-        t_fit_max = max(mol_temps)
-        mol_fitted = next(
-            mol
-            for mol in molecules
-            if mol.susc is not None and mol.susc.temperature == t_fit_max
+    if tip_type is None:
+        pass
+
+    if tip_type == "fix_tip_from_ab_initio":
+        if (
+            config.susc_vt_ab_initio_format is None
+            or "orca" not in config.susc_vt_ab_initio_format
+        ):
+            ut.red_exit("Only Orca is currently supported")
+
+        section = config.susc_vt_ab_initio_format.split("orca_", 1)[1]
+
+        suscs_ab_initio = main.Susceptibility.from_orca(
+            config.susc_vt_ab_initio_file,
+            section=section,
+        )
+        g_tensor = rdrs.read_orca_g_tensor(
+            config.susc_vt_ab_initio_file,
+            section=section,
+        )
+        eff_H = rdrs.read_eff_hamiltonian_tensor(
+            config.susc_vt_ab_initio_file,
+            section=section,
         )
 
-        # Find the globally closest model temperature.
-        tip_temps = np.array([s.temperature for s in suscs_ab_initio], dtype=float)
-        idx = int(np.argmin(np.abs(tip_temps - float(t_fit_max))))
-
+        # Find the ab initio susceptibility temperature closest to the fit temperatures
+        ab_temps = np.array([s.temperature for s in suscs_ab_initio], dtype=float)
+        idx = int(np.argmin(np.abs(ab_temps - np.max(temps_fit))))
         susc_ab_initio = suscs_ab_initio[idx]
 
-        # Compute TIP corrections from fit - model at the matched temperature
-        tip_corrections = {
-            "iso_tip": mol_fitted.susc.iso - susc_ab_initio.iso,
-            "ax_tip": mol_fitted.susc.axiality - susc_ab_initio.axiality,
-            "rho_tip": mol_fitted.susc.rhombicity - susc_ab_initio.rhombicity,
-        }
+        # Compute the irreducible representation of the susceptibility tensor
+        susc_ab_initio.calc_irred()
 
-    if spin is not None:
-        vis.plot_isoaxrho(
-            spin,
-            molecules,
-            method=method,
-            vt_variables=susc_vt_variables,
-            show=False,
-            save=_SAVE_CONV[uargs.isoaxrho_plots],
-            save_name=os.path.join(
-                config.project_name, f"susceptibility_components_chiT{PFF}"
-            ),
-            verbose=True,
-            y_mode="chiT",
-            window_title="ChiT Susceptibility components",
-            susc_models=susc_models if model_to_use == models.IsoAxRhoFitter else [],  # noqa
-            out_file=os.path.join(config.project_name, "isoaxrho_fit.csv"),
-            tip_corrections=tip_corrections,
+        # Rotate the effective Hamiltonian tensor into the chi eigenframe
+        eff_H_rot = susc_ab_initio.eigvecs.T @ eff_H @ susc_ab_initio.eigvecs
+
+        # Construct a diagonal g-tensor in the chi eigenframe
+        g_rot_diag = np.diag(
+            np.diag(susc_ab_initio.eigvecs.T @ g_tensor @ susc_ab_initio.eigvecs)
         )
 
-        vis.plot_isoaxrho(
-            spin,
-            molecules,
-            method=method,
-            vt_variables=susc_vt_variables,
-            show=_SHOW_CONV[uargs.isoaxrho_plots],
-            save=_SAVE_CONV[uargs.isoaxrho_plots],
-            save_name=os.path.join(
-                config.project_name, f"susceptibility_components_chi{PFF}"
-            ),
-            verbose=True,
-            y_mode="chi",
-            window_title="Susceptibility components",
-            susc_models=susc_models if model_to_use == models.IsoAxRhoFitter else [],  # noqa
-            tip_corrections=tip_corrections,
+        # Compute the axial and rhombic parts of the effective Hamiltonian tensor (J)
+        D_J, E_J = fit_vt.calculate_E_D_components(eff_H_rot)
+
+        # Compute the corrected isotropic component of the susceptibility tensor
+        susc_ab_initio.iso = ut.get_true_iso_susceptibility(
+            spin=spin,
+            orbit=config.orbit,
+            g_tensor=g_tensor,
+            chi_tensors=susc_ab_initio.tensor,
+            total_momentum_J=config.total_momentum_J,
         )
 
-        shift_range = [
-            np.min([nuc.shift.avg for nuc in molecule.nuclei]),
-            np.max([nuc.shift.avg for nuc in molecule.nuclei]),
-        ]
+        # Map VT component identifiers to Susceptibility attribute names
+        comp_to_attr = {"iso": "iso", "ax": "axiality", "rho": "rhombicity"}
 
-        extras = [0.1 * abs(shift_range[0]), 0.1 * abs(shift_range[1])]
+        # Compute analytic Iso/Ax/Rho components
+        for comp in fit_component:
+            analytic_chi_ref = fit_vt.compute_analytic_component(
+                comp, susc_ab_initio.temperature, g_rot_diag, D_J, E_J, spin
+            )
+            tip_ref = fit_vt.compute_tip_correction(
+                getattr(susc_ab_initio, comp_to_attr[comp]),
+                analytic_chi_ref,
+                spin,
+            )
+            tip_corrections[comp] = float(tip_ref)
 
-        shift_range = [
-            shift_range[0] + np.negative(np.max(extras)),
-            shift_range[1] + np.positive(np.max(extras)),
-        ]
+    if tip_type == "fit":
+        pass
 
-        vis.plot_pred_spectrum(
-            molecule,
-            isotope=molecule.nuclei[0].isotope,
-            shift_range=shift_range,
-            save=True,
-            show=False,
-            save_name=os.path.join(
-                config.project_name,
-                f"pred_spectrum_{molecule.susc.temperature:.2f}_K{PFF}",
-            ),
-        )
+    if tip_type not in (None, "fix_tip_from_ab_initio", "fit"):
+        raise RuntimeError(f"Unhandled tip_type: {tip_type!r}")
+
+    # Initialize fitted chi errors to zero (if not available)
+    chi_errors = {comp: np.zeros(len(temps_fit)) for comp in fit_component}
+
+    # If chi errors are available, take them from the fitted model standard deviations
+    if susc_models and isinstance(susc_models[0], models.IsoAxRhoFitter):
+        fix = susc_models[0].fix_vars
+
+        if "iso" not in fix:
+            chi_errors["iso"] = np.array(
+                [m.fit_stdev["iso"] for m in susc_models], dtype=float
+            )
+
+        if "ax" not in fix:
+            chi_errors["ax"] = np.array(
+                [m.fit_stdev["ax"] for m in susc_models], dtype=float
+            )
+
+        if "rho_over_ax" not in fix:
+            chi_errors["rho"] = np.array(
+                [m.fit_stdev["rho_over_ax"] for m in susc_models],
+                dtype=float,
+            )
+
+    # Create dictionaries to store fitted chiT values, errors, and fit parameters
+    chiT_reduced = {}
+    chiT_err_reduced = {}
+    chiT_fit_params = {}
+
+    # Fit the VT model parameters for each susceptibility component
+    for comp in fit_component:
+        if method == "vt_2nd_order":
+            vals, errs, params = fit_vt.fit_chit_linear_model(
+                spin=spin,
+                fit_temps=temps_fit,
+                chi_vals=chi_vals[comp],
+                chi_errors=chi_errors[comp],
+                tip_corrections=tip_corrections[comp],
+                susc_vt_variables=susc_vt_variables[comp],
+            )
+
+        if temps_fit.size == 1 or method == "ht_limit":
+            vals, errs, params = fit_vt.compute_chit_high_t_limit(
+                spin=spin,
+                fit_temps=temps_fit,
+                chi_vals=chi_vals[comp],
+                chi_errors=chi_errors[comp],
+            )
+
+        # Store results
+        chiT_reduced[comp] = vals
+        chiT_err_reduced[comp] = errs
+        chiT_fit_params[comp] = params
+
+    # Plot chiT temperature dependence
+    vis.plot_isoaxrho(
+        vals=chiT_reduced,
+        errs=chiT_err_reduced,
+        params=chiT_fit_params,
+        temperatures=temps_fit,
+        show=_SHOW_CONV[uargs.isoaxrho_plots],
+        save=_SAVE_CONV[uargs.isoaxrho_plots],
+        y_label=r"$\chi T$",
+        save_name=os.path.join(
+            config.project_name, f"susceptibility_components_chiT{PFF}"
+        ),
+        window_title="ChiT Susceptibility components",
+        verbose=True,
+        out_file=os.path.join(config.project_name, "isoaxrho_fit.csv"),
+    )
+
+    # Plot chi temperature dependence
+    vis.plot_isoaxrho(
+        vals=chi_vals,
+        errs=chi_errors,
+        params=None,
+        temperatures=temps_fit,
+        show=_SHOW_CONV[uargs.isoaxrho_plots],
+        save=_SAVE_CONV[uargs.isoaxrho_plots],
+        y_label=r"$\chi$",
+        save_name=os.path.join(
+            config.project_name, f"susceptibility_components_chi{PFF}"
+        ),
+        window_title="Susceptibility components",
+        verbose=True,
+        out_file=os.path.join(config.project_name, "isoaxrho_fit.csv"),
+    )
 
     return
 
@@ -1206,15 +1324,13 @@ def predict_func(uargs):
         molecule.susc = susc
 
         if use_orca_correction:
-            # Use ORCA-derived tensors and an effective g-factor
-            # to obtain a "true" isotropic susceptibility corrected for g-anisotropy
+            # Compute the corrected isotropic component of the susceptibility tensor
             susc.iso = ut.get_true_iso_susceptibility(
                 spin=spin,
                 orbit=config.orbit,
                 g_tensor=g_tensor,
-                chi_tensors=chi_tensors,
+                chi_tensors=susc.tensor,
                 total_momentum_J=config.total_momentum_J,
-                temperature=susc.temperature,
             )
         elif config.susceptibility_format == "csv":
             pass
@@ -1284,9 +1400,11 @@ def predict_func(uargs):
             shift_range[1] + np.positive(np.max(extras)),
         ]
 
-        if len(config.experiment_spectrum_files):
+        if len(config.experiment_files):
             vis.plot_raw_deconv_pred(
                 molecule=molecule,
+                isotope=molecule.nuclei[0].isotope,
+                shift_range=shift_range,
                 experiment=experiment,
                 save=True,
                 show=False,

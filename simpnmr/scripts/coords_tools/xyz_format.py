@@ -181,7 +181,7 @@ def load_xyz(
 
     # Optional preflight validation.
     if check:
-        ut.cprint(f"[xyz] Checking XYZ file: {f_name}", color="cyan")
+        ut.cprint(f" Checking XYZ file: {f_name}", color="cyan")
         check_xyz(
             f_name,
             allow_nonelements=atomic_numbers,
@@ -269,7 +269,7 @@ def check_xyz(
     try:
         _labels, _ = load_xyz(f_name, capitalise=False, check=False)
     except Exception as exc:
-        ut.cprint(f"[xyz] Failed to read XYZ file: {exc}", color="blackyellow")
+        ut.cprint(f" Failed to read XYZ file: {exc}", color="blackyellow")
         return
 
     # Compare labels with indices removed.
@@ -278,15 +278,13 @@ def check_xyz(
     # Check all entries are real elements
     if not allow_nonelements:
         if any([lab not in atoms.elements for lab in _labels_nn]):
-            ut.cprint("[xyz] XYZ file contains non-elements", color="blackyellow")
+            ut.cprint(" XYZ file contains non-elements", color="blackyellow")
             return
 
     # Check if indices are present
     if not allow_indices:
         if any([labnn != lab for labnn, lab in zip(_labels_nn, _labels)]):
-            ut.cprint(
-                "[xyz] XYZ file contains elements with indices", color="blackyellow"
-            )
+            ut.cprint(" XYZ file contains elements with indices", color="blackyellow")
             return
 
     return
@@ -319,28 +317,26 @@ def _check_xyz_headers(f_name: str):
                     return
                 except Exception:
                     ut.cprint(
-                        "[xyz] XYZ file does not contain number of atoms",
+                        " XYZ file does not contain number of atoms",
                         color="blackyellow",
                     )
                     return
             else:
                 ut.cprint(
-                    "[xyz] XYZ file does not contain number of atoms",
+                    " XYZ file does not contain number of atoms",
                     color="blackyellow",
                 )
                 return
         try:
             n_atoms = int(line)
         except ValueError:
-            ut.cprint(
-                "[xyz] XYZ file number of atoms is malformed", color="blackyellow"
-            )
+            ut.cprint(" XYZ file number of atoms is malformed", color="blackyellow")
             return
 
         n_lines = len(f.readlines()) + 1
         # Accept either NATOMS+comment or NATOMS-only headers.
         if not (n_lines == n_atoms + 2 or n_lines == n_atoms + 1):
-            ut.cprint("[xyz] XYZ file length/format is incorrect", color="blackyellow")
+            ut.cprint(" XYZ file length/format is incorrect", color="blackyellow")
             return
 
     return
