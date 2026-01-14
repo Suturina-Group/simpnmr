@@ -33,6 +33,25 @@ from .scripts.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
+
+def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
+    level = logging.INFO
+    if verbose:
+        level = logging.DEBUG
+    if quiet:
+        level = logging.ERROR
+
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        root.setLevel(level)
+
+
 # Change figure save dialog to use current working directory
 mpl.rcParams["savefig.directory"] = ""
 
@@ -2593,6 +2612,14 @@ def read_args(arg_list=None):
 
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
 
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Show only errors",
+    )
+
     parser._positionals.title = "Subprograms"
 
     subparsers = parser.add_subparsers(dest="prog")
@@ -2945,6 +2972,7 @@ def read_args(arg_list=None):
     # Read sub-parser and parse arguments
     parser.set_defaults(func=lambda args: parser.print_help())
     args = parser.parse_args(arg_list)
+    setup_logging(verbose=args.verbose, quiet=args.quiet)
     args.func(args)
 
     return args
