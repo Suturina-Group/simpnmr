@@ -10,10 +10,10 @@ relaxation-rate helper functions used across the package.
 import math
 import re
 import sys
+from os import PathLike
 
 import numpy as np
 import scipy.constants as consts
-from extto.core import find_lines
 from numpy.typing import NDArray
 
 from .scripts.coords_tools import label_format as lf
@@ -23,8 +23,8 @@ MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
 MUB = consts.physical_constants["Bohr magneton"][0]
 HBAR = consts.hbar  # [J s radian-1]
 H = consts.h  # [J s radian-1]
-KB = 1.380649e-23  # Boltzmann constant k [J·K⁻¹]
-GE = 2.002319  # g value of free electron
+KB = consts.physical_constants["Boltzmann constant"][0]  # Boltzmann constant k [J·K⁻¹]
+GE = abs(consts.physical_constants["electron g factor"][0])  # g value of free electron
 EGAMMA = consts.physical_constants["electron gyromag. ratio in MHz/T"][0]
 
 
@@ -337,16 +337,16 @@ def read_exp_metadata(file_name: str) -> tuple[float, float, str]:
     temperature, magnetic_field, isotope = None, None, None
 
     temperature = float(
-        find_lines(file_name, r"# *temperature (\d*\.*\d*)", re.IGNORECASE)[0]
+        find_first_group(file_name, r"# *temperature (\d*\.*\d*)", re.IGNORECASE)
     )
 
     magnetic_field = float(
-        find_lines(file_name, r"# *magnetic_field (\d*\.*\d*)", re.IGNORECASE)[0]
+        find_first_group(file_name, r"# *magnetic_field (\d*\.*\d*)", re.IGNORECASE)
     )
 
-    isotope = find_lines(
-        file_name, r"# *isotope (\d{0,3}[A-Za-z]{0,2})", re.IGNORECASE
-    )[0]
+    isotope = str(
+        find_first_group(file_name, r"# *isotope (\d{0,3}[A-Za-z]{0,2})", re.IGNORECASE)
+    )
 
     return temperature, magnetic_field, isotope
 
@@ -361,6 +361,22 @@ def find_index_of_nearest(array, value):
         return idx - 1
     else:
         return idx
+
+
+def find_first_group(
+    file_name: str | PathLike[str],
+    pattern: str,
+    flags: int = 0,
+) -> str:
+    rx = re.compile(pattern, flags)
+
+    with open(file_name, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = rx.search(line)
+            if m:
+                return m.group(1)
+
+    raise ValueError(f"No relevant data found in {file_name} for pattern: {pattern}")
 
 
 def isotope_format(isotope_string: str) -> str:

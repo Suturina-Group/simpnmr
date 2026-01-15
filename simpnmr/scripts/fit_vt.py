@@ -2,10 +2,12 @@
 # Copyright (C) 2025 Suturina Group
 
 """
-Fit Curie-normalised susceptibility chiT(T) data and extract linear model parameters
+Fit Curie-normalised susceptibility chiT(T) data and extract
+linear model parameters
 
-This module provides routines to compute reduced Curie-normalised susceptibility values
-chiT_reduced and their uncertainties chi_errT_reduced, and to perform linear fits of the form
+This module provides routines to compute reduced Curie-normalised
+susceptibility values chiT_reduced and their uncertainties
+chi_errT_reduced, and to perform linear fits of the form
 
     chiT = intercept + slope / T
 
@@ -41,7 +43,8 @@ def fit_chit_linear_model(
         spin (float): Total spin quantum number S.
         fit_temps (np.ndarray): Temperature values.
         chi_vals (np.ndarray): Susceptibility values for a single chi_component.
-        chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array of the same shape.
+        chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array
+        of the same shape.
         tip_corrections (float): Temperature-independent paramagnetism corrections.
         susc_vt_variables (dict): Variables controlling fit modes and initial values.
 
@@ -119,7 +122,7 @@ def fit_chit_linear_model(
 
         return chiT_reduced, chi_errT_reduced, fit_results
 
-    # Prepare sigma only if there are positive errors; otherwise perform an unweighted fit
+    # Prepare sigma only if there are positive errors; or perform an unweighted fit
     sigma = None
     abs_sigma = False
     _errs = np.asarray(chi_errT_reduced, dtype=float)
@@ -216,7 +219,8 @@ def compute_chit_high_t_limit(
     Args:
         temperature (array_like): Temperature values
         chi_value (array_like): Susceptibility values for a single chi_component
-        chi_errors: Uncertainties associated with `chi_vals` as an array of the same shape
+        chi_errors: Uncertainties associated with `chi_vals` as an array
+        of the same shape
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
