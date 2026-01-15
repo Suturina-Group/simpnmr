@@ -587,11 +587,14 @@ def fit_isoaxrho_vt(
     # Define the components to fit
     fit_component = ["iso", "ax", "rho"]
 
-    # Load the VT method
-    method = config.susc_vt_method or "vt_2nd_order"
+    # Default to high-temperature limit unless the user explicitly requests vt_2nd_order
+    method = config.susc_vt_method or "ht_limit"
 
     # Read VT variables (may be None if not provided)
-    susc_vt_variables = getattr(config, "susc_vt_variables", None)
+    susc_vt_variables = config.susc_vt_variables
+
+    if method == "vt_2nd_order":
+        assert susc_vt_variables is not None
 
     # Load the optional susceptibility-model input used for TIP extraction
     tip_type = config.susc_vt_tip_type
@@ -606,13 +609,7 @@ def fit_isoaxrho_vt(
         "rho": np.array([mol.susc.rhombicity for mol in molecules]),
     }
 
-    # Initialize default TIP corrections to 0.0
-    tip_corrections = {comp: 0.0 for comp in fit_component}
-
-    if tip_type is None:
-        pass
-
-    if tip_type == "fix_tip_from_ab_initio":
+    if tip_type == "fix_tip_from_ab_initio" and method == "vt_2nd_order":
         if (
             config.susc_vt_ab_initio_format is None
             or "orca" not in config.susc_vt_ab_initio_format
@@ -675,13 +672,8 @@ def fit_isoaxrho_vt(
                 analytic_chi_ref,
                 spin,
             )
-            tip_corrections[comp] = float(tip_ref)
-
-    if tip_type == "fit":
-        pass
-
-    if tip_type not in (None, "fix_tip_from_ab_initio", "fit"):
-        raise RuntimeError(f"Unhandled tip_type: {tip_type!r}")
+            # Inject ab initio TIP into VT variables for this component
+            susc_vt_variables[comp]["tip"] = ["fix", float(tip_ref)]
 
     # Initialize fitted chi errors to zero (if not available)
     chi_errors = {comp: np.zeros(len(temps_fit)) for comp in fit_component}
@@ -719,7 +711,6 @@ def fit_isoaxrho_vt(
                 fit_temps=temps_fit,
                 chi_vals=chi_vals[comp],
                 chi_errors=chi_errors[comp],
-                tip_corrections=tip_corrections[comp],
                 susc_vt_variables=susc_vt_variables[comp],
             )
 

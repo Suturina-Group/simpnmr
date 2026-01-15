@@ -244,7 +244,7 @@ class Experiment:
             "shift (ppm)": "shift",
             "ppm": "shift",
             "assignment": "assignment",
-            "assignments": "assignmen",
+            "assignments": "assignment",
             "assignments ()": "assignment",
             "assignment ()": "assignment",
             "widths": "width",
@@ -770,7 +770,8 @@ class Susceptibility:
         vals, vecs = la.eigh(self.tensor)
 
         self._eigvals = vals[np.argsort(np.abs(vals))]
-        self._eigvecs = vecs[np.argsort(np.abs(vals))]
+        self._eigvecs = vecs[:, np.argsort(np.abs(vals))]
+
         return vals, vecs
 
     @property

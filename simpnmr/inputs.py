@@ -695,9 +695,8 @@ class FitSuscConfig(Config):
             block = value.get(comp)
             if not isinstance(block, dict):
                 raise ValueError(
-                    "susc_vt: variables component '"
-                    + str(comp)
-                    + "' must be a mapping with keys 'intercept' and 'slope'"
+                    f"susc_vt: variables component '{comp}' must be a mapping with keys"
+                    " 'intercept' and 'slope' (and optional 'tip')"
                 )
 
             missing = {"intercept", "slope"} - set(block)
@@ -709,8 +708,30 @@ class FitSuscConfig(Config):
                     + ", ".join(sorted(missing))
                 )
 
+            allowed_keys = {"intercept", "slope", "tip"}
+            unknown_keys = set(block) - allowed_keys
+            if unknown_keys:
+                raise ValueError(
+                    "susc_vt: variables component '"
+                    + str(comp)
+                    + "' contains unknown key(s): "
+                    + ", ".join(sorted(unknown_keys))
+                )
+
+            # 'tip' is only meaningful in TIP fit mode.
+            if "tip" in block and getattr(self, "_susc_vt_tip_type", None) != "fit":
+                raise ValueError(
+                    "susc_vt: variables component '"
+                    + str(comp)
+                    + "' provides 'tip' but susc_vt:tip_type is not 'fit'. "
+                    "Remove the 'tip' entry or set tip_type: fit."
+                )
+
             comp_vars: dict[str, list[object]] = {}
-            for key in ("intercept", "slope"):
+            keys_to_parse = ["intercept", "slope"]
+            if "tip" in block:
+                keys_to_parse.append("tip")
+            for key in keys_to_parse:
                 entry = block.get(key)
                 if not (isinstance(entry, (list, tuple)) and len(entry) == 2):
                     raise ValueError(
@@ -829,16 +850,49 @@ class FitSuscConfig(Config):
             )
 
         if config.susc_vt_method == "vt_2nd_order" and config.susc_vt_variables is None:
-            ut.cprint(
-                "Warning: 'susc_vt:variables' not provided. Using defaults: "
-                "all VT parameters set to ['fit', 0.0].\n",
-                "black_yellowbg",
-            )
-            config.susc_vt_variables = {
-                "iso": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
-                "ax": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
-                "rho": {"intercept": ["fit", 0.0], "slope": ["fit", 0.0]},
-            }
+            if config.susc_vt_tip_type == "fit":
+                ut.cprint(
+                    "Warning: 'susc_vt:variables' not provided. Using defaults: "
+                    "VT intercept/slope and TIP set to ['fit', 0.0].\n",
+                    "black_yellowbg",
+                )
+                config.susc_vt_variables = {
+                    "iso": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                        "tip": ["fit", 0.0],
+                    },
+                    "ax": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                        "tip": ["fit", 0.0],
+                    },
+                    "rho": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                        "tip": ["fit", 0.0],
+                    },
+                }
+            else:
+                ut.cprint(
+                    "Warning: 'susc_vt:variables' not provided. Using defaults: "
+                    "VT intercept/slope set to ['fit', 0.0].\n",
+                    "black_yellowbg",
+                )
+                config.susc_vt_variables = {
+                    "iso": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                    },
+                    "ax": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                    },
+                    "rho": {
+                        "intercept": ["fit", 0.0],
+                        "slope": ["fit", 0.0],
+                    },
+                }
 
         if (
             config.susc_vt_tip_type is None

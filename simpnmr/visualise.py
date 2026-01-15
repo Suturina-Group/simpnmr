@@ -1189,7 +1189,9 @@ def plot_isoaxrho(
         if params is not None:
             ax.plot(
                 temperatures,
-                params["intercept"] + params["slope"] / temperatures,
+                params["intercept"]
+                + params["slope"] / temperatures
+                + params["tip"] * temperatures,
             )
             # Build annotation string with fitted parameters and uncertainties
             annotation = (

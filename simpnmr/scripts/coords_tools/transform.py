@@ -111,7 +111,7 @@ def get_rotation_and_transformation(cfg: inps.PredictConfig):
         "cyan",
     )
 
-    # Need to add an additional functional to check if the HFC coords are in chi frame
+    # TODO Need to add an additional functional to check if HFC coords are in chi frame
     # because it leads to the wrong prediction
 
     return rot_mat, trans_mat

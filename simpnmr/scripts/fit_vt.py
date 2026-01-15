@@ -9,7 +9,11 @@ This module provides routines to compute reduced Curie-normalised
 susceptibility values chiT_reduced and their uncertainties
 chi_errT_reduced, and to perform linear fits of the form
 
-    chiT = intercept + slope / T
+    chiT = intercept + slope / T + tip * T
+
+where `tip` is an optional temperature-independent paramagnetic contribution
+(TIP) in chi(T) that becomes linear in T for chiT(T). The `tip` parameter can
+be fixed or fitted.
 
 The main outputs of the fitting workflow are
     - chiT_reduced
@@ -31,11 +35,11 @@ def fit_chit_linear_model(
     fit_temps: np.ndarray,
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
-    tip_corrections: float,
     susc_vt_variables: dict,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
     """
-    Fit a linear chiT = A + B / T model to Curie-normalised susceptibility data
+    Fit a linear chiT(T) = A + B / T + tip * T model to
+    Curie-normalised susceptibility data
 
     If valid error estimates are provided, a weighted least-squares fit is performed
 
@@ -45,18 +49,23 @@ def fit_chit_linear_model(
         chi_vals (np.ndarray): Susceptibility values for a single chi_component.
         chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array
         of the same shape.
-        tip_corrections (float): Temperature-independent paramagnetism corrections.
         susc_vt_variables (dict): Variables controlling fit modes and initial values.
+            Must include keys `intercept` and `slope`. The optional key `tip` may be
+            provided as `["fit", <guess>]` or `["fix", <value>]`.
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
             - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless).
             - chi_errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`.
             - fit_results (dict[str, float | None]): Fit parameters and statistics.
+              Includes `intercept`, `slope`, optional `tip`, and their uncertainties,
+              along with `adj_r2`.
     """
 
-    def _model(T, A, B):
-        return A + B / T
+    def _model(T, A, B, tip):
+        # TIP contributes a temperature-independent term in chi(T), which becomes
+        # a linear-in-T term in chiT(T).
+        return A + B / T + tip * T
 
     norm_factor = compute_curie_prefactor(spin)
 
@@ -64,6 +73,7 @@ def fit_chit_linear_model(
     x0: list[float] = []
     fixed_intercept: float | None = None
     fixed_slope: float | None = None
+    fixed_tip: float | None = 0.0
 
     mode_i, val_i = susc_vt_variables["intercept"]
     mode_i = str(mode_i).strip().lower()
@@ -89,34 +99,48 @@ def fit_chit_linear_model(
             f"Invalid mode {mode_s!r} for 'slope'. Expected 'fit' or 'fix'."
         )
 
+    # TIP is optional; if not provided, it is treated as fixed to 0.0.
+    if "tip" in susc_vt_variables:
+        mode_t, val_t = susc_vt_variables["tip"]
+        mode_t = str(mode_t).strip().lower()
+        if mode_t == "fit":
+            fit_param_names.append("tip")
+            x0.append(float(val_t))
+            fixed_tip = None
+        elif mode_t == "fix":
+            fixed_tip = float(val_t)
+        else:
+            raise ValueError(
+                f"Invalid mode {mode_t!r} for 'tip'. Expected 'fit' or 'fix'."
+            )
+
     def _model_free(T, *theta):
         params = {
             "intercept": (fixed_intercept if fixed_intercept is not None else 0.0),
             "slope": (fixed_slope if fixed_slope is not None else 0.0),
+            "tip": (fixed_tip if fixed_tip is not None else 0.0),
         }
         for name, val in zip(fit_param_names, theta, strict=False):
             params[name] = float(val)
-        return _model(T, params["intercept"], params["slope"])
+        return _model(T, params["intercept"], params["slope"], params["tip"])
 
-    # Compute chiT values, chiT errors, and TIP corrections at the given temperatures
+    # Compute chiT values and chiT errors at the given temperatures
     chiT = chi_vals * fit_temps
     chi_errT = chi_errors * fit_temps
-    tip_corrections_T = tip_corrections * fit_temps
 
     # Curie-normalised (dimensionless) values
     chiT_reduced = chiT / norm_factor
     chi_errT_reduced = chi_errT / norm_factor
-
-    # Apply TIP corrections (0 if not available)
-    chiT_reduced = chiT_reduced - tip_corrections_T
 
     # Detect the degenerate case of identically zero chiT
     if np.allclose(chiT_reduced, 0.0):
         fit_results: dict[str, float | None] = {
             "intercept": 0.0,
             "slope": 0.0,
+            "tip": 0.0,
             "intercept_err": 0.0,
             "slope_err": 0.0,
+            "tip_err": 0.0,
             "adj_r2": None,
         }
 
@@ -131,7 +155,7 @@ def fit_chit_linear_model(
         abs_sigma = True
 
     if not fit_param_names:
-        yhat = _model(fit_temps, fixed_intercept, fixed_slope)
+        yhat = _model(fit_temps, fixed_intercept, fixed_slope, fixed_tip)
 
         ss_res = np.sum((chiT_reduced - yhat) ** 2)
         ss_tot = np.sum((chiT_reduced - np.mean(chiT_reduced)) ** 2)
@@ -146,8 +170,10 @@ def fit_chit_linear_model(
         fit_results: dict[str, float | None] = {
             "intercept": float(fixed_intercept),
             "slope": float(fixed_slope),
+            "tip": float(fixed_tip if fixed_tip is not None else 0.0),
             "intercept_err": 0.0,
             "slope_err": 0.0,
+            "tip_err": 0.0,
             "adj_r2": (None if adj_r2 is None else float(adj_r2)),
         }
 
@@ -167,12 +193,13 @@ def fit_chit_linear_model(
     params = {
         "intercept": (fixed_intercept if fixed_intercept is not None else 0.0),
         "slope": (fixed_slope if fixed_slope is not None else 0.0),
+        "tip": (fixed_tip if fixed_tip is not None else 0.0),
     }
     for name, val in zip(fit_param_names, popt, strict=False):
         params[name] = float(val)
 
     # R^2 metrics (guard against zero variance)
-    yhat = _model(fit_temps, params["intercept"], params["slope"])
+    yhat = _model(fit_temps, params["intercept"], params["slope"], params["tip"])
     ss_res = np.sum((chiT_reduced - yhat) ** 2)
     ss_tot = np.sum((chiT_reduced - np.mean(chiT_reduced)) ** 2)
 
@@ -193,11 +220,17 @@ def fit_chit_linear_model(
         else 0.0
     )
 
+    tip_err = (
+        float(perr[fit_param_names.index("tip")]) if "tip" in fit_param_names else 0.0
+    )
+
     fit_results: dict[str, float | None] = {
         "intercept": float(params["intercept"]),
         "slope": float(params["slope"]),
+        "tip": float(params["tip"]),
         "intercept_err": intercept_err,
         "slope_err": slope_err,
+        "tip_err": tip_err,
         "adj_r2": (None if adj_r2 is None else float(adj_r2)),
     }
 
@@ -214,7 +247,8 @@ def compute_chit_high_t_limit(
     Evaluate the high-temperature chiT limit assuming a zero slope
 
     This handler assumes B = 0 and takes the intercept from the
-    highest-temperature data point
+    highest-temperature data point. TIP is not estimated in this mode and is
+    returned fixed at 0.0.
 
     Args:
         temperature (array_like): Temperature values
@@ -228,7 +262,7 @@ def compute_chit_high_t_limit(
             - errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`
             - fit_results (dict[str, float | None]): Fit parameters for the
             fixed-slope branch (intercept from max(T) point,
-            slope=0, uncertainties, adj_r2=1)
+            slope=0, tip=0, uncertainties, adj_r2=1)
     """
     norm_factor = compute_curie_prefactor(spin)
 
@@ -245,8 +279,10 @@ def compute_chit_high_t_limit(
     fit_results: dict[str, float | None] = {
         "intercept": intercept,
         "slope": 0.0,
+        "tip": 0.0,
         "intercept_err": float(errT_reduced[idx] if errT_reduced is not None else 0.0),
         "slope_err": 0.0,
+        "tip_err": 0.0,
         "adj_r2": 1.0,
     }
 
