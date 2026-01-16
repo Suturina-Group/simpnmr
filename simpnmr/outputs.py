@@ -61,84 +61,84 @@ def save_susc(
         conv = 1e-24 * constants.Avogadro / (4 * np.pi)
         unit_label = r"cm^3 mol^-1"
 
-    # And write susceptibility tensor to csv
+    # Write susceptibility tensor to CSV
     out = {
         "Temperature (K)": [molecule.susc.temperature for molecule in molecules],  # noqa
         f"chi_iso ({unit_label})": [molecule.susc.iso * conv for molecule in molecules],  # noqa
         f"chi_iso-s-dev ({unit_label})": None,
-        f"chi_xx ({unit_label})": [
-            molecule.susc.tensor[0, 0] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_xx-s-dev ({unit_label})": None,
-        f"chi_xy ({unit_label})": [
-            molecule.susc.tensor[0, 1] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_xy-s-dev ({unit_label})": None,
-        f"chi_xz ({unit_label})": [
-            molecule.susc.tensor[0, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_xz-s-dev ({unit_label})": None,
-        f"chi_yy ({unit_label})": [
-            molecule.susc.tensor[1, 1] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_yy-s-dev ({unit_label})": None,
-        f"chi_yz ({unit_label})": [
-            molecule.susc.tensor[1, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_yz-s-dev ({unit_label})": None,
-        f"chi_zz ({unit_label})": [
-            molecule.susc.tensor[2, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_zz-s-dev ({unit_label})": None,
-        f"dchi_xx ({unit_label})": [
-            molecule.susc.dtensor[0, 0] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_xx-s-dev ({unit_label})": None,
-        f"dchi_xy ({unit_label})": [
-            molecule.susc.dtensor[0, 1] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_xy-s-dev ({unit_label})": None,
-        f"dchi_xz ({unit_label})": [
-            molecule.susc.dtensor[0, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_xz-s-dev ({unit_label})": None,
-        f"dchi_yy ({unit_label})": [
-            molecule.susc.dtensor[1, 1] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_yy-s-dev ({unit_label})": None,
-        f"dchi_yz ({unit_label})": [
-            molecule.susc.dtensor[1, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_yz-s-dev ({unit_label})": None,
-        f"dchi_zz ({unit_label})": [
-            molecule.susc.dtensor[2, 2] * conv for molecule in molecules
-        ],  # noqa
-        f"dchi_zz-s-dev ({unit_label})": None,
-        f"chi_x ({unit_label})": [
-            molecule.susc.eigvals[0] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_x-s-dev ({unit_label})": None,
-        f"chi_y ({unit_label})": [
-            molecule.susc.eigvals[1] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_y-s-dev ({unit_label})": None,
-        f"chi_z ({unit_label})": [
-            molecule.susc.eigvals[2] * conv for molecule in molecules
-        ],  # noqa
-        f"chi_z-s-dev ({unit_label})": None,
         f"chi_ax ({unit_label})": [
             molecule.susc.axiality * conv for molecule in molecules
-        ],  # noqa
+        ],
         f"chi_ax-s-dev ({unit_label})": None,
         f"chi_rho ({unit_label})": [
             molecule.susc.rhombicity * conv for molecule in molecules
-        ],  # noqa
+        ],
         f"chi_rho-s-dev ({unit_label})": None,
-        "alpha (degrees)": [molecule.susc.alpha for molecule in molecules],  # noqa
+        f"chi_xx ({unit_label})": [
+            molecule.susc.tensor[0, 0] * conv for molecule in molecules
+        ],
+        f"chi_xx-s-dev ({unit_label})": None,
+        f"chi_xy ({unit_label})": [
+            molecule.susc.tensor[0, 1] * conv for molecule in molecules
+        ],
+        f"chi_xy-s-dev ({unit_label})": None,
+        f"chi_xz ({unit_label})": [
+            molecule.susc.tensor[0, 2] * conv for molecule in molecules
+        ],
+        f"chi_xz-s-dev ({unit_label})": None,
+        f"chi_yy ({unit_label})": [
+            molecule.susc.tensor[1, 1] * conv for molecule in molecules
+        ],
+        f"chi_yy-s-dev ({unit_label})": None,
+        f"chi_yz ({unit_label})": [
+            molecule.susc.tensor[1, 2] * conv for molecule in molecules
+        ],
+        f"chi_yz-s-dev ({unit_label})": None,
+        f"chi_zz ({unit_label})": [
+            molecule.susc.tensor[2, 2] * conv for molecule in molecules
+        ],
+        f"chi_zz-s-dev ({unit_label})": None,
+        f"dchi_xx ({unit_label})": [
+            molecule.susc.dtensor[0, 0] * conv for molecule in molecules
+        ],
+        f"dchi_xx-s-dev ({unit_label})": None,
+        f"dchi_xy ({unit_label})": [
+            molecule.susc.dtensor[0, 1] * conv for molecule in molecules
+        ],
+        f"dchi_xy-s-dev ({unit_label})": None,
+        f"dchi_xz ({unit_label})": [
+            molecule.susc.dtensor[0, 2] * conv for molecule in molecules
+        ],
+        f"dchi_xz-s-dev ({unit_label})": None,
+        f"dchi_yy ({unit_label})": [
+            molecule.susc.dtensor[1, 1] * conv for molecule in molecules
+        ],
+        f"dchi_yy-s-dev ({unit_label})": None,
+        f"dchi_yz ({unit_label})": [
+            molecule.susc.dtensor[1, 2] * conv for molecule in molecules
+        ],
+        f"dchi_yz-s-dev ({unit_label})": None,
+        f"dchi_zz ({unit_label})": [
+            molecule.susc.dtensor[2, 2] * conv for molecule in molecules
+        ],
+        f"dchi_zz-s-dev ({unit_label})": None,
+        f"chi_x ({unit_label})": [
+            molecule.susc.eigvals[0] * conv for molecule in molecules
+        ],
+        f"chi_x-s-dev ({unit_label})": None,
+        f"chi_y ({unit_label})": [
+            molecule.susc.eigvals[1] * conv for molecule in molecules
+        ],
+        f"chi_y-s-dev ({unit_label})": None,
+        f"chi_z ({unit_label})": [
+            molecule.susc.eigvals[2] * conv for molecule in molecules
+        ],
+        f"chi_z-s-dev ({unit_label})": None,
+        "alpha (degrees)": [molecule.susc.alpha for molecule in molecules],
         "alpha-s-dev (degrees)": None,
-        "beta (degrees)": [molecule.susc.beta for molecule in molecules],  # noqa
+        "beta (degrees)": [molecule.susc.beta for molecule in molecules],
         "beta-s-dev (degrees)": None,
-        "gamma (degrees)": [molecule.susc.gamma for molecule in molecules],  # noqa
+        "gamma (degrees)": [molecule.susc.gamma for molecule in molecules],
         "gamma-s-dev (degrees)": None,
         "r2 ()": None,
         "r2_adjusted ()": None,
@@ -152,6 +152,8 @@ def save_susc(
         out["MAE (ppm)"] = [model.mae for model in susc_models]
         out["RMSE (ppm)"] = [model.rmse for model in susc_models]
         for key in susc_models[0].fit_stdev:
+            if key == "rho_over_ax":
+                continue
             out[f"chi_{key}-s-dev ({unit_label})"] = [
                 model.fit_stdev[key] * conv for model in susc_models
             ]
@@ -161,6 +163,15 @@ def save_susc(
         out.pop(pop)
 
     df = pd.DataFrame(data=out)
+
+    # Update outpul labels to reflect the physically meaningful definition
+    # chi_iso_g_corr = g_e / 3 * Tr(chi @ g.T)
+    df = df.rename(
+        columns={
+            f"chi_iso ({unit_label})": f"chi_iso_g_corr ({unit_label})",
+            f"chi_iso-s-dev ({unit_label})": f"chi_iso_g_corr-s-dev ({unit_label})",
+        }
+    )
 
     _comment = f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
         datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")

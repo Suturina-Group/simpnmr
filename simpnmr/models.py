@@ -294,6 +294,17 @@ class SusceptibilityModel(ABC):
         """
         raise NotImplementedError
 
+    def _post_fit(self) -> None:
+        """Hook for model-specific post-processing after a successful fit.
+
+        Called at the end of `fit_to` after `final_var_values` and `fit_stdev` are set.
+        Subclasses may override to compute derived quantities.
+
+        Returns:
+            None.
+        """
+        return
+
     def residuals(
         self,
         parameters: dict[str, float],
@@ -459,9 +470,13 @@ class SusceptibilityModel(ABC):
 
             # Set fitted values
             self.final_var_values = copy.deepcopy(curr_fit_dict)
+
             # and fixed values
             for key, val in self.fix_vars.items():
                 self.final_var_values[key] = val
+
+            # Model-specific post-processing (e.g., derived parameter uncertainties)
+            self._post_fit()
 
             # R2
             self.mae = np.sum(np.abs(curr_fit.fun)) / len(curr_fit.fun)
@@ -752,6 +767,46 @@ class IsoAxRhoFitter(SusceptibilityModel):
         tensor += np.eye(3) * params["iso"]
 
         return tensor
+
+    def _post_fit(self) -> None:
+        """Adds derived uncertainty for chi_rho.
+
+        The fit uses `rho_over_ax`, but reporting prefers `rho = ax * rho_over_ax`.
+
+        Notes:
+            - If `rho_over_ax` is fixed, treat its uncertainty as zero and propagate
+              only the `ax` uncertainty.
+            - If `ax` is fixed (no `ax` stdev available), `rho` uncertainty cannot be
+              propagated reliably and is omitted.
+        """
+        ax = self.final_var_values.get("ax")
+        rho_over_ax = self.final_var_values.get("rho_over_ax")
+        ax_st_dev = self.fit_stdev.get("ax")
+        rho_over_ax_st_dev = self.fit_stdev.get("rho_over_ax")
+
+        # Require values for rho computation
+        if ax is None or rho_over_ax is None:
+            self.fit_stdev.pop("rho", None)
+            return
+
+        # If ax is fixed, we cannot propagate an uncertainty for rho.
+        if ax_st_dev is None:
+            self.fit_stdev.pop("rho", None)
+            return
+
+        # If rho_over_ax is fixed, assume sigma_rho_over_ax = 0.
+        if rho_over_ax_st_dev is None:
+            if "rho_over_ax" in self.fix_vars:
+                self.fit_stdev["rho"] = float(np.abs(rho_over_ax) * ax_st_dev)
+                return
+            self.fit_stdev.pop("rho", None)
+            return
+
+        # General case: first-order propagation under independence.
+        self.fit_stdev["rho"] = float(
+            np.hypot(rho_over_ax * ax_st_dev, ax * rho_over_ax_st_dev)
+        )
+        return
 
 
 class EigenFitter(SusceptibilityModel):

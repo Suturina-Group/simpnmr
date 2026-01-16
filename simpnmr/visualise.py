@@ -361,13 +361,20 @@ def plot_fitted_shifts(
     # Add fitted and fixed parameters to top of plot
     expression = ""
     for it, name in enumerate(susc_model.VARNAMES):
-        expression += "{} = {:.3f} ".format(
-            susc_model.VARNAMES_MM[name],
-            susc_model.final_var_values[name] * conv,
-        )
-        if name in susc_model.fit_vars.keys():
-            expression += r"$\pm$ "
-            expression += "{:.3f} ".format(susc_model.fit_stdev[name] * conv)
+        val = float(susc_model.final_var_values[name]) * conv
+        label = susc_model.VARNAMES_MM[name]
+
+        if name in susc_model.fit_vars:
+            err = susc_model.fit_stdev.get(name)
+            if err is not None and err > 0:
+                err_val = float(err) * conv
+                par = int(round(err_val * 1000))
+                expression += f"{label} = {val:.3f}({par}) "
+            else:
+                expression += f"{label} = {val:.3f} "
+        else:
+            expression += f"{label} = {val:.3f} "
+
         expression += unit_label + "     "
         if (
             not (it + 1) % per_line
@@ -378,19 +385,19 @@ def plot_fitted_shifts(
 
     expression += "\n"
 
-    expression += rf"$r^2_\mathregular{{adj.}}$ = {susc_model.adj_r2:.5f}       "
-    expression += rf"$\mathrm{{MAE}} = {susc_model.mae:.5f}\ \mathrm{{ppm}}$       "
-    expression += rf"$\mathrm{{RMSE}} = {susc_model.rmse:.5f}\ \mathrm{{ppm}}$"
+    expression += rf"$R^2_\mathregular{{adj.}}$ = {susc_model.adj_r2:.3f}       "
+    expression += rf"$\mathrm{{MAE}} = {susc_model.mae:.3f}\ \mathrm{{ppm}}$       "
+    expression += rf"$\mathrm{{RMSE}} = {susc_model.rmse:.3f}\ \mathrm{{ppm}}$"
 
-    expression += "\n-------------------------------------------------\n"
+    expression += f"\n{'-' * 50}\n"
 
     if not any(["ax" in susc_model.VARNAMES]):
         expression += rf"$\Delta\chi_\mathregular{{ax}}$ = {molecule.susc.axiality * conv:.3f} {unit_label}"  # noqa
         expression += rf"  $\Delta\chi_\mathregular{{rh}}$ = {molecule.susc.rhombicity * conv:.3f} {unit_label}"  # noqa
         expression += "\n"
-    expression += rf"$\alpha$ = {molecule.susc.alpha:.3f}"
-    expression += rf"  $\beta$ = {molecule.susc.beta:.3f}"
-    expression += rf"  $\gamma$ = {molecule.susc.gamma:.3f}"
+    expression += rf"$\alpha$ = {molecule.susc.alpha:.2f}"
+    expression += rf"  $\beta$ = {molecule.susc.beta:.2f}"
+    expression += rf"  $\gamma$ = {molecule.susc.gamma:.2f}"
 
     ax.text(0.0, 1.02, s=expression, fontsize=11, transform=ax.transAxes)
 
