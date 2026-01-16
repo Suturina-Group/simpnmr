@@ -63,8 +63,8 @@ def save_susc(
 
     # Write susceptibility tensor to CSV
     out = {
-        "Temperature (K)": [molecule.susc.temperature for molecule in molecules],  # noqa
-        f"chi_iso ({unit_label})": [molecule.susc.iso * conv for molecule in molecules],  # noqa
+        "Temperature (K)": [molecule.susc.temperature for molecule in molecules],
+        f"chi_iso ({unit_label})": [molecule.susc.iso * conv for molecule in molecules],
         f"chi_iso-s-dev ({unit_label})": None,
         f"chi_ax ({unit_label})": [
             molecule.susc.axiality * conv for molecule in molecules
@@ -163,6 +163,10 @@ def save_susc(
         out.pop(pop)
 
     df = pd.DataFrame(data=out)
+
+    # TODO: the current pipeline works fine for fitting only,
+    # For prediction, we need to check whether chi iso has been treated
+    # as spin only value, or calculated with g contribution, or just as Tr(chi)/3
 
     # Update outpul labels to reflect the physically meaningful definition
     # chi_iso_g_corr = g_e / 3 * Tr(chi @ g.T)

@@ -275,11 +275,11 @@ def main():
 
     for name, relative_isos in all_isos.items():
         for lab in relative_isos.keys():
-            all_relative_isos[name][lab] /= np.max(np.abs(list(relative_isos.values())))  # noqa
+            all_relative_isos[name][lab] /= np.max(np.abs(list(relative_isos.values())))
             norm_vals[name] = np.max(np.abs(list(relative_isos.values())))
             norm_clabs[name] = list(relative_isos.keys())[
                 np.argmax(np.abs(list(relative_isos.values())))
-            ]  # noqa
+            ]
 
     for name, valdict in all_relative_isos.items():
         all_relative_isos[name] = dict(

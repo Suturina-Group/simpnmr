@@ -131,7 +131,7 @@ def plot_hyperfine(
     save_name: str = "hyperfines.dat",
     verbose: bool = False,
     window_title: str = "Hyperfine data",
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots selected hyperfine-tensor components for a list of nuclei.
 
     Args:
@@ -161,30 +161,30 @@ def plot_hyperfine(
                 complabels[component] = r"$A_\mathregular{iso}$"
         elif component == "ax":
             for nuc in nuclei:
-                hf_components[component][nuc.label] = nuc.A.dip[0, 0] - nuc.A.dip[1, 1]  # noqa
+                hf_components[component][nuc.label] = nuc.A.dip[0, 0] - nuc.A.dip[1, 1]
                 complabels[component] = r"$A_\mathregular{dip, ax}$"
         elif component == "rho":
             for nuc in nuclei:
-                hf_components[component][nuc.label] = nuc.A.dip[0, 0] + nuc.A.dip[1, 1]  # noqa
+                hf_components[component][nuc.label] = nuc.A.dip[0, 0] + nuc.A.dip[1, 1]
                 complabels[component] = r"$A_\mathregular{dip, rho}$"
         elif "d" in component:
             for nuc in nuclei:
                 hf_components[component][nuc.label] = nuc.A.dip[
                     ut.comp2ind(component[1:])
-                ]  # noqa
+                ]
                 complabels[component] = (
-                    rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"  # noqa
+                    rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"
                 )
         elif component in ["x", "y", "z"]:  # eigenvalues
             _to_ind = {"x": 0, "y": 1, "z": 2}
             for nuc in nuclei:
-                hf_components[component][nuc.label] = nuc.A.eigvals[_to_ind[component]]  # noqa
-                complabels[component] = rf"$A_{{\mathregular{{{component}}}}}$"  # noqa
+                hf_components[component][nuc.label] = nuc.A.eigvals[_to_ind[component]]
+                complabels[component] = rf"$A_{{\mathregular{{{component}}}}}$"
         else:
             for nuc in nuclei:
                 hf_components[component][nuc.label] = nuc.A.tensor[
                     ut.comp2ind(component)
-                ]  # noqa
+                ]
                 complabels[component] = rf"$A_\mathregular{{{component}}}$"
 
     fig, ax = plt.subplots(1, 1, num=window_title)
@@ -254,7 +254,7 @@ def plot_fitted_shifts(
     window_title: str = "Fitted Shifts",
     susc_units: str = "A3",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots theoretical vs experimental shifts for a fitted susceptibility model.
 
     Args:
@@ -380,7 +380,7 @@ def plot_fitted_shifts(
             not (it + 1) % per_line
             and len(susc_model.final_var_values.keys()) > 2
             and it != len(susc_model.VARNAMES) - 1
-        ):  # noqa
+        ):
             expression += "\n"
 
     expression += "\n"
@@ -392,8 +392,14 @@ def plot_fitted_shifts(
     expression += f"\n{'-' * 50}\n"
 
     if not any(["ax" in susc_model.VARNAMES]):
-        expression += rf"$\Delta\chi_\mathregular{{ax}}$ = {molecule.susc.axiality * conv:.3f} {unit_label}"  # noqa
-        expression += rf"  $\Delta\chi_\mathregular{{rh}}$ = {molecule.susc.rhombicity * conv:.3f} {unit_label}"  # noqa
+        expression += (
+            rf"$\Delta\chi_\mathregular{{ax}}$ = "
+            f"{molecule.susc.axiality * conv:.3f} {unit_label}"
+        )
+        expression += (
+            rf"  $\Delta\chi_\mathregular{{rh}}$ = "
+            f"{molecule.susc.rhombicity * conv:.3f} {unit_label}"
+        )
         expression += "\n"
     expression += rf"$\alpha$ = {molecule.susc.alpha:.2f}"
     expression += rf"  $\beta$ = {molecule.susc.beta:.2f}"
@@ -427,7 +433,7 @@ def plot_pred_spectrum(
     save_name: str = "predicted_spectrum.png",
     window_title: str = "Predicted Spectrum",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots a predicted 1D spectrum from simulated shifts.
 
     Args:
@@ -518,7 +524,7 @@ def plot_pred_spectrum(
     label_y = 1.15 * np.max(y_intensity)
 
     # Add label and dashed lines
-    for shift, label, label_x in zip(sorted_shifts, sorted_labels, adj_label_xvals):  # noqa
+    for shift, label, label_x in zip(sorted_shifts, sorted_labels, adj_label_xvals):
         # Add label to plot
         ax.text(
             label_x,
@@ -586,7 +592,7 @@ def plot_shift_spread(
     save_name: str = "shift_spread.png",
     window_title: str = "Shift Spread",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots the spread of theoretical shifts and selected components.
 
     Optionally overlays experimental shift values.
@@ -706,7 +712,7 @@ def plot_shift_spread(
         widthscaler += 1
         set_violin_colours(_violin, "blue")
         legend_markers.append(
-            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),  # noqa
+            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),
         )
         legend_labels.append("Fermi")
 
@@ -725,7 +731,7 @@ def plot_shift_spread(
         widthscaler += 1
         set_violin_colours(_violin, "red")
         legend_markers.append(
-            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),  # noqa
+            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),
         )
         legend_labels.append("Pseudo")
 
@@ -745,7 +751,7 @@ def plot_shift_spread(
         set_violin_colours(_violin, "green")
 
         legend_markers.append(
-            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),  # noqa
+            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),
         )
         legend_labels.append("Dia")
 
@@ -818,7 +824,7 @@ def plot_shift_contrib(
     save_name: str = "shift_components.png",
     window_title: str = "Shift components",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots shift components alongside total and optional experimental values.
 
     Args:
@@ -857,13 +863,13 @@ def plot_shift_contrib(
         for nuc in molecule.nuclei:
             exps[nuc.chem_math_label] += (
                 experiment[nuc.chem_label].shift / cl_to_al[nuc.chem_math_label]
-            )  # noqa
+            )
 
         if "d" not in terms:
             for nuc in molecule.nuclei:
                 exps[nuc.chem_math_label] -= (
                     nuc.shift.dia / cl_to_al[nuc.chem_math_label]
-                )  # noqa
+                )
 
         # Order by low to high experimental shift
         # and store order as list of chemical math labels
@@ -900,11 +906,11 @@ def plot_shift_contrib(
     # Take average
     total = dict.fromkeys(cl_to_al, 0)
     for nuc in molecule.nuclei:
-        total[nuc.chem_math_label] += nuc.shift.total / cl_to_al[nuc.chem_math_label]  # noqa
+        total[nuc.chem_math_label] += nuc.shift.total / cl_to_al[nuc.chem_math_label]
 
     if "d" not in terms:
         for nuc in molecule.nuclei:
-            total[nuc.chem_math_label] -= nuc.shift.dia / cl_to_al[nuc.chem_math_label]  # noqa
+            total[nuc.chem_math_label] -= nuc.shift.dia / cl_to_al[nuc.chem_math_label]
 
     if experiment is None:
         if order.lower() == "ascending":
@@ -932,7 +938,7 @@ def plot_shift_contrib(
         # Take average
         fc = dict.fromkeys(cl_to_al, 0)
         for nuc in molecule.nuclei:
-            fc[nuc.chem_math_label] += nuc.shift.fc / cl_to_al[nuc.chem_math_label]  # noqa
+            fc[nuc.chem_math_label] += nuc.shift.fc / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
             [fc[o] for o in order],
@@ -947,7 +953,7 @@ def plot_shift_contrib(
         # Take average
         pc = dict.fromkeys(cl_to_al, 0)
         for nuc in molecule.nuclei:
-            pc[nuc.chem_math_label] += nuc.shift.pc / cl_to_al[nuc.chem_math_label]  # noqa
+            pc[nuc.chem_math_label] += nuc.shift.pc / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
             [pc[o] for o in order],
@@ -962,7 +968,7 @@ def plot_shift_contrib(
         # Take average
         dia = dict.fromkeys(cl_to_al, 0)
         for nuc in molecule.nuclei:
-            dia[nuc.chem_math_label] += nuc.shift.dia / cl_to_al[nuc.chem_math_label]  # noqa
+            dia[nuc.chem_math_label] += nuc.shift.dia / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
             [dia[o] for o in order],
@@ -1044,7 +1050,7 @@ def plot_relax_contrib(
     save_name: str = "relaxation_contributions.png",
     window_title: str = "Relaxation Contributions",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots contributions to relaxation rates alongside experimental values.
 
     Args:
@@ -1075,7 +1081,7 @@ def plot_shift_tdep(
     window_title: str = "ShiftxT vs T",
     verbose: bool = True,
     assignment: bool = True,
-) -> tuple[plt.Figure, tuple[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, tuple[plt.Axes]]:
     """Plots experimental shift temperature dependence.
 
     By default, plots ``shift * T`` versus ``T`` for each assignment label.
@@ -1155,10 +1161,10 @@ def plot_isoaxrho(
     save: bool = True,
     y_label: str = "ChiT",
     save_name: str = "iso_ax_rho_tdep.png",
-    window_title: str = "Isotropic, Axial, and Rhombic susceptibilities",  # noqa
+    window_title: str = "Isotropic, Axial, and Rhombic susceptibilities",
     verbose: bool = True,
     out_file: str = "isoaxrho_fit.csv",
-) -> tuple[plt.Figure, tuple[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, tuple[plt.Axes]]:
     """Plots temperature dependence of isotropic/axial/rhombic susceptibility.
 
     The function supports plotting either ``chi*T`` or ``chi`` versus temperature.
@@ -1207,7 +1213,7 @@ def plot_isoaxrho(
                 + "\n"
                 + rf"$Slope = {params['slope']:.1f} "
                 rf"\pm {params['slope_err']:.1f}$"
-            )  # noqa
+            )
 
             _adj_r2 = params.get("adj_r2")
             if _adj_r2 is None or np.isnan(_adj_r2):
@@ -1217,7 +1223,7 @@ def plot_isoaxrho(
 
             # Display adj_r2 and fit parameters in the bottom annotation panel
             bax.annotate(
-                text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + annotation,  # noqa
+                text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + annotation,
                 xy=(0.1, 0.5),
                 xycoords="axes fraction",
             )
@@ -1299,7 +1305,7 @@ def plot_hyperfine_iso_vs_ax(
 
     ax.set_ylabel(
         r"$A_\mathregular{iso} / (A_\mathregular{dip_{xx}} + A_\mathregular{dip_{yy}})$"
-    )  # noqa
+    )
 
     if save:
         plt.savefig(save_name, dpi=500)
@@ -1320,7 +1326,7 @@ def plot_hyperfine_spread(
     save_name: str = "hyperfines.png",
     window_title: str = "Hyperfine Components",
     verbose: bool = True,
-) -> tuple[plt.Figure, list[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plots the spread of hyperfine components for each chemical label.
 
     Args:
@@ -1356,27 +1362,27 @@ def plot_hyperfine_spread(
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
                     nuc.A.dip[0, 0] - nuc.A.dip[1, 1]
-                )  # noqa
+                )
                 legend_labels[component] = r"$A_\mathregular{dip, ax}$"
         elif component == "rho":
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
                     nuc.A.dip[0, 0] + nuc.A.dip[1, 1]
-                )  # noqa
+                )
                 legend_labels[component] = r"$A_\mathregular{dip, rho}$"
         elif "d" in component:
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
                     nuc.A.dip[ut.comp2ind(component[1:])]
-                )  # noqa
+                )
                 legend_labels[component] = (
-                    rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"  # noqa
+                    rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"
                 )
         else:
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
                     nuc.A.tensor[ut.comp2ind(component)]
-                )  # noqa
+                )
                 legend_labels[component] = rf"$A_\mathregular{{{component}}}$"
 
     unique_chemlabels = []
@@ -1397,7 +1403,7 @@ def plot_hyperfine_spread(
             showmeans=True,
         )
         legend_markers.append(
-            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),  # noqa
+            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),
         )
 
     if len(a_comps) < 11:
@@ -1441,9 +1447,9 @@ def plot_raw_deconv_pred(
     save: bool = True,
     show: bool = True,
     save_name: str = "pred_and_exp_spectrum.png",
-    window_title: str = "Raw, Deconvoluted, and Predicted Spectra",  # noqa
+    window_title: str = "Raw, Deconvoluted, and Predicted Spectra",
     verbose: bool = True,
-) -> tuple[plt.Figure, tuple[plt.Axes]]:  # noqa
+) -> tuple[plt.Figure, tuple[plt.Axes]]:
     """Plots raw, deconvoluted, and predicted spectra.
 
     Args:

@@ -218,7 +218,7 @@ def fit_susc_func(uargs):
                 f"Specified hyperfine file format "
                 f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
                 "red",
-            )  # noqa
+            )
             sys.exit(1)
 
         # Create molecule
@@ -344,7 +344,7 @@ def fit_susc_func(uargs):
         _terms.pop(_terms.index("d"))
 
     # Run fit for all experiments
-    for molecule, susc_model, experiment in zip(molecules, susc_models, experiments):  # noqa
+    for molecule, susc_model, experiment in zip(molecules, susc_models, experiments):
         # If permuting assignments, then first
         # run all assignment permutations to find best one
         if config.assignment_method == "permute":
@@ -360,7 +360,7 @@ def fit_susc_func(uargs):
             )
 
             ut.cprint(
-                f"\n There are {len(permed_assignments):d} possible permutations",  # noqa
+                f"\n There are {len(permed_assignments):d} possible permutations",
                 "cyan",
             )
 
@@ -413,7 +413,11 @@ def fit_susc_func(uargs):
                     "assigned_experiment_{:.2f}_K.csv".format(experiment.temperature),
                 ),
                 delimiter=CSV_DELIMITER,
-                comment=f"# Optimal Assignment\n# r2 = {opt_r2:f}\n# T = {experiment.temperature:.2f} K",  # noqa
+                comment=(
+                    f"# Optimal Assignment\n"
+                    f"# r2 = {opt_r2:f}\n"
+                    f"# T = {experiment.temperature:.2f} K"
+                ),
             )
 
         # Fit susceptibility model to experimental chemical shifts
@@ -441,7 +445,7 @@ def fit_susc_func(uargs):
         visible = ["show", "on"]
 
         if uargs.shift_plots in _PLOT_ACTIVE:
-            if any(cfg in visible for cfg in [uargs.contrib_plots, uargs.spread_plots]):  # noqa
+            if any(cfg in visible for cfg in [uargs.contrib_plots, uargs.spread_plots]):
                 show = False
             else:
                 show = _SHOW_CONV[uargs.shift_plots]
@@ -457,14 +461,14 @@ def fit_susc_func(uargs):
                     config.project_name, f"shifts_{experiment.temperature:.2f}_K{PFF}"
                 ),
                 verbose=True,
-                window_title=f"Fitted shifts at {experiment.temperature:.2f} K",  # noqa
+                window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
             )
 
             visible = ["show", "on"]
 
             if all(
                 cfg not in visible for cfg in [uargs.contrib_plots, uargs.spread_plots]
-            ):  # noqa
+            ):
                 plt.close("all")
 
             if uargs.spread_plots in _PLOT_ACTIVE:
@@ -477,9 +481,12 @@ def fit_susc_func(uargs):
                     save_name=os.path.join(
                         config.project_name,
                         f"shift_spread_{molecule.susc.temperature:.2f}_K{PFF}",
-                    ),  # noqa
+                    ),
                     verbose=True,
-                    window_title=f"Spread of predicted shift components at {experiment.temperature:.2f} K",  # noqa
+                    window_title=(
+                        f"Spread of predicted shift components "
+                        f"at {experiment.temperature:.2f} K"
+                    ),
                     order="descending",
                 )
 
@@ -495,7 +502,9 @@ def fit_susc_func(uargs):
                         f"mean_components_{experiment.temperature:.2f}_K{PFF}",
                     ),
                     verbose=True,
-                    window_title=f"Predicted shift components at {experiment.temperature:.2f} K",  # noqa
+                    window_title=(
+                        f"Predicted shift components at {experiment.temperature:.2f} K"
+                    ),
                     order="descending",
                 )
 
@@ -504,9 +513,9 @@ def fit_susc_func(uargs):
     # Write shift data to file
     _comment = f"# Hyperfines from file {config.hyperfine_file}\n"
     if len(config.diamagnetic_file):
-        _comment += f"# Diamagnetic shifts from file {config.diamagnetic_file}\n"  # noqa
+        _comment += f"# Diamagnetic shifts from file {config.diamagnetic_file}\n"
     if len(config.diamagnetic_ref_file):
-        _comment += f"# Diamagnetic reference from file {config.diamagnetic_ref_file}\n"  # noqa
+        _comment += f"# Diamagnetic reference from file {config.diamagnetic_ref_file}\n"
     _comment += f"# T = {molecule.susc.temperature:.2f} K"
 
     for molecule in molecules:
@@ -837,7 +846,9 @@ def plot_a_func(uargs):
                 save=uargs.save,
                 show=False,
                 save_name=f"hyperfine_spread_{file_head}{PFF}",
-                window_title=f"Spread of hyperfine data from {uargs.calculation_data}",  # noqa
+                window_title=(
+                    f"Spread of hyperfine data from {uargs.calculation_data}"
+                ),
                 verbose=True,
             )
 
@@ -900,7 +911,7 @@ def plot_a_iso_ax_func(uargs):
         elif config.hyperfine_method == "pdip":
             if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
                 labels, coords = xyzf.load_xyz(config.hyperfine_file)
-            elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:  # noqa
+            elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:
                 QCS = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
                 labels = QCS.labels
                 coords = QCS.coords
@@ -909,7 +920,7 @@ def plot_a_iso_ax_func(uargs):
                     f"Specified hyperfine file format "
                     f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
                     "red",
-                )  # noqa
+                )
                 sys.exit(1)
 
             # Create molecule
@@ -930,7 +941,7 @@ def plot_a_iso_ax_func(uargs):
         file_head = os.path.splitext(hf_file)[0]
 
         iso_div_ax = {
-            nuc.chem_math_label: nuc.A.iso / (nuc.A.dip[0, 0] + nuc.A.dip[1, 1])  # noqa
+            nuc.chem_math_label: nuc.A.iso / (nuc.A.dip[0, 0] + nuc.A.dip[1, 1])
             for nuc in base_molecule.nuclei
         }
 
@@ -1002,7 +1013,7 @@ def calc_pdip_func(uargs):
 
     if os.path.splitext(uargs.structure_file)[1] == ".xyz":
         labels, coords = xyzf.load_xyz(uargs.structure_file)
-    elif os.path.splitext(uargs.structure_file)[1] in [".log", ".out"]:  # noqa
+    elif os.path.splitext(uargs.structure_file)[1] in [".log", ".out"]:
         QCS = rdrs.QCStructure.guess_from_file(uargs.structure_file)
         labels = QCS.labels
         coords = QCS.coords
@@ -1011,7 +1022,7 @@ def calc_pdip_func(uargs):
             f"Specified hyperfine file format "
             f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
             "red",
-        )  # noqa
+        )
         sys.exit(1)
 
     # Create molecule
@@ -1031,7 +1042,7 @@ def calc_pdip_func(uargs):
                 nuc.chem_label,
                 *nuc.A.dip[0, :],
                 *nuc.A.dip[1, 1:],
-                nuc.A.dip[2, 2],  # noqa
+                nuc.A.dip[2, 2],
             )
             for nuc in molecule.nuclei
         ]
@@ -1041,7 +1052,14 @@ def calc_pdip_func(uargs):
     file_head = os.path.splitext(uargs.structure_file)[0]
     file_name = f"point_dipole_A_dip_{file_head}.csv"
 
-    header = "Label, Adip_xx (ppm Å^-3), Adip_xy (ppm Å^-3), Adip_xz (ppm Å^-3), Adip_yy (ppm Å^-3), Adip_yz (ppm Å^-3), Adip_zz (ppm Å^-3)"  # noqa
+    header = (
+        "Label, Adip_xx (ppm Å^-3), "
+        "Adip_xy (ppm Å^-3), "
+        "Adip_xz (ppm Å^-3), "
+        "Adip_yy (ppm Å^-3), "
+        "Adip_yz (ppm Å^-3), "
+        "Adip_zz (ppm Å^-3)"
+    )
 
     np.savetxt(file_name, out, delimiter=",", header=header, fmt="%s")
     ut.cprint(f"Point dipole dipolar tensors saved to {file_name}", "cyan")
@@ -1098,14 +1116,14 @@ def calc_pcs_iso_func(uargs):
             f"Specified structure file format "
             f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
             "red",
-        )  # noqa
+        )
         sys.exit(1)
 
     if uargs.central_atom not in labels:
         ut.red_exit(
             "Specified central atom not present in structure file \n"
             "Perhaps try with indexing e.g. Ni1"
-        )  # noqa
+        )
 
     # Load susceptibility information
     if "orca" in uargs.susc_format:
@@ -1127,7 +1145,9 @@ def calc_pcs_iso_func(uargs):
                 labels,
                 coords,
                 uargs.central_atom,
-                comment=f"PCS Isosurface from {uargs.susc_file} at {susc.temperature:.2f} K",  # noqa
+                comment=(
+                    f"PCS Isosurface from {uargs.susc_file} at {susc.temperature:.2f} K"
+                ),
                 file_name=f"pcs_isosurface_{susc.temperature:.2f}_K.cube",
             )
 
@@ -1185,7 +1205,7 @@ def predict_func(uargs):
                 f"Specified hyperfine file format "
                 f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
                 "red",
-            )  # noqa
+            )
             sys.exit(1)
 
         # Create molecule
@@ -1284,13 +1304,13 @@ def predict_func(uargs):
             if susc.temperature != exp.temperature:
                 ut.cprint(
                     f"Warning: Mismatch in Susceptibility ({susc.temperature:.2f} K) "
-                    f"and Experimental ({exp.temperature:.2f} K) temperatures",  # noqa
+                    f"and Experimental ({exp.temperature:.2f} K) temperatures",
                     "black_yellowbg",
                 )
             if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
                 ut.cprint(
                     f"Warning: Experimental isotope ({exp.isotope}) not requested "
-                    "in input file ({config.nuclei_include})",  # noqa
+                    "in input file ({config.nuclei_include})",
                     "black_yellowbg",
                 )
     else:
@@ -1300,7 +1320,7 @@ def predict_func(uargs):
     molecules = [copy.deepcopy(base_molecule) for _ in range(len(experiments))]
 
     if len(config.experiment_spectrum_files):
-        for experiment, spectrum in zip(experiments, config.experiment_spectrum_files):  # noqa
+        for experiment, spectrum in zip(experiments, config.experiment_spectrum_files):
             experiment.load_spectrum_from_file(spectrum)
 
     _terms = ["pc", "fc", "d"]
@@ -1377,9 +1397,9 @@ def predict_func(uargs):
             save_name=os.path.join(
                 config.project_name,
                 f"pred_shift_spread_{molecule.susc.temperature:.2f}_K{PFF}",
-            ),  # noqa
+            ),
             verbose=True,
-            window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",  # noqa
+            window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
             order="descending",
         )
 
@@ -1392,9 +1412,11 @@ def predict_func(uargs):
             save_name=os.path.join(
                 config.project_name,
                 f"pred_mean_components_{molecule.susc.temperature:.2f}_K{PFF}",
-            ),  # noqa
+            ),
             verbose=True,
-            window_title=f"Predicted mean shifts and components at {susc.temperature:.2f} K",  # noqa
+            window_title=(
+                f"Predicted mean shifts and components at {susc.temperature:.2f} K"
+            ),
             order="descending",
         )
 
@@ -1420,7 +1442,7 @@ def predict_func(uargs):
                 show=False,
                 save_name=os.path.join(
                     config.project_name,
-                    f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K{PFF}",  # noqa
+                    f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K{PFF}",
                 ),
             )
         vis.plot_pred_spectrum(
@@ -1505,7 +1527,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         # In point-dipole (pdip) model, contact hyperfine A_iso = 0 for all nuclei.
         A_iso_dict = {label: 0.0 for label in nuclei_coords}
     else:
-        qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)  # noqa
+        qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
         A_iso_dict_MHz = qc_hyperfine_data.a_iso  # MHz
         A_iso_dict = {
             nuc.label: A_iso_dict_MHz[nuc.label] * 1e6
@@ -1619,7 +1641,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
     # Combined SBM and Curie mechanisms
     elif (
         config.relaxation_model == "sbm curie" or config.relaxation_model == "curie sbm"
-    ):  # noqa
+    ):
         sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
@@ -1694,13 +1716,13 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         rates_r1 = {
             label: sbm_dipolar_r1_rates[label]
             + sbm_contact_r1_rates[label]
-            + curie_r1_rates[label]  # noqa
+            + curie_r1_rates[label]
             for label in nuclei_coords
         }
         rates_r2 = {
             label: sbm_dipolar_r2_rates[label]
             + sbm_contact_r2_rates[label]
-            + curie_r2_rates[label]  # noqa
+            + curie_r2_rates[label]
             for label in nuclei_coords
         }
 
@@ -1784,7 +1806,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
                 avg_lw_by_chem_label[nuc.chem_label]
                 / (abs(omega_I_dict[nuc.label]) / (2 * np.pi))
                 * 1e6
-            )  # noqa
+            )
 
     return
 
@@ -1847,7 +1869,7 @@ def fit_corr_time_func(uargs):
         ut.red_exit(
             "Error: Use syntax 'tau_C: [fit/fix, guess, [upper-bound, lower-bound]]', "
             "with bounds optional (tau_C refers to tau_R or tau_E)."
-        )  # noqa
+        )
 
     # Placeholders for fitted parameters and covariance
     tau_R_fit = None
@@ -2509,7 +2531,10 @@ def fit_corr_time_func(uargs):
             plt.text(
                 0.01,
                 0.91,
-                f"Fitted $\\tau_{{\\mathrm{{R}}}}$: {tau_R_fit:.3e} s\nFitted $\\tau_{{\\mathrm{{E}}}}$: {tau_E_fit:.3e} s",  # noqa
+                (
+                    f"Fitted $\\tau_{{\\mathrm{{R}}}}$: {tau_R_fit:.3e} s\n"
+                    f"Fitted $\\tau_{{\\mathrm{{E}}}}$: {tau_E_fit:.3e} s"
+                ),
                 fontsize=12,
                 ha="left",
                 va="top",
@@ -2624,9 +2649,7 @@ def read_args(arg_list=None):
     extract_dia.add_argument(
         "output_file",
         type=str,
-        help=(
-            "Quantum Chemistry output file containing chemical shift information"  # noqa
-        ),
+        help=("Quantum Chemistry output file containing chemical shift information"),
     )
 
     extract_dia.add_argument(
@@ -2635,7 +2658,8 @@ def read_args(arg_list=None):
         default="",
         type=str,
         help=(
-            "Quantum Chemistry output file containing reference chemical shift information"  # noqa
+            "Quantum Chemistry output file containing reference "
+            "chemical shift information"
         ),
     )
 
@@ -2683,7 +2707,8 @@ def read_args(arg_list=None):
         type=str,
         default="save",
         help=(
-            "Plot Experimental and Calculated Chemical shifts against each other \n"  # noqa
+            "Plot Experimental and Calculated Chemical shifts "
+            "against each other \n"
             " - 'on' shows and saves the plots\n"
             " - 'show' shows the plots\n"
             " - 'save' saves the plots\n"
@@ -2731,7 +2756,8 @@ def read_args(arg_list=None):
         type=str,
         default="save",
         help=(
-            "Plot Isotropic, Axial, and Rhombic susceptibility as a function of temperature \n"  # noqa
+            "Plot Isotropic, Axial, and Rhombic susceptibility "
+            "as a function of temperature \n"
             " - 'on' shows and saves the plots\n"
             " - 'show' shows the plots\n"
             " - 'save' saves the plots\n"

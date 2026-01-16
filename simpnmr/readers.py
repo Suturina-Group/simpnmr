@@ -610,10 +610,10 @@ class QCA(ABC):
         # Save hyperfine data to file
         out = np.array(
             [
-                "{}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}".format(  # noqa
+                "{}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}".format(
                     label, iso, *tensor[0, :], *tensor[1, 1:], tensor[2, 2]
                 )
-                for iso, (label, tensor) in zip(self.a_iso.values(), self.a_dip.items())  # noqa
+                for iso, (label, tensor) in zip(self.a_iso.values(), self.a_dip.items())
             ]
         )
 
@@ -625,7 +625,16 @@ class QCA(ABC):
 
         _comments += comment + "\n"
 
-        header = f"atom_label, Aiso ({self.a_units}), Adip_xx ({self.a_units}), Adip_xy ({self.a_units}), Adip_xz ({self.a_units}), Adip_yy ({self.a_units}), Adip_yz ({self.a_units}), Adip_zz ({self.a_units})"  # noqa
+        header = (
+            f"atom_label, "
+            f"Aiso ({self.a_units}), "
+            f"Adip_xx ({self.a_units}), "
+            f"Adip_xy ({self.a_units}), "
+            f"Adip_xz ({self.a_units}), "
+            f"Adip_yy ({self.a_units}), "
+            f"Adip_yz ({self.a_units}), "
+            f"Adip_zz ({self.a_units})"
+        )
 
         # Save to file
         np.savetxt(
@@ -834,7 +843,7 @@ def read_gaussian_log_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDA
     return labels, coords
 
 
-def read_gaussian_log_spin(file_name: str) -> int:  # noqa
+def read_gaussian_log_spin(file_name: str) -> int:
     """Read the spin multiplicity (2S+1) from a Gaussian .log file.
 
     Args:
@@ -935,7 +944,7 @@ class Orca5OutputA(QCA):
     FILETYPE = "Orca OUTPUT"
 
     COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"  # noqa
+        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"
     )
 
     @classmethod
@@ -968,7 +977,7 @@ class Orca6OutputA(QCA):
     FILETYPE = "Orca OUTPUT"
 
     COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#"  # noqa
+        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#"
     )
 
     @classmethod
@@ -993,7 +1002,7 @@ class Orca6OutputA(QCA):
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
 
 
-def read_orca5_output_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:  # noqa
+def read_orca5_output_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:
     """Read the final Cartesian coordinates from an ORCA output file.
 
     Args:
@@ -1178,7 +1187,7 @@ class Orca5PropertyA(QCA):
     FILETYPE = "Orca PROPERTY"
 
     COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"  # noqa
+        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"
     )
 
     @classmethod
@@ -1202,7 +1211,7 @@ class Orca5PropertyA(QCA):
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
 
 
-def read_orca5_property_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:  # noqa
+def read_orca5_property_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:
     """Read the final Cartesian coordinates from an ORCA property file.
 
     Args:
@@ -1407,7 +1416,7 @@ def read_orca_susceptibility(file_name: str, section: str) -> dict[float, np.nda
                 while (
                     "TEMPERATURE DEPENDENT MOLAR MAGNETIC SUSCEPTIBILITY TENSOR"
                     not in line
-                ):  # noqa
+                ):
                     line = next(f)
                 # Move down until we reach the first temperature header line
                 while "TEMPERATURE/K" not in line:

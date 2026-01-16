@@ -388,7 +388,7 @@ class Experiment:
     @classmethod
     def generate_permutations(
         cls, experiment: "Experiment", groups: list[list[str]] = []
-    ) -> list["Experiment"]:  # noqa
+    ) -> list["Experiment"]:
         """Generates all assignment permutations consistent with grouping.
 
         Args:
@@ -901,15 +901,18 @@ class Susceptibility:
     def irred(self, value):
         if not isinstance(value, np.ndarray):
             raise TypeError(
-                "Irreducible Spherical Components must be 5 element arraylike of complex numbers"  # noqa
+                "Irreducible Spherical Components must be 5 element "
+                "arraylike of complex numbers"
             )
         elif value.shape != (5,):
             raise TypeError(
-                "Irreducible Spherical Components must be 5 element arraylike of complex numbers"  # noqa
+                "Irreducible Spherical Components must be 5 element "
+                "arraylike of complex numbers"
             )
         elif not np.iscomplexobj(value):
             raise TypeError(
-                "Irreducible Spherical Components must be 5 element arraylike of complex numbers"  # noqa
+                "Irreducible Spherical Components must be 5 element "
+                "arraylike of complex numbers"
             )
         self._irred = value
         return
@@ -936,23 +939,23 @@ class Susceptibility:
         # chi_-2
         irred[0] = +np.sqrt(2 * np.pi / 15) * (
             tensor[0, 0] - tensor[1, 1] + 1j * (tensor[0, 1] + tensor[1, 0])
-        )  # noqa
+        )
         # chi_-1
         irred[1] = -np.sqrt(2 * np.pi / 15) * (
             tensor[0, 2] - tensor[2, 0] + 1j * (tensor[1, 2] + tensor[2, 1])
-        )  # noqa
+        )
         # chi_0
         irred[2] = +np.sqrt(4 * np.pi / 45) * (
             2 * tensor[2, 2] - tensor[0, 0] - tensor[1, 1]
-        )  # noqa
+        )
         # chi_+1
         irred[3] = -np.sqrt(2 * np.pi / 15) * (
             tensor[0, 2] - tensor[2, 0] - 1j * (tensor[1, 2] + tensor[2, 1])
-        )  # noqa
+        )
         # chi_2
         irred[4] = +np.sqrt(2 * np.pi / 15) * (
             tensor[0, 0] - tensor[1, 1] - 1j * (tensor[0, 1] + tensor[1, 0])
-        )  # noqa
+        )
 
         return irred
 
@@ -1000,9 +1003,9 @@ class Susceptibility:
             cls(
                 np.array(
                     [
-                        [row["chi_xx (Å^3)"], row["chi_xy (Å^3)"], row["chi_xz (Å^3)"]],  # noqa
-                        [row["chi_xy (Å^3)"], row["chi_yy (Å^3)"], row["chi_yz (Å^3)"]],  # noqa
-                        [row["chi_xz (Å^3)"], row["chi_yz (Å^3)"], row["chi_zz (Å^3)"]],  # noqa
+                        [row["chi_xx (Å^3)"], row["chi_xy (Å^3)"], row["chi_xz (Å^3)"]],
+                        [row["chi_xy (Å^3)"], row["chi_yy (Å^3)"], row["chi_yz (Å^3)"]],
+                        [row["chi_xz (Å^3)"], row["chi_yz (Å^3)"], row["chi_zz (Å^3)"]],
                     ]
                 ),
                 temperature=row["Temperature (K)"],
@@ -1835,17 +1838,17 @@ class Molecule:
                             row["Adip_xx (ppm Å^-3)"],
                             row["Adip_xy (ppm Å^-3)"],
                             row["Adip_xz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                         [
                             row["Adip_xy (ppm Å^-3)"],
                             row["Adip_yy (ppm Å^-3)"],
                             row["Adip_yz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                         [
                             row["Adip_xz (ppm Å^-3)"],
                             row["Adip_yz (ppm Å^-3)"],
                             row["Adip_zz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                     ]
                 )
                 + np.eye(3) * row["Aiso (ppm Å^-3)"]
@@ -1859,17 +1862,17 @@ class Molecule:
                             row["A_xx (ppm Å^-3)"],
                             row["A_xy (ppm Å^-3)"],
                             row["A_xz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                         [
                             row["A_xy (ppm Å^-3)"],
                             row["A_yy (ppm Å^-3)"],
                             row["A_yz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                         [
                             row["A_xz (ppm Å^-3)"],
                             row["A_yz (ppm Å^-3)"],
                             row["A_zz (ppm Å^-3)"],
-                        ],  # noqa
+                        ],
                     ]
                 )
                 for _, row in data.iterrows()
@@ -2007,7 +2010,7 @@ class Molecule:
             else:
                 raise KeyError(
                     "atom_label or chem_label not present in diamagnetic shift file"
-                )  # noqa
+                )
         elif file_type == "dft":
             data = rdrs.QCCS.guess_from_file(file_name)
 
@@ -2015,7 +2018,7 @@ class Molecule:
                 new: old
                 for old, new in zip(
                     data.cs_iso.keys(), xyzf.add_label_indices(data.cs_iso.keys())
-                )  # noqa
+                )
             }
 
             for nuc in self.nuclei:
@@ -2024,7 +2027,7 @@ class Molecule:
                 except KeyError:
                     raise KeyError(
                         f"Cannot find {nuc.label} in reference diamagnetic shift file"
-                    )  # noqa
+                    )
         else:
             raise ValueError("Unknown file_type")
 
@@ -2039,12 +2042,12 @@ class Molecule:
 
                 for nuc in self.nuclei:
                     try:
-                        nuc.shift.dia = ref["shift"][nuc.label_nn] - nuc.shift.dia  # noqa
+                        nuc.shift.dia = ref["shift"][nuc.label_nn] - nuc.shift.dia
                     except KeyError:
                         raise KeyError(
                             f"Cannot find {nuc.label_nn} in reference diamagnetic "
                             "shift file"
-                        )  # noqa
+                        )
 
             elif ref_file_type == "dft":
                 ref_data = rdrs.QCCS.guess_from_file(ref_file_name)
@@ -2062,12 +2065,12 @@ class Molecule:
 
                 for nuc in self.nuclei:
                     try:
-                        nuc.shift.dia = avg_ref_iso[nuc.label_nn] - nuc.shift.dia  # noqa
+                        nuc.shift.dia = avg_ref_iso[nuc.label_nn] - nuc.shift.dia
                     except KeyError:
                         raise KeyError(
                             f"Cannot find {nuc.label_nn} in reference diamagnetic "
                             "shift file"
-                        )  # noqa
+                        )
             else:
                 raise ValueError("Unknown file_type")
         return
@@ -2116,16 +2119,16 @@ class Molecule:
             raise TypeError(
                 "Unknown type passed to average_hyperfine, "
                 "labels should be list[list[str]] or list[str]"
-            )  # noqa
+            )
 
         # Check sublists are all string
         if any(
             [not isinstance(subent, str) for ent in av_chemlabels for subent in ent]
-        ):  # noqa
+        ):
             raise TypeError(
                 "Unknown type passed to average_hyperfine, "
                 "labels should be list[list[str]] or list[str]"
-            )  # noqa
+            )
 
         # Check labels exist in molecule
         _fl_av_chemlabels = ut.flatten(av_chemlabels)
@@ -2137,7 +2140,7 @@ class Molecule:
         # Average hyperfines and diamagnetic shifts
         for ents in av_chemlabels:
             avg_atens = np.mean(
-                [nuc.A.tensor for nuc in self.nuclei if nuc.chem_label in ents],  # noqa
+                [nuc.A.tensor for nuc in self.nuclei if nuc.chem_label in ents],
                 axis=0,
             )
             for nuc in self.nuclei:
@@ -2185,7 +2188,7 @@ class Molecule:
         if not len(centre_labels):
             raise ValueError(
                 ut.cstr(
-                    "Error: No paramagnetic centres specified for point dipole",  # noqa
+                    "Error: No paramagnetic centres specified for point dipole",
                     "red",
                 )
             )
@@ -2300,7 +2303,7 @@ class Molecule:
             }
             for nuc in self.nuclei:
                 if nuc.label in al_to_cl.keys():
-                    nuc.chem_math_label = al_to_cml[nuc.label].lstrip().rstrip()  # noqaq
+                    nuc.chem_math_label = al_to_cml[nuc.label].lstrip().rstrip()
         # or if math labels are not provided, set to the same as math labels
         else:
             for nuc in self.nuclei:
@@ -2460,7 +2463,7 @@ class Molecule:
                     "{:5} {:15.7f} {:15.7f} {:15.7f}".format(
                         xyzf.lab_to_num(lab), *trio
                     )
-                )  # noqa
+                )
                 if lab in _clabs.keys():
                     f.write('      "{}"\n'.format(_clabs[lab]))
                 else:

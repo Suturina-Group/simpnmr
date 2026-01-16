@@ -148,13 +148,13 @@ def a_tensor_mhz_to_angstrom(a_tensors: dict[str, NDArray]) -> dict[str, NDArray
         key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[lf.remove_numbers(key)])
         for key, val in a_tensors.items()
         if lf.remove_numbers(key) in NUCLEAR_GAMMAS.keys()
-        and NUCLEAR_GAMMAS[lf.remove_numbers(key)]  # noqa
+        and NUCLEAR_GAMMAS[lf.remove_numbers(key)]
     }
 
     return a_tensors_ang
 
 
-def _mhz_to_angstrom(val_mhz: NDArray | float, nuclear_gamma: float) -> NDArray | float:  # noqa
+def _mhz_to_angstrom(val_mhz: NDArray | float, nuclear_gamma: float) -> NDArray | float:
     """Converts a hyperfine coupling value from MHz to ``ppm Å^-3``.
 
     Args:
@@ -357,7 +357,7 @@ def find_index_of_nearest(array, value):
     if idx > 0 and (
         idx == len(array)
         or math.fabs(value - array[idx - 1]) < math.fabs(value - array[idx])
-    ):  # noqa
+    ):
         return idx - 1
     else:
         return idx

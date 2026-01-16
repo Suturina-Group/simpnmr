@@ -359,7 +359,7 @@ class SusceptibilityModel(ABC):
         nuclei: list[main.Nucleus],
         al_to_para_shift: dict[str, float],
         average_labels: list[list[str]] = [],
-    ) -> list[float]:  # noqa
+    ) -> list[float]:
         """Adapter for optimizers that pass parameters as a flat float list.
 
         Converts `new_vals` into a parameter dictionary (using `fit_vars` key order),
@@ -448,7 +448,7 @@ class SusceptibilityModel(ABC):
         if curr_fit.status == 0:
             if verbose:
                 ut.cprint(
-                    f"\n Fit at {self.temperature} K failed - Too many iterations",  # noqa
+                    f"\n Fit at {self.temperature} K failed - Too many iterations",
                     "black_yellowbg",
                 )
             self.final_var_values = copy.deepcopy(curr_fit_dict)
@@ -487,7 +487,7 @@ class SusceptibilityModel(ABC):
             self.r2 = 1 - (ss_res / ss_tot)
             self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
                 len(ecs) - len(self.fit_vars) - 1
-            )  # noqa
+            )
 
         return
 
@@ -534,7 +534,7 @@ class LinearSusceptibilityModel(SusceptibilityModel):
         if curr_fit.status == 0:
             if verbose:
                 ut.cprint(
-                    f"\n Fit at {self.temperature} K failed - Too many iterations",  # noqa
+                    f"\n Fit at {self.temperature} K failed - Too many iterations",
                     "black_yellowbg",
                 )
             self.final_var_values = copy.deepcopy(curr_fit_dict)
@@ -570,7 +570,7 @@ class LinearSusceptibilityModel(SusceptibilityModel):
             self.r2 = 1 - (ss_res / ss_tot)
             self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
                 len(ecs) - len(self.fit_vars) - 1
-            )  # noqa
+            )
 
         return
 
@@ -684,7 +684,7 @@ class SplitFitter(SusceptibilityModel):
                 [
                     params["dxz"],
                     params["dyz"],
-                    -params["dxx"] - params["dyy"],  # noqa
+                    -params["dxx"] - params["dyy"],
                 ],
             ]
         )
@@ -916,7 +916,7 @@ class IsoEigenFitter(SusceptibilityModel):
             nuc.label: nuc.A.iso * iso
             + nuc.shift.dia
             + 1.0 / 3.0 * dxx * (nuc.A.tensor[0, 0] - nuc.A.tensor[2, 2])
-            + 1.0 / 3.0 * dyy * (nuc.A.tensor[1, 1] - nuc.A.tensor[2, 2])  # noqa
+            + 1.0 / 3.0 * dyy * (nuc.A.tensor[1, 1] - nuc.A.tensor[2, 2])
             for nuc in nuclei
         }
 
