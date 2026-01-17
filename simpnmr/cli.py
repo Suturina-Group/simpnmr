@@ -386,7 +386,10 @@ def fit_susc_func(uargs):
 
             # Create parallel pool
             pool = mp.Pool(num_threads)
-            logger.info("... using %s threads", num_threads)
+            logger.info(
+                "Parallel permutation search: %s worker processes",
+                num_threads,
+            )
             iterables = [
                 (
                     molecule,
