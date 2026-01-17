@@ -8,14 +8,16 @@ rate decompositions, and fit diagnostics to CSV/text files.
 """
 
 import datetime
+import logging
 
 import numpy as np
 import pandas as pd
 import scipy.constants as constants
 
 from . import main, models
-from . import utils as ut
 from .__version__ import __version__
+
+logger = logging.getLogger(__name__)
 
 
 def save_susc(
@@ -192,7 +194,7 @@ def save_susc(
         df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
 
     if verbose:
-        ut.cprint(f"\n Susceptibility data written to \n {file_name}\n", "cyan")
+        logger.info("Susceptibility data written to %s", file_name)
 
     return
 
@@ -289,7 +291,7 @@ def save_relaxation_decomposition(
         df.to_csv(_f, sep=delimiter, header=True, float_format="%.5e", index=None)
 
     if verbose:
-        ut.cprint(f"\n Relaxation decomposition written to \n {file_name}\n", "cyan")
+        logger.info("Relaxation decomposition written to %s", file_name)
 
     return
 
@@ -370,7 +372,7 @@ def save_corr_time_fit_data(
         df.to_csv(_f, sep=delimiter, header=True, float_format="%.5e", index=None)
 
     if verbose:
-        ut.cprint(f"\n Correlation‑time fit data written to \n {file_name}\n", "cyan")
+        logger.info("Correlation time fit data written to %s", file_name)
 
     return
 
@@ -441,9 +443,6 @@ def save_slope_intercept(
         df.to_csv(_f, sep=delimiter, header=True, index=None)
 
     if verbose:
-        ut.cprint(
-            f"\n Temperature dependence data is written to \n {file_name}\n",
-            "cyan",
-        )
+        logger.info("Temperature dependence data is written to %s", file_name)
 
     return

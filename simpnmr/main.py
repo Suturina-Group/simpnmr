@@ -10,6 +10,7 @@ spectra, hyperfine couplings, and magnetic susceptibility tensors.
 import copy
 import csv
 import datetime
+import logging
 import os
 import re
 from itertools import chain, permutations, product
@@ -26,6 +27,8 @@ from .__version__ import __version__
 from .scripts.coords_tools import atoms
 from .scripts.coords_tools import label_format as lf
 from .scripts.coords_tools import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 
 class Signal:
@@ -381,7 +384,7 @@ class Experiment:
             df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
 
         if verbose:
-            ut.cprint(f"\n Assigned experiment saved to \n {file_name}\n", "cyan")
+            logger.info("Assigned experiment saved to %s", file_name)
 
         return
 
@@ -1156,7 +1159,7 @@ class Susceptibility:
                     a = 0
 
         if verbose:
-            ut.cprint(f"\n PCS Isosurface written to \n {file_name}\n", "cyan")
+            logger.info("PCS isosurface written to %s", file_name)
 
         return
 
@@ -2376,11 +2379,8 @@ class Molecule:
             df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
 
         if verbose:
-            ut.cprint(f"\n Molecule data written to \n {file_name}\n", "cyan")
-        if verbose:
-            ut.cprint(
-                f"\n Converted Hyperfine data written to \n {file_name}\n", "cyan"
-            )
+            logger.info("Molecule data written to %s", file_name)
+            logger.info("Converted hyperfine data written to %s", file_name)
 
         return
 
@@ -2437,7 +2437,7 @@ class Molecule:
             df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
 
         if verbose:
-            ut.cprint(f"\n Molecule data written to \n {file_name}\n", "cyan")
+            logger.info("Molecule data written to %s", file_name)
 
         return
 
@@ -2470,9 +2470,7 @@ class Molecule:
                     f.write("\n")
 
         if verbose:
-            ut.cprint(
-                f"\n Molecule CHEMCRAFT .xyz file written to \n {file_name}\n", "cyan"
-            )
+            logger.info("Molecule CHEMCRAFT.xyz file written to %s", file_name)
         return
 
     def save_xyz(self, file_name: str, verbose: bool = True, comment: str = ""):
@@ -2506,5 +2504,5 @@ class Molecule:
         )
 
         if verbose:
-            ut.cprint(f"\n Molecule .xyz file written to \n {file_name}\n", "cyan")
+            logger.info("Molecule.xyz file written to %s", file_name)
         return

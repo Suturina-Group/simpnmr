@@ -10,6 +10,7 @@ entry point.
 """
 
 import datetime
+import logging
 import os
 import re
 
@@ -18,9 +19,10 @@ import numpy.linalg as la
 
 from ... import inputs as inps
 from ... import readers as rdrs
-from ... import utils as ut
 from ...__version__ import __version__
 from . import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 
 def access_input_data(cfg: inps.PredictConfig):
@@ -105,10 +107,10 @@ def get_rotation_and_transformation(cfg: inps.PredictConfig):
     # Transformation matrix
     trans_mat = evecs.T @ rot_mat
 
-    ut.cprint(
-        f"\n Distinct Susceptibility and DFT geometries detected;"
-        f"\n applied rotational alignment (RMSD = {rmsd:.6f}). \n",
-        "cyan",
+    logger.warning(
+        "Distinct Susceptibility and DFT geometries detected; \n"
+        "Applied rotational alignment (RMSD = %.2f).",
+        rmsd,
     )
 
     # TODO Need to add an additional functional to check if HFC coords are in chi frame
@@ -194,10 +196,7 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
         comment=_comment,
     )
 
-    ut.cprint(
-        f"\n Chi-frame coordinates saved to {xyz_filename}\n",
-        "cyan",
-    )
+    logger.info("Chi-frame coordinates saved to %s", xyz_filename)
 
     # Return list of (label, coord) tuples for possible downstream use
     coords_chi_frame_out = list(zip(clean_labels, nevpt2_coords_chi_frame))

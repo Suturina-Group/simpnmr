@@ -2,6 +2,7 @@
 # Copyright (C) 2025 Suturina Group
 
 import copy
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -11,7 +12,8 @@ from scipy.optimize import least_squares, lsq_linear
 from scipy.optimize._optimize import OptimizeResult
 
 from . import main
-from . import utils as ut
+
+logger = logging.getLogger(__name__)
 
 
 class SusceptibilityModel(ABC):
@@ -447,9 +449,8 @@ class SusceptibilityModel(ABC):
 
         if curr_fit.status == 0:
             if verbose:
-                ut.cprint(
-                    f"\n Fit at {self.temperature} K failed - Too many iterations",
-                    "black_yellowbg",
+                logger.warning(
+                    "Fit at %s K failed - Too many iterations", self.temperature
                 )
             self.final_var_values = copy.deepcopy(curr_fit_dict)
             self.fit_stdev = {label: np.nan for label in self.fit_vars.keys()}
@@ -533,9 +534,8 @@ class LinearSusceptibilityModel(SusceptibilityModel):
 
         if curr_fit.status == 0:
             if verbose:
-                ut.cprint(
-                    f"\n Fit at {self.temperature} K failed - Too many iterations",
-                    "black_yellowbg",
+                logger.warning(
+                    "Fit at %s K failed - Too many iterations", self.temperature
                 )
             self.final_var_values = copy.deepcopy(curr_fit_dict)
             self.fit_stdev = {label: np.nan for label in self.fit_vars.keys()}
@@ -1171,7 +1171,5 @@ def write_model_data(
         f.write("\n")
 
     if verbose:
-        ut.cprint(
-            f"\n Susceptibility Model parameters written to \n {file_name}\n", "cyan"
-        )
+        logger.info("Susceptibility Model parameters written to %s", file_name)
     return

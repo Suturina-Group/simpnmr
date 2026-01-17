@@ -9,7 +9,6 @@ relaxation-rate helper functions used across the package.
 
 import math
 import re
-import sys
 from os import PathLike
 
 import numpy as np
@@ -286,33 +285,6 @@ def can_float(s: str) -> bool:
         out = False
 
     return out
-
-
-def cprint(string: str, color: str):
-    """Prints a colorized string to stdout.
-
-    Args:
-        string: String to print.
-        color: Color name supported by `cstr`.
-
-    Returns:
-        None.
-    """
-    return print(cstr(string, color))
-
-
-def red_exit(string: str) -> None:
-    """Prints an error message in red and exits with code ``-1``.
-
-    Args:
-        string: Message to print.
-
-    Returns:
-        None.
-    """
-    cprint(string, "red")
-    sys.exit(-1)
-    return
 
 
 def read_exp_metadata(file_name: str) -> tuple[float, float, str]:

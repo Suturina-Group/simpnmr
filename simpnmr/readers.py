@@ -9,6 +9,7 @@ EPR g-tensors) from supported quantum-chemistry program outputs.
 """
 
 import datetime
+import logging
 import sys
 from abc import ABC, abstractmethod
 
@@ -16,10 +17,11 @@ import numpy as np
 import numpy.linalg as la
 import numpy.typing as npt
 
-from . import utils as ut
 from .__version__ import __version__
 from .scripts.coords_tools import label_format as lf
 from .scripts.coords_tools import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 
 class QCStructure(ABC):
@@ -647,7 +649,7 @@ class QCA(ABC):
         )
 
         if verbose:
-            ut.cprint(f"\n Raw DFT Hyperfine data written to \n {file_name}\n", "cyan")
+            logger.info("Raw DFT Hyperfine data written to %s", file_name)
 
         return
 
@@ -925,12 +927,11 @@ def read_gaussian_log_a_tensors(file_name: str) -> tuple[npt.NDArray, npt.NDArra
                     line = next(f)
 
     if track != 2:
-        ut.cprint(
+        logger.warning(
             (
-                "Warning: Cannot find Dipolar Hyperfine Tensor in log file\n"
-                " Check prop=epr is in routecard!"
-            ),
-            "black_yellowbg",
+                "Cannot find Dipolar Hyperfine Tensor in log file \n"
+                "Check prop=epr is in routecard!"
+            )
         )
 
     return a_iso, a_dip
@@ -1517,8 +1518,10 @@ def read_orca_g_tensor(file_name: str, section: str) -> np.ndarray | None:
                             break
                     break
     except Exception as e:
-        # Soft failure — let caller handle missing tensor
-        ut.cprint(f"Warning: failed to parse ORCA g-tensor: {e}", "cyan")
+        logger.warning(
+            "Failed to parse ORCA g-tensor — proceeding without g-tensor: %s",
+            e,
+        )
 
     return g_tensor
 

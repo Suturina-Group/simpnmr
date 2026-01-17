@@ -8,10 +8,11 @@ SimpNMR.
 
 import argparse
 import csv
-
-from simpnmr import utils as ut
+import logging
 
 from . import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 
 def load_chemcraft_xyz(file_name: str):
@@ -34,7 +35,7 @@ def load_chemcraft_xyz(file_name: str):
 
     Raises:
         SystemExit: If the file cannot be parsed as an XYZ file or contains
-            invalid formatting. The function exits via `ut.red_exit`.
+            invalid formatting.
     """
 
     formatting = xyzf.detect_xyz_formatting(file_name)
@@ -45,7 +46,7 @@ def load_chemcraft_xyz(file_name: str):
             file_name, missing_headers=formatting["missing_headers"], check=False
         )
     except (ValueError, xyzf.XYZError) as vxe:
-        ut.red_exit(str(vxe))
+        raise ValueError(str(vxe))
 
     if formatting["atomic_numbers"]:
         indexed_labels = xyzf.add_label_indices(xyzf.num_to_lab(_labels))
@@ -114,4 +115,4 @@ def main():
                 row.append(math_dict[k])
             writer.writerow(row)
 
-    ut.cprint("Chemical labels written to\n chemlabels.csv", "cyan")
+    logger.info("Chemical labels written to\n chemlabels.csv")

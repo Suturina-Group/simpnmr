@@ -34,6 +34,22 @@ from .scripts.coords_tools import xyz_format as xyzf
 logger = logging.getLogger(__name__)
 
 
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[90m",  # gray
+        logging.INFO: "\033[36m",  # cyan
+        logging.WARNING: "\033[33m",  # yellow
+        logging.ERROR: "\033[31m",  # red
+        logging.CRITICAL: "\033[41m",  # red background
+    }
+    RESET = "\033[0m"
+
+    def format(self, record):
+        msg = super().format(record)
+        color = self.COLORS.get(record.levelno, self.RESET)
+        return f"{color}{msg}{self.RESET}"
+
+
 def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
     level = logging.INFO
     if verbose:
@@ -42,14 +58,13 @@ def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
         level = logging.ERROR
 
     root = logging.getLogger()
+    root.setLevel(level)
+
     if not root.handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            datefmt="%H:%M:%S",
-        )
-    else:
-        root.setLevel(level)
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = ColorFormatter("%(levelname)-7s |  %(message)s")
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
 
 
 # Change figure save dialog to use current working directory
@@ -67,16 +82,16 @@ if os.getenv("pnmr_echo_r2"):
         if os.getenv("pnmr_echo_r2").lower() == "true":
             ECHO_R2 = True
     except ValueError:
-        ut.cprint("Error in pnmr_echo_r2 environment variable", "red")
-        sys.exit(1)
+        logger.error("Error in pnmr_echo_r2 environment variable")
+        raise SystemExit(1)
 
 # Set user specified font name
 if os.getenv("pnmr_fontname"):
     try:
         plt.rcParams["font.family"] = os.getenv("pnmr_fontname")
     except ValueError:
-        ut.cprint("Error in pnmr_fontname environment variable", "red")
-        sys.exit(1)
+        logger.error("Error in pnmr_fontname environment variable")
+        raise SystemExit(1)
 
 # Set user specified plot file format
 PFF = ".png"
@@ -86,8 +101,8 @@ if os.getenv("pnmr_plot_format"):
         if PFF[0] != ".":
             PFF = f".{PFF}"
     except ValueError:
-        ut.cprint("Error in pnmr_plot_format environment variable", "red")
-        sys.exit(1)
+        logger.error("Error in pnmr_plot_format environment variable")
+        raise SystemExit(1)
 
 # Set user specified plot file format
 CSV_DELIMITER = ","
@@ -95,8 +110,8 @@ if os.getenv("pnmr_csvdelimiter"):
     try:
         CSV_DELIMITER = os.getenv("pnmr_csvdelimiter")
     except ValueError:
-        ut.cprint("Error in pnmr_csvdelimiter environment variable", "red")
-        sys.exit(1)
+        logger.error("Error in pnmr_csvdelimiter environment variable")
+        raise SystemExit(1)
 
 _SHOW_CONV = {"on": True, "save": False, "show": True, "off": False}
 
@@ -118,13 +133,13 @@ def extract_dia_func(uargs):
     Returns:
         None
     """
-    ut.cprint(f"Extracting shifts from {uargs.output_file}", "cyan")
+    logger.info("Extracting shifts from %s", uargs.output_file)
 
     data = rdrs.QCCS.guess_from_file(uargs.output_file)
 
     if len(uargs.ref_output_file):
         ref_data = rdrs.QCCS.guess_from_file(uargs.ref_output_file)
-        ut.cprint(f"Extracting reference shifts from {uargs.ref_output_file}", "cyan")
+        logger.info("Extracting reference shifts from %s", uargs.ref_output_file)
 
         ref_labels = list(ref_data.cs_iso.keys())
         ref_labels_nn = xyzf.remove_label_indices(ref_labels)
@@ -162,7 +177,7 @@ def extract_dia_func(uargs):
         comments="",
     )
 
-    ut.cprint("Extracted shifts saved to extracted_dia.csv", "cyan")
+    logger.info("Extracted shifts saved to extracted_dia.csv")
 
     return
 
@@ -204,7 +219,7 @@ def fit_susc_func(uargs):
         base_molecule = main.Molecule.from_QCA(
             qc_hyperfine_data, converter="MHz_to_Ang-3", elements=config.nuclei_include
         )
-        ut.cprint(f"\n Group(s)/Atoms included: {config.nuclei_include} \n", "cyan")
+        logger.info("Group(s)/Atoms included: %s", config.nuclei_include)
     # generate using point dipole approximation
     elif config.hyperfine_method == "pdip":
         if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
@@ -214,12 +229,10 @@ def fit_susc_func(uargs):
             labels = QCS.labels
             coords = QCS.coords
         else:
-            ut.cprint(
-                f"Specified hyperfine file format "
-                f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-                "red",
+            raise ValueError(
+                "Specified hyperfine file format "
+                f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
             )
-            sys.exit(1)
 
         # Create molecule
         base_molecule = main.Molecule.from_labels_coords(
@@ -244,9 +257,10 @@ def fit_susc_func(uargs):
         try:
             base_molecule.add_chem_labels_from_file(config.chem_labels_file)
         except ValueError as err:
-            ut.red_exit(str(err) + "\n Check chem_labels and hyperfine files.")
+            raise ValueError(f"{err}\nCheck chem_labels and hyperfine files.")
         except KeyError as err:
-            ut.red_exit(str(err))
+            # treat missing labels/keys as a user input error
+            raise ValueError(str(err))
 
         # Save xyz file with chemical labels for chemcraft
         base_molecule.save_chemcraft_xyz(
@@ -284,9 +298,7 @@ def fit_susc_func(uargs):
     # Check the number of experiments is consistent across the files
     # and issue warning if not
     if len(np.unique([len(exp.signals) for exp in experiments])) > 1:
-        ut.cprint(
-            "Warning: some experiments have more signals than others!", "black_yellowbg"
-        )
+        logger.warning("Some experiments have more signals than others!")
 
     # Create a molecule object to accompany each experiment object
     molecules = [copy.deepcopy(base_molecule) for _ in range(len(experiments))]
@@ -320,8 +332,8 @@ def fit_susc_func(uargs):
     ]
 
     if uargs.dry_run:
-        ut.cprint("All good chief!", "green")
-        sys.exit()
+        logger.info("Dry run successful — no computations executed")
+        raise SystemExit(0)
 
     if len(config.susc_fit_average_shifts):
         if "all" in config.susc_fit_average_shifts:
@@ -359,10 +371,7 @@ def fit_susc_func(uargs):
                 experiment=experiment, groups=config.assignment_groups
             )
 
-            ut.cprint(
-                f"\n There are {len(permed_assignments):d} possible permutations",
-                "cyan",
-            )
+            logger.info("There are %s possible permutations", len(permed_assignments))
 
             # For each permutation, fit tensor and store r2_adjusted
 
@@ -377,8 +386,7 @@ def fit_susc_func(uargs):
 
             # Create parallel pool
             pool = mp.Pool(num_threads)
-            ut.cprint(f"   ... using {num_threads:d} threads\n", "cyan")
-
+            logger.info("... using %s threads", num_threads)
             iterables = [
                 (
                     molecule,
@@ -623,7 +631,7 @@ def fit_isoaxrho_vt(
             config.susc_vt_ab_initio_format is None
             or "orca" not in config.susc_vt_ab_initio_format
         ):
-            ut.red_exit("Only Orca is currently supported")
+            raise ValueError("Only Orca is currently supported")
 
         section = config.susc_vt_ab_initio_format.split("orca_", 1)[1]
 
@@ -916,12 +924,10 @@ def plot_a_iso_ax_func(uargs):
                 labels = QCS.labels
                 coords = QCS.coords
             else:
-                ut.cprint(
-                    f"Specified hyperfine file format "
-                    f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-                    "red",
+                raise ValueError(
+                    "Specified hyperfine file format "
+                    f"{os.path.splitext(hf_file)[1]} unsupported"
                 )
-                sys.exit(1)
 
             # Create molecule
             base_molecule = main.Molecule.from_labels_coords(
@@ -1018,12 +1024,10 @@ def calc_pdip_func(uargs):
         labels = QCS.labels
         coords = QCS.coords
     else:
-        ut.cprint(
-            f"Specified hyperfine file format "
-            f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-            "red",
+        raise ValueError(
+            "Specified hyperfine file format "
+            f"{os.path.splitext(uargs.structure_file)[1]} unsupported"
         )
-        sys.exit(1)
 
     # Create molecule
     molecule = main.Molecule.from_labels_coords(labels, coords, elements=uargs.elements)
@@ -1062,7 +1066,7 @@ def calc_pdip_func(uargs):
     )
 
     np.savetxt(file_name, out, delimiter=",", header=header, fmt="%s")
-    ut.cprint(f"Point dipole dipolar tensors saved to {file_name}", "cyan")
+    logger.info("Point dipole dipolar tensors saved to %s", file_name)
 
     if len(uargs.plot_components):
         vis.plot_hyperfine(
@@ -1112,15 +1116,13 @@ def calc_pcs_iso_func(uargs):
         labels = QCS.labels
         coords = QCS.coords
     else:
-        ut.cprint(
-            f"Specified structure file format "
-            f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-            "red",
+        raise ValueError(
+            "Specified structure file format "
+            f"{os.path.splitext(uargs.structure_file)[1]} unsupported"
         )
-        sys.exit(1)
 
     if uargs.central_atom not in labels:
-        ut.red_exit(
+        raise ValueError(
             "Specified central atom not present in structure file \n"
             "Perhaps try with indexing e.g. Ni1"
         )
@@ -1133,7 +1135,7 @@ def calc_pcs_iso_func(uargs):
     elif "csv" in uargs.susc_format:
         suscs = main.Susceptibility.from_csv(uargs.susc_file)
     elif "molcas" in uargs.susc_format:
-        ut.red_exit("Molcas files are not currently supported")
+        raise ValueError("Molcas files are not currently supported")
 
     for susc in suscs:
         if susc.temperature in uargs.temperatures:
@@ -1201,12 +1203,10 @@ def predict_func(uargs):
             labels = QCS.labels
             coords = QCS.coords
         else:
-            ut.cprint(
-                f"Specified hyperfine file format "
-                f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-                "red",
+            raise ValueError(
+                "Specified hyperfine file format "
+                f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
             )
-            sys.exit(1)
 
         # Create molecule
         base_molecule = main.Molecule.from_labels_coords(
@@ -1272,27 +1272,27 @@ def predict_func(uargs):
     elif "csv" in config.susceptibility_format:
         suscs = main.Susceptibility.from_csv(config.susceptibility_file)
     elif "molcas" in config.susceptibility_format:
-        ut.red_exit("Molcas files are not currently supported")
+        raise ValueError("Molcas files are not currently supported")
 
     suscs = [
         susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
     ]
 
     if not len(suscs):
-        ut.red_exit("Error: No susceptibility data found for specified temperature(s)")
+        raise ValueError("No susceptibility data found for specified temperature(s)")
 
     # Calculate linewidths using user-specified relaxation model (optional)
     if not getattr(config, "relaxation_model", None):
-        ut.cprint(
-            "\n No relaxation model specified — linewidths will be fixed at 1 ppm.\n",
-            "cyan",
+        (
+            logger.warning(
+                "No relaxation model specified — linewidths will be fixed at 1 ppm."
+            ),
         )
     elif config.relaxation_magnetic_field_tesla is None:
-        ut.cprint(
-            "\n Warning: relaxation_magnetic_field_tesla "
+        logger.warning(
+            "relaxation_magnetic_field_tesla "
             "not provided — relaxation effects skipped, "
-            "linewidths will be fixed at 1 ppm \n",
-            "cyan",
+            "linewidths will be fixed at 1 ppm \n"
         )
     else:
         apply_relaxation_model(config, base_molecule)
@@ -1302,16 +1302,17 @@ def predict_func(uargs):
         experiments = main.Experiment.from_file(config.experiment_files)
         for susc, exp in zip(suscs, experiments):
             if susc.temperature != exp.temperature:
-                ut.cprint(
-                    f"Warning: Mismatch in Susceptibility ({susc.temperature:.2f} K) "
-                    f"and Experimental ({exp.temperature:.2f} K) temperatures",
-                    "black_yellowbg",
+                logger.warning(
+                    "Mismatch in Susceptibility (%.2f K) and "
+                    "Experimental (%.2f K) temperatures",
+                    susc.temperature,
+                    exp.temperature,
                 )
             if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
-                ut.cprint(
-                    f"Warning: Experimental isotope ({exp.isotope}) not requested "
-                    "in input file ({config.nuclei_include})",
-                    "black_yellowbg",
+                logger.warning(
+                    "Experimental isotope (%s) not requested in input file (%s)",
+                    exp.isotope,
+                    config.nuclei_include,
                 )
     else:
         experiments = [None] * len(suscs)
@@ -1374,10 +1375,9 @@ def predict_func(uargs):
                 temperature=susc.temperature,
             )
         else:
-            ut.cprint(
-                "\n Spin not specified and could not be inferred — "
-                "using chi iso from susceptibility file (no spin-only correction)\n",
-                "cyan",
+            logger.info(
+                "Spin not specified and could not be inferred — "
+                "using chi iso from susceptibility file (no spin-only correction)"
             )
 
         # Calculate shifts using new susceptibility tensor and rotated hyperfines
@@ -1861,13 +1861,12 @@ def fit_corr_time_func(uargs):
     elif tau_R_mode == "fit" and tau_E_mode == "fit":
         fix_param = None  # Fit both
     elif tau_R_mode == "fix" and tau_E_mode == "fix":
-        ut.red_exit(
-            "Error: Both tau_R and tau_E cannot be fixed. "
-            "At least one must be set to 'fit'."
+        raise ValueError(
+            "Both tau_R and tau_E cannot be fixed. At least one must be set to 'fit'."
         )
     else:
-        ut.red_exit(
-            "Error: Use syntax 'tau_C: [fit/fix, guess, [upper-bound, lower-bound]]', "
+        raise ValueError(
+            "Use syntax 'tau_C: [fit/fix, guess, [upper-bound, lower-bound]]', "
             "with bounds optional (tau_C refers to tau_R or tau_E)."
         )
 
@@ -1910,8 +1909,7 @@ def fit_corr_time_func(uargs):
                 )
 
         if not exp_blocks:
-            ut.red_exit("No valid experimental R1 values found for fitting.")
-            return
+            raise ValueError("No valid experimental R1 values found for fitting.")
 
         chem_labels = np.concatenate([blk[1] for blk in exp_blocks])
         exp_r1 = np.concatenate([blk[2] for blk in exp_blocks])
@@ -1939,12 +1937,10 @@ def fit_corr_time_func(uargs):
                 labels = QCS.labels
                 coords = QCS.coords
             else:
-                ut.cprint(
-                    f"Specified hyperfine file format "
-                    f"{os.path.splitext(uargs.structure_file)[1]} unsupported",
-                    "red",
+                raise ValueError(
+                    "Specified hyperfine file format "
+                    f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
                 )
-                sys.exit(1)
             base_molecule = main.Molecule.from_labels_coords(
                 labels, coords, elements=config.nuclei_include
             )
@@ -2133,10 +2129,7 @@ def fit_corr_time_func(uargs):
             tau_E_fit = popt[0]
             theory_r1 = r1_model(xdata, tau_E_fit)
             if tau_E_fit <= 0:
-                ut.red_exit(
-                    f"Error: Fitted tau_E is negative: {tau_E_fit:.3e} s.",
-                    "black_yellowbg",
-                )
+                raise ValueError(f"Fitted tau_E is negative: {tau_E_fit:.3e} s.")
 
         elif fix_param == "tau_e":
             tau_E = float(tau_E_guess)
@@ -2282,12 +2275,9 @@ def fit_corr_time_func(uargs):
             tau_R_fit = popt[0]
             theory_r1 = r1_model(xdata, tau_R_fit)
             if tau_R_fit <= 0:
-                ut.red_exit(
-                    f"Error: Fitted tau_R is negative: {tau_R_fit:.3e} s.",
-                    "black_yellowbg",
-                )
+                raise ValueError(f"Fitted tau_R is negative: {tau_R_fit:.3e} s.")
             else:
-                ut.cprint(f"Fitted tau_R: {tau_R_fit:.3e} s", "cyan")
+                logger.info("Fitted tau_R: %.3e s", tau_R_fit)
 
         elif not fix_param or fix_param in ["none", ""]:
             # Fit both tau_R and tau_E
@@ -2442,21 +2432,16 @@ def fit_corr_time_func(uargs):
             tau_R_fit, tau_E_fit = popt
             theory_r1 = r1_model(xdata, tau_R_fit, tau_E_fit)
             if tau_R_fit <= 0 and tau_E_fit > 0:
-                ut.red_exit(
-                    f"Error: tau_R is negative: {tau_R_fit:.3e} s.", "black_yellowbg"
-                )
+                raise ValueError(f"tau_R is negative: {tau_R_fit:.3e} s.")
             elif tau_E_fit <= 0 and tau_R_fit > 0:
-                ut.red_exit(
-                    f"Error: tau_E is negative: {tau_E_fit:.3e} s.", "black_yellowbg"
-                )
+                raise ValueError(f"tau_E is negative: {tau_E_fit:.3e} s.")
             elif tau_R_fit <= 0 and tau_E_fit <= 0:
-                ut.red_exit(
-                    f"Error: Both tau_R and tau_E are negative: "
-                    f"tau_R = {tau_R_fit:.3e} s, tau_E = {tau_E_fit:.3e} s.",
-                    "black_yellowbg",
+                raise ValueError(
+                    f"Both tau_R and tau_E are negative: "
+                    f"tau_R = {tau_R_fit:.3e} s, tau_E = {tau_E_fit:.3e} s."
                 )
         else:
-            ut.red_exit("Error: correlation times must be 'tau_r' or 'tau_e'.")
+            raise ValueError("Correlation times must be 'tau_r' or 'tau_e'.")
 
         rsquared = 1 - (
             np.sum((exp_r1 - theory_r1) ** 2) / np.sum((exp_r1 - np.mean(exp_r1)) ** 2)
@@ -2564,7 +2549,7 @@ def fit_corr_time_func(uargs):
         plt.show()
 
     else:
-        ut.red_exit(
+        raise ValueError(
             "fit_corr_time and relaxation_model must be specified in the input file."
         )
 
@@ -2989,12 +2974,20 @@ def read_args(arg_list=None):
     # Read sub-parser and parse arguments
     parser.set_defaults(func=lambda args: parser.print_help())
     args = parser.parse_args(arg_list)
-    setup_logging(verbose=args.verbose, quiet=args.quiet)
-    args.func(args)
 
     return args
 
 
-def interface():
-    read_args()
-    return
+def interface(argv=None):
+    args = read_args(argv)
+
+    setup_logging(verbose=args.verbose, quiet=args.quiet)
+
+    try:
+        return args.func(args)
+    except ValueError as err:
+        logger.error("%s", err)
+        raise SystemExit(1) from None
+    except FileNotFoundError as err:
+        logger.error("File not found: %s", err.filename)
+        raise SystemExit(1) from None

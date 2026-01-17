@@ -2,6 +2,7 @@
 # Copyright (C) 2025 Suturina Group
 
 import copy
+import logging
 import os
 
 import matplotlib.lines as lines
@@ -17,6 +18,8 @@ from . import main, models, outputs
 from . import utils as ut
 from .scripts.coords_tools import atoms
 from .scripts.coords_tools import label_format as lf
+
+logger = logging.getLogger(__name__)
 
 SAFE_COLOURS = [
     "C0",
@@ -235,7 +238,7 @@ def plot_hyperfine(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint("Hyperfine plot saved to {}".format(save_name), "blue")
+            logger.info("Hyperfine plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -416,7 +419,7 @@ def plot_fitted_shifts(
     if save:
         fig.savefig(save_name, dpi=400)
         if verbose:
-            ut.cprint(f"\n Chemical shift plot saved to \n {save_name}\n", "cyan")
+            logger.info("Chemical shift plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -566,7 +569,7 @@ def plot_pred_spectrum(
     if save:
         fig.savefig(save_name, dpi=400)
         if verbose:
-            ut.cprint(f"\n Predicted spectrum saved to \n {save_name}\n", "cyan")
+            logger.info("Predicted spectrum saved to %s", save_name)
 
     if show:
         plt.show()
@@ -806,7 +809,7 @@ def plot_shift_spread(
     if save:
         fig.savefig(save_name, dpi=400)
         if verbose:
-            ut.cprint(f"\n Shift spread plot saved to \n {save_name}\n", "cyan")
+            logger.info("Shift spread plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -1033,7 +1036,7 @@ def plot_shift_contrib(
     if save:
         fig.savefig(save_name, dpi=400)
         if verbose:
-            ut.cprint(f"\n Shift component plot saved to \n {save_name}\n", "cyan")
+            logger.info("Shift component plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -1145,7 +1148,7 @@ def plot_shift_tdep(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint(f"\n Shift vs T plots saved to \n {save_name}\n", "cyan")
+            logger.info("Shift vs Temperature plots saved to %s", save_name)
     if show:
         plt.show()
 
@@ -1268,7 +1271,7 @@ def plot_isoaxrho(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint(f"\n {y_label} vs T plots saved to \n {save_name}\n", "cyan")
+            logger.info("%s vs T plots saved to %s", y_label, save_name)
     if show:
         plt.show()
 
@@ -1310,7 +1313,7 @@ def plot_hyperfine_iso_vs_ax(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint(f"Hyperfine plot saved to {save_name}", "cyan")
+            logger.info("Hyperfine plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -1431,7 +1434,7 @@ def plot_hyperfine_spread(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint("Hyperfine spread plot saved to {}".format(save_name), "blue")
+            logger.info("Hyperfine spread plot saved to %s", save_name)
 
     if show:
         plt.show()
@@ -1632,7 +1635,7 @@ def plot_raw_deconv_pred(
     if save:
         plt.savefig(save_name, dpi=500)
         if verbose:
-            ut.cprint(f"\n Spectra saved to\n {save_name}\n", "cyan")
+            logger.info("Spectra saved to %s", save_name)
 
     if show:
         plt.show()

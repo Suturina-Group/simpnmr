@@ -8,12 +8,15 @@ This module provides small, dependency-light helpers for reading, validating, an
 writing XYZ coordinate files, plus a few geometry helpers used by scripts.
 """
 
+import logging
+
 import numpy as np
 import numpy.linalg as la
 from numpy.typing import ArrayLike, NDArray
 
-from ... import utils as ut
 from . import atoms
+
+logger = logging.getLogger(__name__)
 
 
 def add_label_indices(
@@ -181,7 +184,7 @@ def load_xyz(
 
     # Optional preflight validation.
     if check:
-        ut.cprint(f" Checking XYZ file: {f_name}", color="cyan")
+        logger.info("Checking XYZ file: %s", f_name)
         check_xyz(
             f_name,
             allow_nonelements=atomic_numbers,
@@ -250,7 +253,7 @@ def check_xyz(
     """Validate basic structure and label content of an XYZ file.
 
     This function is intentionally non-throwing: on validation failure it logs an
-    error via `ut.cprint(..., color="blackyellow")` and returns.
+    error and returns.
 
     Args:
         f_name: Path to the XYZ file.
@@ -269,7 +272,7 @@ def check_xyz(
     try:
         _labels, _ = load_xyz(f_name, capitalise=False, check=False)
     except Exception as exc:
-        ut.cprint(f" Failed to read XYZ file: {exc}", color="blackyellow")
+        logger.error("Failed to read XYZ file: %s", exc)
         return
 
     # Compare labels with indices removed.
@@ -278,13 +281,13 @@ def check_xyz(
     # Check all entries are real elements
     if not allow_nonelements:
         if any([lab not in atoms.elements for lab in _labels_nn]):
-            ut.cprint(" XYZ file contains non-elements", color="blackyellow")
+            logger.error("XYZ file contains non-elements")
             return
 
     # Check if indices are present
     if not allow_indices:
         if any([labnn != lab for labnn, lab in zip(_labels_nn, _labels)]):
-            ut.cprint(" XYZ file contains elements with indices", color="blackyellow")
+            logger.error("XYZ file contains elements with indices")
             return
 
     return
@@ -293,8 +296,7 @@ def check_xyz(
 def _check_xyz_headers(f_name: str):
     """Validate XYZ header lines and atom count consistency.
 
-    This helper is intentionally non-throwing: on failure it logs an error via
-    `ut.cprint(..., color="blackyellow")` and returns.
+    This helper is intentionally non-throwing: on failure it logs an error and returns.
 
     Args:
         f_name: Path to the XYZ file.
@@ -316,27 +318,21 @@ def _check_xyz_headers(f_name: str):
                     # first line appears to be coordinates -> treat as missing headers
                     return
                 except Exception:
-                    ut.cprint(
-                        " XYZ file does not contain number of atoms",
-                        color="blackyellow",
-                    )
+                    logger.error("XYZ file does not contain number of atoms")
                     return
             else:
-                ut.cprint(
-                    " XYZ file does not contain number of atoms",
-                    color="blackyellow",
-                )
+                logger.error("XYZ file does not contain number of atoms")
                 return
         try:
             n_atoms = int(line)
         except ValueError:
-            ut.cprint(" XYZ file number of atoms is malformed", color="blackyellow")
+            logger.error("XYZ file number of atoms is malformed")
             return
 
         n_lines = len(f.readlines()) + 1
         # Accept either NATOMS+comment or NATOMS-only headers.
         if not (n_lines == n_atoms + 2 or n_lines == n_atoms + 1):
-            ut.cprint(" XYZ file length/format is incorrect", color="blackyellow")
+            logger.error("XYZ file length/format is incorrect")
             return
 
     return
@@ -403,7 +399,7 @@ def save_xyz(
             f.write("\n{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
 
     if verbose:
-        ut.cprint("New XYZ file written to {}".format(f_name), color="cyan")
+        logger.info("New XYZ file written to %s", f_name)
 
     return
 

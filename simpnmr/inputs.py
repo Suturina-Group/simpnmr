@@ -3,9 +3,9 @@
 
 import copy
 import csv
+import logging
 import multiprocessing as mp
 import os
-import sys
 from abc import ABC, abstractmethod
 from glob import glob
 
@@ -13,7 +13,7 @@ import numpy as np
 import yaml
 import yaml_include
 
-from . import utils as ut
+logger = logging.getLogger(__name__)
 
 
 class Config(ABC):
@@ -70,7 +70,7 @@ class Config(ABC):
         ]
         if any(unsupported):
             for us in unsupported:
-                ut.cprint(f"Error: input keyword {us} unknown", "black_yellowbg")
+                logger.warning("Input keyword %s unknown", us)
                 parsed.pop(us)
 
         # missing required (mandatory) keywords
@@ -380,10 +380,7 @@ class FitSuscConfig(Config):
     def num_threads(self, value: list[float]):
         value = int(value[0])
         if value > mp.cpu_count():
-            ut.cprint(
-                "Warning: Number of threads > system number, resetting",
-                "black_yellowbg",
-            )
+            logger.error("Number of threads > system number, resetting")
             self._num_threads = mp.cpu_count() - 1
         else:
             self._num_threads = value
@@ -396,8 +393,7 @@ class FitSuscConfig(Config):
     @assignment_method.setter
     def assignment_method(self, value: str):
         if value not in ["fixed", "permute"]:
-            ut.cprint(f"Unknown assignment:method {value}", "red")
-            sys.exit()
+            raise ValueError(f"Unknown assignment:method {value}")
         self._assignment_method = value
         return None
 
@@ -851,10 +847,9 @@ class FitSuscConfig(Config):
 
         if config.susc_vt_method == "vt_2nd_order" and config.susc_vt_variables is None:
             if config.susc_vt_tip_type == "fit":
-                ut.cprint(
-                    "Warning: 'susc_vt:variables' not provided. Using defaults: "
-                    "VT intercept/slope and TIP set to ['fit', 0.0].\n",
-                    "black_yellowbg",
+                logger.warning(
+                    "'susc_vt:variables' not provided. Using defaults: "
+                    "VT Intercept / Slope and TIP set to ['fit', 0.0]."
                 )
                 config.susc_vt_variables = {
                     "iso": {
@@ -874,10 +869,9 @@ class FitSuscConfig(Config):
                     },
                 }
             else:
-                ut.cprint(
-                    "Warning: 'susc_vt:variables' not provided. Using defaults: "
-                    "VT intercept/slope set to ['fit', 0.0].\n",
-                    "black_yellowbg",
+                logger.warning(
+                    "'susc_vt:variables' not provided. Using defaults: "
+                    "VT Intercept / Slope set to ['fit', 0.0]."
                 )
                 config.susc_vt_variables = {
                     "iso": {
@@ -905,14 +899,10 @@ class FitSuscConfig(Config):
 
         if config.assignment_method == "permute":
             if not len(config.assignment_groups):
-                ut.cprint(
-                    "Warning, Missing permutation groups in input", "black_yellowbg"
-                )
+                logger.warning("Missing permutation groups in input")
         elif config.assignment_method == "fixed":
             if len(config.assignment_groups):
-                ut.cprint(
-                    "Warning, groups provided with fixed assignment", "black_yellowbg"
-                )
+                logger.info("Chemical groups (signals) provided with fixed assignment")
 
         return config
 
