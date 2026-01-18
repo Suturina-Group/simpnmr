@@ -26,6 +26,7 @@ from . import main, models
 from . import utils as ut
 from . import visualise as vis
 from .io import writers as out
+from .io.csv import readers
 from .io.qc import qc_readers as rdrs
 from .scripts import fit_vt
 from .scripts.coords_tools import transform as tfm
@@ -1325,7 +1326,8 @@ def predict_func(uargs):
 
     if len(config.experiment_spectrum_files):
         for experiment, spectrum in zip(experiments, config.experiment_spectrum_files):
-            experiment.load_spectrum_from_file(spectrum)
+            spectrum_array = readers.read_spectrum(spectrum)
+            experiment.spectrum = spectrum_array
 
     _terms = ["pc", "fc", "d"]
 

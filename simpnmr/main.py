@@ -8,7 +8,6 @@ spectra, hyperfine couplings, and magnetic susceptibility tensors.
 """
 
 import copy
-import csv
 import datetime
 import logging
 import os
@@ -17,13 +16,13 @@ from itertools import chain, permutations, product
 
 import numpy as np
 import numpy.linalg as la
-import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
+from . import serialization as ser
 from . import utils as ut
 from .__version__ import __version__
-from .io.csv import experiment
+from .io.csv import readers
 from .io.qc import qc_readers as rdrs
 from .scripts.coords_tools import atoms
 from .scripts.coords_tools import label_format as lf
@@ -99,40 +98,6 @@ class Experiment:
             self.spectrum = spectrum
         else:
             self._spectrum = None
-        return
-
-    def load_spectrum_from_file(self, file_name: str):
-        """Loads spectrum data from a CSV file.
-
-        The input file must contain two columns with no header: the first column
-        is ppm (shift) and the second column is intensity.
-
-        Args:
-            file_name: Path to the CSV file.
-        """
-
-        # Read spectrum supporting both comma and any whitespace as separators
-        df = pd.read_csv(
-            file_name,
-            sep=r"\s+",  # tabs/spaces
-            header=None,
-            comment="#",
-            engine="python",
-            quoting=csv.QUOTE_NONE,  # treat quotes as normal characters
-            converters={
-                0: lambda s: float(s.strip("\"'")),
-                1: lambda s: float(s.strip("\"'")),
-            },
-        )
-
-        if df.shape[1] != 2:
-            raise ValueError(
-                "Spectrum file must contain exactly two columns: ppm and intensity"
-            )
-
-        spectrum = df.to_numpy(dtype=float)
-
-        self.spectrum = spectrum
         return
 
     def keys(self):
@@ -278,9 +243,9 @@ class Experiment:
         # Read each file
         final = []
         for file_name in file_names:
-            _data = pd.read_csv(file_name, comment="#", skipinitialspace=True)
+            _data = readers.read_csv_safe(file_name)
             _data.rename(columns=name_convertor, inplace=True)
-            _temperature, _magnetic_field, _isotope = experiment.read_exp_metadata(
+            _temperature, _magnetic_field, _isotope = readers.read_exp_metadata(
                 file_name
             )
             _data["temperature"] = _temperature
@@ -288,12 +253,8 @@ class Experiment:
             _data["isotope"] = _isotope
             final.append(_data)
 
-        # combine into a single dataframe
-        data = pd.concat(final)
-        data.reset_index(inplace=True)
-
-        # Sort by temperature
-        data = data.sort_values("temperature")
+        # Assemble and normalize experiment table
+        data = readers.assemble_experiments_table(final)
 
         # Add linewidth ratio if missing
         if "L/G" not in data.columns:
@@ -359,16 +320,7 @@ class Experiment:
             None.
         """
 
-        data = {
-            "assignment ()": [signal.assignment for signal in self.signals],
-            "shift (ppm)": [signal.shift for signal in self.signals],
-            "width (Hz)": [signal.width for signal in self.signals],
-            "area ()": [signal.area for signal in self.signals],
-            "L/G ()": [signal.l_to_g for signal in self.signals],
-        }
-
-        df = pd.DataFrame(data=data)
-        df.sort_values(["shift (ppm)"], inplace=True)
+        df = ser.build_experiment_signals_df(self)
 
         _comment = (
             f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
@@ -979,9 +931,7 @@ class Susceptibility:
             A list of susceptibility tensors.
         """
 
-        data = pd.read_csv(
-            file_name, skipinitialspace=True, index_col=False, comment="#"
-        )
+        data = readers.read_csv_safe(file_name)
 
         # Forward conversion, A^3 --> Key
         convs = {
@@ -1755,13 +1705,7 @@ class Molecule:
                 incomplete.
         """
 
-        data = pd.read_csv(
-            file_name,
-            skipinitialspace=True,
-            index_col=False,
-            engine="python",
-            comment="#",
-        )
+        data = readers.read_csv_safe(file_name)
 
         required_cols = ["atom_label ()", "x (Å)", "y (Å)", "z (Å)"]
         split_hyperfine_cols = [
@@ -2003,7 +1947,7 @@ class Molecule:
         """
 
         if file_type == "csv":
-            dia = pd.read_csv(file_name, skipinitialspace=True, index_col=False)
+            dia = readers.read_csv_safe(file_name)
 
             if "atom_label" in dia.keys():
                 dia.set_index("atom_label", inplace=True)
@@ -2039,7 +1983,7 @@ class Molecule:
 
         if len(ref_file_name):
             if ref_file_type == "csv":
-                ref = pd.read_csv(ref_file_name, skipinitialspace=True, index_col=False)
+                ref = readers.read_csv_safe(ref_file_name)
 
                 # Average by nucleus
                 ref["atom_label"] = xyzf.remove_label_indices(ref["atom_label"])
@@ -2261,7 +2205,7 @@ class Molecule:
                 structure.
         """
 
-        _tmp = pd.read_csv(file_name, skipinitialspace=True, comment="#")
+        _tmp = readers.read_csv_safe(file_name)
 
         # Check for duplicate atom labels
         if any([val > 1 for val in _tmp["atom_label"].value_counts()]):
@@ -2346,19 +2290,7 @@ class Molecule:
             delimiter: CSV delimiter.
         """
 
-        data = {
-            "atom_label ()": [nuc.label for nuc in self.nuclei],
-            "chem_label ()": [nuc.chem_label for nuc in self.nuclei],
-            "Aiso (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_xx (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_xy (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_xz (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_yy (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_yz (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_zz (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-        }
-
-        df = pd.DataFrame(data=data)
+        df = ser.build_hyperfines_df(self)
 
         _comment = (
             f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
@@ -2395,28 +2327,7 @@ class Molecule:
             delimiter: CSV delimiter.
         """
 
-        data = {
-            "atom_label ()": [nuc.label for nuc in self.nuclei],
-            "chem_label ()": [nuc.chem_label for nuc in self.nuclei],
-            "x (Å)": [nuc.coord[0] for nuc in self.nuclei],
-            "y (Å)": [nuc.coord[1] for nuc in self.nuclei],
-            "z (Å)": [nuc.coord[2] for nuc in self.nuclei],
-            "Aiso (ppm Å^-3)": [nuc.A.iso for nuc in self.nuclei],
-            "Adip_xx (ppm Å^-3)": [nuc.A.dip[0, 0] for nuc in self.nuclei],
-            "Adip_xy (ppm Å^-3)": [nuc.A.dip[0, 1] for nuc in self.nuclei],
-            "Adip_xz (ppm Å^-3)": [nuc.A.dip[0, 2] for nuc in self.nuclei],
-            "Adip_yy (ppm Å^-3)": [nuc.A.dip[1, 1] for nuc in self.nuclei],
-            "Adip_yz (ppm Å^-3)": [nuc.A.dip[1, 2] for nuc in self.nuclei],
-            "Adip_zz (ppm Å^-3)": [nuc.A.dip[2, 2] for nuc in self.nuclei],
-            "δ_total_avg (ppm)": [nuc.shift.avg for nuc in self.nuclei],
-            "δ_total (ppm)": [nuc.shift.total for nuc in self.nuclei],
-            "δ_dia (ppm)": [nuc.shift.dia for nuc in self.nuclei],
-            "δ_fc (ppm)": [nuc.shift.fc for nuc in self.nuclei],
-            "δ_pc (ppm)": [nuc.shift.pc for nuc in self.nuclei],
-            "linewidth (Hz)": [1 for _ in self.nuclei],
-        }
-
-        df = pd.DataFrame(data=data)
+        df = ser.build_molecule_df(self)
 
         _comment = (
             f"# This file was generated with SimpNMR v{__version__} at {{}}\n".format(
