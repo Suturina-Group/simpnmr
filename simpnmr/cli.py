@@ -26,6 +26,7 @@ from simpnmr.config import config as cfg
 from simpnmr.core import main
 from simpnmr.core.chemistry.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.fitting import fit_vt, fitters
+from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io import writers
 from simpnmr.io.csv import readers
 from simpnmr.io.qc import qc_readers as rdrs
@@ -1564,7 +1565,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
 
     if config.relaxation_model == "sbm":
         # Calculate SBM dipolar rates (R1)
-        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1578,7 +1579,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             total_momentum_J,
         )
         # Calculate SBM contact rates (R1)
-        sbm_contact_r1_rates = ut.sbm_r1_contact(
+        sbm_contact_r1_rates = sbm.calc_r1_contact(
             list(nuclei_coords.keys()),
             A_iso_dict,
             omega_I_dict,
@@ -1588,7 +1589,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             total_momentum_J,
         )
         # Calculate SBM dipolar rates (R2)
-        sbm_dipolar_r2_rates = ut.sbm_r2_dipolar(
+        sbm_dipolar_r2_rates = sbm.calc_r2_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1602,7 +1603,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             total_momentum_J,
         )
         # Calculate SBM contact rates (R2)
-        sbm_contact_r2_rates = ut.sbm_r2_contact(
+        sbm_contact_r2_rates = sbm.calc_r2_contact(
             list(nuclei_coords.keys()),
             A_iso_dict,
             omega_I_dict,
@@ -1623,7 +1624,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
         }
     # Curie mechanism only (R1 and R2)
     elif config.relaxation_model == "curie":
-        curie_r1_rates = ut.gueron_r1_curie(
+        curie_r1_rates = gueron.calc_r1_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1634,7 +1635,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             orbit,
             total_momentum_J,
         )
-        curie_r2_rates = ut.gueron_r2_curie(
+        curie_r2_rates = gueron.calc_r2_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1652,7 +1653,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
     elif (
         config.relaxation_model == "sbm curie" or config.relaxation_model == "curie sbm"
     ):
-        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1665,7 +1666,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             orbit,
             total_momentum_J,
         )
-        sbm_contact_r1_rates = ut.sbm_r1_contact(
+        sbm_contact_r1_rates = sbm.calc_r1_contact(
             list(nuclei_coords.keys()),
             A_iso_dict,
             omega_I_dict,
@@ -1674,7 +1675,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             spin,
             total_momentum_J,
         )
-        sbm_dipolar_r2_rates = ut.sbm_r2_dipolar(
+        sbm_dipolar_r2_rates = sbm.calc_r2_dipolar(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1689,7 +1690,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
         )
 
         # Calculate SBM contact rates
-        sbm_contact_r2_rates = ut.sbm_r2_contact(
+        sbm_contact_r2_rates = sbm.calc_r2_contact(
             list(nuclei_coords.keys()),
             A_iso_dict,
             omega_I_dict,
@@ -1700,7 +1701,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             total_momentum_J,
         )
 
-        curie_r1_rates = ut.gueron_r1_curie(
+        curie_r1_rates = gueron.calc_r1_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -1711,7 +1712,7 @@ def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecu
             orbit,
             total_momentum_J,
         )
-        curie_r2_rates = ut.gueron_r2_curie(
+        curie_r2_rates = gueron.calc_r2_curie(
             list(nuclei_coords.keys()),
             nuclei_coords,
             electron_coords,
@@ -2027,7 +2028,7 @@ def fit_corr_time_func(uargs):
 
                     # Calculate relaxation rates for current tau_R, tau_E
                     if config.relaxation_model == "sbm":
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2040,7 +2041,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2055,7 +2056,7 @@ def fit_corr_time_func(uargs):
                             for label in nuclei_coords
                         }
                     elif config.relaxation_model == "curie":
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2070,7 +2071,7 @@ def fit_corr_time_func(uargs):
                             label: curie_r1_rates[label] for label in nuclei_coords
                         }
                     elif config.relaxation_model in ["sbm curie", "curie sbm"]:
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2083,7 +2084,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2092,7 +2093,7 @@ def fit_corr_time_func(uargs):
                             spin,
                             total_momentum_J,
                         )
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2175,7 +2176,7 @@ def fit_corr_time_func(uargs):
 
                     # Calculate relaxation rates for current tau_R, tau_E
                     if config.relaxation_model == "sbm":
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2188,7 +2189,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2203,7 +2204,7 @@ def fit_corr_time_func(uargs):
                             for label in nuclei_coords
                         }
                     elif config.relaxation_model == "curie":
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2218,7 +2219,7 @@ def fit_corr_time_func(uargs):
                             label: curie_r1_rates[label] for label in nuclei_coords
                         }
                     elif config.relaxation_model in ["sbm curie", "curie sbm"]:
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2231,7 +2232,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2240,7 +2241,7 @@ def fit_corr_time_func(uargs):
                             spin,
                             total_momentum_J,
                         )
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2331,7 +2332,7 @@ def fit_corr_time_func(uargs):
                     omega_S = -ut.EGAMMA * B0 * 2 * np.pi * 1e6
 
                     if config.relaxation_model == "sbm":
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2344,7 +2345,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2359,7 +2360,7 @@ def fit_corr_time_func(uargs):
                         }
 
                     elif config.relaxation_model == "curie":
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2373,7 +2374,7 @@ def fit_corr_time_func(uargs):
                         rates_r1 = {lab: curie_r1_rates[lab] for lab in nuclei_coords}
 
                     elif config.relaxation_model in ["sbm curie", "curie sbm"]:
-                        sbm_dipolar_r1_rates = ut.sbm_r1_dipolar(
+                        sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,
@@ -2386,7 +2387,7 @@ def fit_corr_time_func(uargs):
                             orbit,
                             total_momentum_J,
                         )
-                        sbm_contact_r1_rates = ut.sbm_r1_contact(
+                        sbm_contact_r1_rates = sbm.calc_r1_contact(
                             list(nuclei_coords.keys()),
                             A_iso_dict,
                             omega_I_dict,
@@ -2395,7 +2396,7 @@ def fit_corr_time_func(uargs):
                             spin,
                             total_momentum_J,
                         )
-                        curie_r1_rates = ut.gueron_r1_curie(
+                        curie_r1_rates = gueron.calc_r1_curie(
                             list(nuclei_coords.keys()),
                             nuclei_coords,
                             electron_coords,

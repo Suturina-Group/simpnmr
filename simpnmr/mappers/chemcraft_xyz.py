@@ -10,7 +10,7 @@ import argparse
 import csv
 import logging
 
-from . import xyz_format as xyzf
+from ..tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
