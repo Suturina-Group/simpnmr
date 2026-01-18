@@ -18,8 +18,8 @@ import numpy as np
 import numpy.linalg as la
 
 from ... import inputs as inps
-from ... import readers as rdrs
 from ...__version__ import __version__
+from ...io.qc import qc_readers as rdrs
 from . import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)

@@ -21,9 +21,10 @@ import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
-from . import readers as rdrs
 from . import utils as ut
 from .__version__ import __version__
+from .io.csv import experiment
+from .io.qc import qc_readers as rdrs
 from .scripts.coords_tools import atoms
 from .scripts.coords_tools import label_format as lf
 from .scripts.coords_tools import xyz_format as xyzf
@@ -222,7 +223,7 @@ class Experiment:
 
         Each file is expected to contain signal assignments and parameters
         (shift, width, area, etc.). Additional metadata (temperature, field,
-        isotope) is read via ``ut.read_exp_metadata``.
+        isotope) is read via ``experiment.read_exp_metadata``.
 
         Args:
             file_names: Path to a CSV file or a list of CSV files.
@@ -279,7 +280,9 @@ class Experiment:
         for file_name in file_names:
             _data = pd.read_csv(file_name, comment="#", skipinitialspace=True)
             _data.rename(columns=name_convertor, inplace=True)
-            _temperature, _magnetic_field, _isotope = ut.read_exp_metadata(file_name)
+            _temperature, _magnetic_field, _isotope = experiment.read_exp_metadata(
+                file_name
+            )
             _data["temperature"] = _temperature
             _data["magnetic_field"] = _magnetic_field
             _data["isotope"] = _isotope

@@ -23,10 +23,10 @@ from scipy.optimize import curve_fit
 
 from . import inputs as inps
 from . import main, models
-from . import outputs as out
-from . import readers as rdrs
 from . import utils as ut
 from . import visualise as vis
+from .io import writers as out
+from .io.qc import qc_readers as rdrs
 from .scripts import fit_vt
 from .scripts.coords_tools import transform as tfm
 from .scripts.coords_tools import xyz_format as xyzf

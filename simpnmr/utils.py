@@ -8,8 +8,6 @@ relaxation-rate helper functions used across the package.
 """
 
 import math
-import re
-from os import PathLike
 
 import numpy as np
 import scipy.constants as consts
@@ -276,53 +274,6 @@ def cstr(string: str, color: str):
     return out
 
 
-def can_float(s: str) -> bool:
-    """Returns whether a string can be parsed as a float."""
-    out = True
-    try:
-        s = float(s.strip())
-    except ValueError:
-        out = False
-
-    return out
-
-
-def read_exp_metadata(file_name: str) -> tuple[float, float, str]:
-    """Reads metadata from an experiment CSV file.
-
-    Metadata is stored as single comment lines beginning with ``#`` and formatted as
-    ``name value``. Supported keys are ``temperature``, ``magnetic_field``, and
-    ``isotope``.
-
-    Args:
-        file_name: Path to the experiment file.
-
-    Returns:
-        A tuple ``(temperature, magnetic_field, isotope)`` where temperature is in K,
-        magnetic field is in T, and isotope is formatted like ``"1H"`` or ``"13C"``.
-
-    Raises:
-        IndexError: If a required metadata line is missing.
-        ValueError: If a numeric metadata value cannot be parsed.
-    """
-
-    temperature, magnetic_field, isotope = None, None, None
-
-    temperature = float(
-        find_first_group(file_name, r"# *temperature (\d*\.*\d*)", re.IGNORECASE)
-    )
-
-    magnetic_field = float(
-        find_first_group(file_name, r"# *magnetic_field (\d*\.*\d*)", re.IGNORECASE)
-    )
-
-    isotope = str(
-        find_first_group(file_name, r"# *isotope (\d{0,3}[A-Za-z]{0,2})", re.IGNORECASE)
-    )
-
-    return temperature, magnetic_field, isotope
-
-
 def find_index_of_nearest(array, value):
     """Returns the index of the nearest value in a sorted array."""
     idx = np.searchsorted(array, value, side="left")
@@ -333,40 +284,6 @@ def find_index_of_nearest(array, value):
         return idx - 1
     else:
         return idx
-
-
-def find_first_group(
-    file_name: str | PathLike[str],
-    pattern: str,
-    flags: int = 0,
-) -> str:
-    """Return the first captured group for the first regex match in a text file
-
-    The function scans the file line by line and applies `pattern` using `re.search`
-    It returns group 1 from the first match, so `pattern` must contain at least one
-    capturing group in parentheses
-
-    Args:
-        file_name: Path to the text file to scan
-        pattern: Regular expression pattern with at least one capturing group
-        flags: Regex flags passed to `re.compile`, e.g. `re.IGNORECASE`
-
-    Returns:
-        The first captured group from the first matching line
-
-    Raises:
-        ValueError: If no matching line is found
-        IndexError: If the pattern matches but has no capturing group 1
-    """
-    rx = re.compile(pattern, flags)
-
-    with open(file_name, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            m = rx.search(line)
-            if m:
-                return m.group(1)
-
-    raise ValueError(f"No relevant data found in {file_name} for pattern: {pattern}")
 
 
 def isotope_format(isotope_string: str) -> str:

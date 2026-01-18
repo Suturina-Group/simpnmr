@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 import scipy.constants as constants
 
-from . import main, models
-from .__version__ import __version__
+from .. import main, models
+from ..__version__ import __version__
 
 logger = logging.getLogger(__name__)
 

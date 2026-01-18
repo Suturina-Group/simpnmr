@@ -20,8 +20,8 @@ import yaml
 import yaml_include
 from matplotlib.lines import Line2D
 
+import simpnmr.io.qc.qc_readers as rdrs
 import simpnmr.main as pnmr
-import simpnmr.readers as rdrs
 import simpnmr.visualise as vis
 
 mpl.rc("xtick", labelsize=12)

@@ -17,9 +17,9 @@ import numpy as np
 import numpy.linalg as la
 import numpy.typing as npt
 
-from .__version__ import __version__
-from .scripts.coords_tools import label_format as lf
-from .scripts.coords_tools import xyz_format as xyzf
+from ...__version__ import __version__
+from ...scripts.coords_tools import label_format as lf
+from ...scripts.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 

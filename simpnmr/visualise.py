@@ -14,8 +14,9 @@ import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
-from . import main, models, outputs
+from . import main, models
 from . import utils as ut
+from .io import writers
 from .scripts.coords_tools import atoms
 from .scripts.coords_tools import label_format as lf
 
@@ -1278,7 +1279,7 @@ def plot_isoaxrho(
     # Save fitted intercept and slope values to a CSV file if requested
     if params is not None and out_file is not None:
         fits_list = [params.get("iso"), params.get("ax"), params.get("rho")]
-        outputs.save_slope_intercept(fits_list, out_file)
+        writers.save_slope_intercept(fits_list, out_file)
 
     return fig, ax
 
