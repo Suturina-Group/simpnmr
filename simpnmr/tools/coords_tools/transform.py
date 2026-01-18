@@ -9,7 +9,6 @@ hyperfine data, and exposes `get_rotation_and_transformation` as its main
 entry point.
 """
 
-import datetime
 import logging
 import os
 import re
@@ -17,10 +16,11 @@ import re
 import numpy as np
 import numpy.linalg as la
 
-from ... import inputs as inps
-from ...__version__ import __version__
+from simpnmr.io.writers import save_xyz
+from simpnmr.tools.coords_tools import xyz_format
+
+from ...config import config as inps
 from ...io.qc import qc_readers as rdrs
-from . import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def get_rotation_and_transformation(cfg: inps.PredictConfig):
         )
 
     # Compute rotation aligning NEVPT2 → DFT
-    rot_mat, rmsd = xyzf.find_rotation(nevpt2_coords, dft_coords)
+    rot_mat, rmsd = xyz_format.find_rotation(nevpt2_coords, dft_coords)
 
     # Temperature-normalised tensor
     chi = chiT / temperature[0]
@@ -181,15 +181,11 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
     xyz_filename = os.path.join(file_path, "chi_frame_structure.xyz")
 
     # Build a descriptive comment line
-    _comment = (
-        f"NEVPT2 coordinates rotated into the susceptibility (chi) frame. "
-        f"This file was generated with SimpNMR v{__version__} "
-        f"at {datetime.datetime.now().strftime('%H:%M:%S %d-%m-%Y')}."
-    )
+    _comment = "NEVPT2 coordinates rotated into the susceptibility (chi) frame."
 
     # Save XYZ
-    xyzf.save_xyz(
-        xyz_filename,
+    save_xyz(
+        file_name=xyz_filename,
         labels=clean_labels,
         coords=nevpt2_coords_chi_frame,
         verbose=False,

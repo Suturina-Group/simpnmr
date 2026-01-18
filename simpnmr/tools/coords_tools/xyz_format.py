@@ -14,7 +14,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy.typing import ArrayLike, NDArray
 
-from . import atoms
+from ...core.chemistry import periodic_table
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ def num_to_lab(numbers: ArrayLike, numbered: bool = True) -> list[str]:
         Element symbols for the provided atomic numbers.
     """
 
-    labels = [atoms.num_lab[int(num)] for num in numbers]
+    labels = [periodic_table.num_lab[int(num)] for num in numbers]
 
     if numbered:
         labels_wn = add_label_indices(labels)
@@ -142,7 +142,7 @@ def lab_to_num(labels: ArrayLike | str) -> list[int]:
 
     labels_nn = remove_label_indices(_labels)
 
-    numbers = [atoms.lab_num[lab] for lab in labels_nn]
+    numbers = [periodic_table.lab_num[lab] for lab in labels_nn]
 
     if isinstance(labels, str):
         return numbers[0]
@@ -280,7 +280,7 @@ def check_xyz(
 
     # Check all entries are real elements
     if not allow_nonelements:
-        if any([lab not in atoms.elements for lab in _labels_nn]):
+        if any([lab not in periodic_table.elements for lab in _labels_nn]):
             logger.error("XYZ file contains non-elements")
             return
 
@@ -334,72 +334,6 @@ def _check_xyz_headers(f_name: str):
         if not (n_lines == n_atoms + 2 or n_lines == n_atoms + 1):
             logger.error("XYZ file length/format is incorrect")
             return
-
-    return
-
-
-def save_xyz(
-    f_name: str,
-    labels: ArrayLike,
-    coords: ArrayLike,
-    with_numbers: bool = False,
-    verbose: bool = True,
-    mask: list | None = None,
-    atomic_numbers: bool = False,
-    comment: str = "",
-) -> None:
-    """Write an XYZ file from labels and coordinates.
-
-    Args:
-        f_name: Output file name.
-        labels: Atomic labels.
-        coords: Cartesian coordinates with shape (n_atoms, 3).
-        with_numbers: If True, overwrite labels with freshly assigned indices.
-        verbose: If True, print a confirmation message after writing.
-        mask: Indices of atoms to exclude from output.
-        atomic_numbers: If True, write atomic numbers instead of element symbols.
-        comment: Comment line written as the second line of the XYZ file.
-
-    Returns:
-        None.
-
-    Raises:
-        OSError: For underlying I/O errors.
-    """
-
-    coords = np.asarray(coords)
-    mask = mask or []
-
-    # Option to have numbers added
-    if with_numbers:
-        # Remove and re-add numbers to be safe
-        _labels = remove_label_indices(labels)
-        _labels = add_label_indices(_labels)
-    else:
-        _labels = labels
-
-    # Set up masks
-    if mask:
-        coords = np.delete(coords, mask, axis=0)
-        _labels = np.delete(_labels, mask, axis=0).tolist()
-
-    n_atoms = len(_labels)
-
-    if atomic_numbers:
-        _labels = remove_label_indices(_labels)
-        _numbers = lab_to_num(_labels)
-        _identifier = _numbers
-    else:
-        _identifier = _labels
-
-    with open(f_name, "w") as f:
-        f.write(f"{n_atoms:d}\n")
-        f.write(f"{comment}")
-        for ident, trio in zip(_identifier, coords):
-            f.write("\n{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
-
-    if verbose:
-        logger.info("New XYZ file written to %s", f_name)
 
     return
 

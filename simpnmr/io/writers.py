@@ -13,18 +13,21 @@ import logging
 import numpy as np
 import pandas as pd
 import scipy.constants as constants
+from numpy.typing import ArrayLike
 
-from .. import main, models
+from simpnmr.core.fitting import fitters
+from simpnmr.tools.coords_tools import xyz_format
+
 from ..__version__ import __version__
 
 logger = logging.getLogger(__name__)
 
 
 def save_susc(
-    molecules: list[main.Molecule],
+    molecules: list,
     file_name: str = "susceptibility.csv",
     verbose: bool = True,
-    susc_models: list[models.SusceptibilityModel] = [],
+    susc_models: list[fitters.SusceptibilityModel] = [],
     susc_units: str = "A3",
     delimiter: str = ",",
     comment: str = "",
@@ -377,6 +380,62 @@ def save_corr_time_fit_data(
     return
 
 
+def write_model_data(
+    models: list[fitters.SusceptibilityModel], file_name: str, verbose: bool = True
+) -> None:
+    """Writes fitted model parameters for multiple temperatures to a text file.
+
+    Assumes all models in `models` are of the same concrete class.
+
+    Args:
+        models: Models (typically one per temperature).
+        file_name: Output file path.
+        verbose: If ``True``, prints the output file path.
+
+    Returns:
+        None.
+    """
+    f = open(file_name, "w", encoding="utf-8")
+    f.write(" {:^12} ".format("T"))
+
+    # Fitted parameters
+    for name in models[0].fit_vars.keys():
+        f.write("{:^17} {:^17} ".format(name, name + "-s-dev"))
+
+    # Fixed parameters
+    for name in models[0].fix_vars.keys():
+        f.write("{:^17} ".format(name))
+
+    f.write("{:^12} ".format("r2"))
+    f.write("{:^12} ".format("r2_adj"))
+
+    f.write("\n")
+
+    for model in models:
+        if not model.fit_status:
+            continue
+        f.write("{:12.10f} ".format(model.temperature))
+
+        for name in model.fit_vars.keys():
+            f.write(
+                "{: 1.10E} {: 1.10E} ".format(
+                    model.final_var_values[name], model.fit_stdev[name]
+                )
+            )
+
+        for value in model.fix_vars.values():
+            f.write("{: 1.10E} ".format(value))
+
+        f.write("{: 1.10E} ".format(model.r2))
+        f.write("{: 1.10E} ".format(model.adj_r2))
+
+        f.write("\n")
+
+    if verbose:
+        logger.info("Susceptibility Model parameters written to %s", file_name)
+    return
+
+
 def save_slope_intercept(
     fits,
     file_name: str = "isoaxrho_fit.csv",
@@ -444,5 +503,83 @@ def save_slope_intercept(
 
     if verbose:
         logger.info("Temperature dependence data is written to %s", file_name)
+
+    return
+
+
+def save_xyz(
+    file_name: str,
+    labels: ArrayLike,
+    coords: ArrayLike,
+    with_numbers: bool = False,
+    verbose: bool = True,
+    mask: list | None = None,
+    atomic_numbers: bool = False,
+    comment: str = "",
+) -> None:
+    """Write an XYZ file from labels and coordinates.
+
+    Args:
+        file_name: Output file name.
+        labels: Atomic labels.
+        coords: Cartesian coordinates with shape (n_atoms, 3).
+        with_numbers: If True, overwrite labels with freshly assigned indices.
+        verbose: If True, print a confirmation message after writing.
+        mask: Indices of atoms to exclude from output.
+        atomic_numbers: If True, write atomic numbers instead of element symbols.
+        comment: User comment appended after an auto-generated provenance string
+        on the second line of the XYZ file.
+
+    Returns:
+        None.
+
+    Raises:
+        OSError: For underlying I/O errors.
+    """
+
+    coords = np.asarray(coords)
+    mask = mask or []
+
+    _comment = f"This file was generated with SimpNMR v{__version__} at {{}}. ".format(
+        datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y")
+    )
+    _comment += comment
+    if not _comment.endswith("\n"):
+        _comment += "\n"
+
+    # Option to have numbers added
+    if with_numbers:
+        # Remove and re-add numbers to be safe
+        _labels = xyz_format.remove_label_indices(labels)
+        _labels = xyz_format.add_label_indices(_labels)
+    else:
+        _labels = labels
+
+    # Set up masks
+    if mask:
+        coords = np.delete(coords, mask, axis=0)
+        _labels = np.delete(_labels, mask, axis=0).tolist()
+
+    n_atoms = len(_labels)
+
+    if atomic_numbers:
+        _labels = xyz_format.remove_label_indices(_labels)
+        _numbers = xyz_format.lab_to_num(_labels)
+        _identifier = _numbers
+    else:
+        _identifier = _labels
+
+    with open(file_name, "w") as f:
+        f.write(f"{n_atoms:d}\n")
+        f.write(_comment)
+
+        for i, (ident, trio) in enumerate(zip(_identifier, coords)):
+            if i == 0:
+                f.write("{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
+            else:
+                f.write("\n{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
+
+    if verbose:
+        logger.info("New XYZ file written to %s", file_name)
 
     return

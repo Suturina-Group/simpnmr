@@ -1,6 +1,6 @@
 import pandas as pd
 
-from . import main
+from simpnmr.core import main
 
 
 def build_experiment_signals_df(experiment: "main.Experiment") -> pd.DataFrame:

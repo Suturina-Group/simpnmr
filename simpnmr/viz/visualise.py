@@ -14,11 +14,13 @@ import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
-from . import main, models
-from . import utils as ut
-from .io import writers
-from .scripts.coords_tools import atoms
-from .scripts.coords_tools import label_format as lf
+from simpnmr import utils as ut
+from simpnmr.core import main
+from simpnmr.core.chemistry import periodic_table
+from simpnmr.core.chemistry.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.fitting import fitters
+from simpnmr.io import writers
+from simpnmr.mappers import label_format as lf
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +252,7 @@ def plot_hyperfine(
 def plot_fitted_shifts(
     molecule: main.Molecule,
     experiment: main.Experiment,
-    susc_model: models.SusceptibilityModel,
+    susc_model: fitters.SusceptibilityModel,
     average: bool = True,
     save: bool = True,
     show: bool = True,
@@ -304,7 +306,9 @@ def plot_fitted_shifts(
 
     # Element specific markers with consistent order
     _unique_elements = [
-        ele for ele in atoms.elements if ele in [nuc.label_nn for nuc in unique_nuclei]
+        ele
+        for ele in periodic_table.elements
+        if ele in [nuc.label_nn for nuc in unique_nuclei]
     ]
     _markers = {
         ele: mrkr for (ele, mrkr) in zip(_unique_elements, ["x", "o", "v", "s", "*"])
@@ -1509,7 +1513,7 @@ def plot_raw_deconv_pred(
     for signal in experiment.signals:
         # Convert experimental linewidth from Hz to ppm
         exp_width_ppm = signal.width / (
-            ut.NUCLEAR_GAMMAS[lf.remove_numbers(isotope)] * experiment.magnetic_field
+            NUCLEAR_GAMMAS[lf.remove_numbers(isotope)] * experiment.magnetic_field
         )
         # Add Lorentzian contribution
         y_deconv_intensity += signal.l_to_g * lorentzian(

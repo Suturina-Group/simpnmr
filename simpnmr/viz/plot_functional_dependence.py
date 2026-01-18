@@ -18,8 +18,8 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 
+import simpnmr.core.main as pnmr
 import simpnmr.io.qc.qc_readers as rdrs
-import simpnmr.main as pnmr
 
 
 def load_hyperfine_data(

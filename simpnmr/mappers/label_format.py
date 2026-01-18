@@ -11,7 +11,7 @@ spectroscopic workflows.
 
 import re
 
-from . import atoms
+from simpnmr.core.chemistry import periodic_table
 
 
 def title(string: str) -> str:
@@ -144,7 +144,7 @@ def atom_range_to_list(atom_range: str) -> list[str]:
     start = int(re.search(r"\d+", atom_range.split("-")[0]).group(0))
     end = int(re.search(r"\d+", atom_range.split("-")[1]).group(0))
     ele = re.search(r"[a-zA-Z\s]+", atom_range.split("-")[1]).group(0).capitalize()
-    if ele not in atoms.elements:
+    if ele not in periodic_table.elements:
         raise ValueError(f"Unknown nucleus type {ele}")
     else:
         atom_list = [f"{ele}{it}" for it in range(start, end + 1)]

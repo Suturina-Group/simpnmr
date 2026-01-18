@@ -20,9 +20,9 @@ import yaml
 import yaml_include
 from matplotlib.lines import Line2D
 
+import simpnmr.core.main as pnmr
 import simpnmr.io.qc.qc_readers as rdrs
-import simpnmr.main as pnmr
-import simpnmr.visualise as vis
+import simpnmr.viz.visualise as vis
 
 mpl.rc("xtick", labelsize=12)
 mpl.rc("ytick", labelsize=12)

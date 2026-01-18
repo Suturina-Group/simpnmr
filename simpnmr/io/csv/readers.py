@@ -8,6 +8,7 @@ import re
 import pandas as pd
 
 from ..text import find_first_group
+from .validation import validate_csv_delimiters
 
 
 def read_csv_safe(
@@ -15,19 +16,22 @@ def read_csv_safe(
     **kwargs,
 ) -> pd.DataFrame:
     try:
-        return pd.read_csv(
+        validate_csv_delimiters(file_name)
+        df = pd.read_csv(
             file_name,
             skipinitialspace=True,
             comment="#",
             engine="python",
             **kwargs,
         )
+
+        return df
     except FileNotFoundError:
-        raise ValueError(f"CSV file not found: {file_name}")
+        raise ValueError(f"CSV file not found: {os.path.basename(file_name)}")
     except pd.errors.EmptyDataError:
-        raise ValueError(f"CSV file is empty: {file_name}")
+        raise ValueError(f"CSV file is empty: {os.path.basename(file_name)}")
     except Exception as e:
-        raise ValueError(f"Failed to read CSV file {file_name}: {e}")
+        raise ValueError(f"Failed to read CSV file {os.path.basename(file_name)}: {e}")
 
 
 def read_exp_metadata(file_name: str) -> tuple[float, float, str]:

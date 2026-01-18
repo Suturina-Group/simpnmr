@@ -19,14 +19,14 @@ import numpy.linalg as la
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
-from . import serialization as ser
-from . import utils as ut
-from .__version__ import __version__
-from .io.csv import readers
-from .io.qc import qc_readers as rdrs
-from .scripts.coords_tools import atoms
-from .scripts.coords_tools import label_format as lf
-from .scripts.coords_tools import xyz_format as xyzf
+from simpnmr import utils as ut
+from simpnmr.__version__ import __version__
+from simpnmr.core.chemistry import isotopes, periodic_table
+from simpnmr.io.csv import readers
+from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.mappers import dataframes as ser
+from simpnmr.mappers import label_format as lf
+from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -1332,7 +1332,7 @@ class Nucleus:
 
         # If isotope is provided then set, else set as default
         if isotope is None:
-            self.isotope = ut.DEFAULT_ISOTOPES[self.label_nn]
+            self.isotope = isotopes.DEFAULT_ISOTOPES[self.label_nn]
 
         return
 
@@ -1418,7 +1418,7 @@ class Nucleus:
     def isotope(self, value: str):
         if re.sub("[0-9]", "", value) != self.label_nn:
             raise ValueError("Isotope label does not match atomic label")
-        elif value not in ut.SUPPORTED_ISOTOPES:
+        elif value not in isotopes.SUPPORTED_ISOTOPES:
             raise ValueError(f"Unsupported isotope {value}")
         else:
             self._isotope = value
@@ -1666,7 +1666,7 @@ class Molecule:
             if ele == "all":
                 elements_to_include = labels
                 break
-            elif "all_" in ele or ele in atoms.elements:
+            elif "all_" in ele or ele in periodic_table.elements:
                 if "all_" in ele:
                     _e = ele[4:]
                 else:
@@ -1766,7 +1766,7 @@ class Molecule:
             if ele == "all":
                 elements_to_include = labels
                 break
-            elif "all_" in ele or ele in atoms.elements:
+            elif "all_" in ele or ele in periodic_table.elements:
                 if "all_" in ele:
                     _e = ele[4:]
                 else:
@@ -1876,7 +1876,7 @@ class Molecule:
             if ele == "all":
                 elements_to_include = copy.copy(ab_initio.labels)
                 break
-            elif "all_" in ele or ele in atoms.elements:
+            elif "all_" in ele or ele in periodic_table.elements:
                 if "all_" in ele:
                     _e = ele[4:]
                 else:
@@ -1948,7 +1948,6 @@ class Molecule:
 
         if file_type == "csv":
             dia = readers.read_csv_safe(file_name)
-
             if "atom_label" in dia.keys():
                 dia.set_index("atom_label", inplace=True)
                 for nuc in self.nuclei:
@@ -2377,38 +2376,4 @@ class Molecule:
 
         if verbose:
             logger.info("Molecule CHEMCRAFT.xyz file written to %s", file_name)
-        return
-
-    def save_xyz(self, file_name: str, verbose: bool = True, comment: str = ""):
-        """Save the current structure to an XYZ file.
-
-        This is a thin wrapper around `xyzf.save_xyz` that also injects a provenance
-        comment including the SimpNMR version and timestamp.
-
-        Args:
-            file_name: Output XYZ file path.
-            verbose: If True, prints the output file path.
-            comment: Optional additional comment appended to the provenance line.
-
-        Returns:
-            None.
-        """
-
-        _comment = (
-            f"This file was generated with SimpNMR v{__version__} at {{}}. ".format(
-                datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y")
-            )
-        )
-        _comment += comment
-
-        xyzf.save_xyz(
-            file_name,
-            labels=self.labels,
-            coords=self.coords,
-            verbose=False,
-            comment=_comment,
-        )
-
-        if verbose:
-            logger.info("Molecule.xyz file written to %s", file_name)
         return

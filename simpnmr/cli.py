@@ -21,16 +21,17 @@ import numpy as np
 from pathos import multiprocessing as mp
 from scipy.optimize import curve_fit
 
-from . import inputs as inps
-from . import main, models
-from . import utils as ut
-from . import visualise as vis
-from .io import writers as out
-from .io.csv import readers
-from .io.qc import qc_readers as rdrs
-from .scripts import fit_vt
-from .scripts.coords_tools import transform as tfm
-from .scripts.coords_tools import xyz_format as xyzf
+from simpnmr import utils as ut
+from simpnmr.config import config as cfg
+from simpnmr.core import main
+from simpnmr.core.chemistry.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.fitting import fit_vt, fitters
+from simpnmr.io import writers
+from simpnmr.io.csv import readers
+from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.tools.coords_tools import transform as tfm
+from simpnmr.tools.coords_tools import xyz_format as xyzf
+from simpnmr.viz import visualise as vis
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +200,7 @@ def fit_susc_func(uargs):
     """
 
     # Parse input file
-    config = inps.FitSuscConfig.from_file(uargs.input_file)
+    config = cfg.FitSuscConfig.from_file(uargs.input_file)
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
@@ -269,8 +270,10 @@ def fit_susc_func(uargs):
         )
 
     # Save xyz file with chemical labels for chemcraft
-    base_molecule.save_xyz(
+    writers.save_xyz(
         file_name=os.path.join(config.project_name, "structure.xyz"),
+        labels=base_molecule.labels,
+        coords=base_molecule.coords,
         comment=f"Structure from {config.hyperfine_file}",
     )
 
@@ -317,18 +320,18 @@ def fit_susc_func(uargs):
         if value[0] == "fix"
     }
 
-    name_to_susc_fit: dict[str, models.SusceptibilityModel] = {
-        "full": models.FullSuscFitter,
-        "split": models.SplitFitter,
-        "isoaxrho": models.IsoAxRhoFitter,
-        "eigen": models.EigenFitter,
-        "isoeigen": models.IsoEigenFitter,
+    name_to_susc_fit: dict[str, fitters.SusceptibilityModel] = {
+        "full": fitters.FullSuscFitter,
+        "split": fitters.SplitFitter,
+        "isoaxrho": fitters.IsoAxRhoFitter,
+        "eigen": fitters.EigenFitter,
+        "isoeigen": fitters.IsoEigenFitter,
     }
 
     model_to_use = name_to_susc_fit[config.susc_fit_type]
 
     # Create one susceptibility model per molecule/experiment pair
-    susc_models: list[models.SusceptibilityModel] = [
+    susc_models: list[fitters.SusceptibilityModel] = [
         copy.deepcopy(model_to_use(fit_vars, fix_vars)) for _ in molecules
     ]
 
@@ -541,7 +544,7 @@ def fit_susc_func(uargs):
         )
 
     # Write susceptibility tensor with model terms
-    out.save_susc(
+    writers.save_susc(
         molecules,
         os.path.join(config.project_name, "susceptibility_tensor.csv"),
         susc_models=susc_models,
@@ -600,10 +603,10 @@ def fit_susc_func(uargs):
 
 def fit_isoaxrho_vt(
     uargs: argparse.Namespace,
-    config: inps.FitSuscConfig,
+    config: cfg.FitSuscConfig,
     molecules: list[main.Molecule],
     spin: float | None,
-    susc_models: list[models.SusceptibilityModel] | None,
+    susc_models: list[fitters.SusceptibilityModel] | None,
 ) -> None:
     # Define the components to fit
     fit_component = ["iso", "ax", "rho"]
@@ -700,7 +703,7 @@ def fit_isoaxrho_vt(
     chi_errors = {comp: np.zeros(len(temps_fit)) for comp in fit_component}
 
     # If chi errors are available, take them from the fitted model standard deviations
-    if susc_models and isinstance(susc_models[0], models.IsoAxRhoFitter):
+    if susc_models and isinstance(susc_models[0], fitters.IsoAxRhoFitter):
         fix = susc_models[0].fix_vars
 
         if "iso" not in fix:
@@ -788,7 +791,7 @@ def fit_isoaxrho_vt(
 def obtain_r2a(
     molecule: main.Molecule,
     assignment: list[str],
-    model: models.SusceptibilityModel,
+    model: fitters.SusceptibilityModel,
     experiment: main.Experiment,
     average_labels: list[list[str]],
 ):
@@ -894,7 +897,7 @@ def plot_a_iso_ax_func(uargs):
         None
     """
 
-    config = inps.PlotAConfig.from_file(uargs.input_file)
+    config = cfg.PlotAConfig.from_file(uargs.input_file)
 
     symbols = ["x", "o"]
     fig, ax = plt.subplots(1, 1)
@@ -1176,7 +1179,7 @@ def predict_func(uargs):
     """
 
     # Parse input file
-    config = inps.PredictConfig.from_file(uargs.input_file)
+    config = cfg.PredictConfig.from_file(uargs.input_file)
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
@@ -1240,8 +1243,10 @@ def predict_func(uargs):
         )
 
     # Save xyz file with chemical labels for chemcraft
-    base_molecule.save_xyz(
+    writers.save_xyz(
         file_name=os.path.join(config.project_name, "structure.xyz"),
+        labels=base_molecule.labels,
+        coords=base_molecule.coords,
         comment=f"Structure from {config.hyperfine_file}",
     )
 
@@ -1469,7 +1474,7 @@ def predict_func(uargs):
     # TODO If more than one temperature, then make a stacked plot of spectra
 
     # Save susceptibility data to file
-    out.save_susc(
+    writers.save_susc(
         molecules,
         os.path.join(config.project_name, "susceptibility_tensor.csv"),
         comment="#Data from {} ({})".format(
@@ -1492,7 +1497,7 @@ def predict_func(uargs):
     return
 
 
-def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molecule):
+def apply_relaxation_model(config: cfg.PredictConfig, base_molecule: main.Molecule):
     """
     Apply linewidths using a user-specified relaxation model.
 
@@ -1500,7 +1505,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
     when relaxation inputs are provided in the config.
 
     Args:
-        config (inps.PredictConfig): Prediction configuration containing relaxation
+        config (PredictConfig): Prediction configuration containing relaxation
             settings and physical parameters.
         base_molecule (main.Molecule): Molecule instance to update in-place.
 
@@ -1541,7 +1546,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         }
 
     gamma_I_dict = {
-        label: ut.NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
+        label: NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
         for label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}
@@ -1795,7 +1800,7 @@ def apply_relaxation_model(config: inps.PredictConfig, base_molecule: main.Molec
         }
 
     # Save the relaxation data to CSV
-    out.save_relaxation_decomposition(
+    writers.save_relaxation_decomposition(
         file_name=os.path.join(config.project_name, "relaxation_decomposition.csv"),
         avg_r1_by_chem_label=avg_r1_by_chem_label,
         avg_r2_by_chem_label=avg_r2_by_chem_label,
@@ -1829,7 +1834,7 @@ def fit_corr_time_func(uargs):
     Returns:
         None
     """
-    config = inps.FitCorrTimeConfig.from_file(uargs.input_file)
+    config = cfg.FitCorrTimeConfig.from_file(uargs.input_file)
 
     if config.spin_S is not None:
         spin = config.spin_S
@@ -1961,8 +1966,10 @@ def fit_corr_time_func(uargs):
             base_molecule.save_chemcraft_xyz(
                 file_name=os.path.join(config.project_name, "chemcraft_structure.xyz")
             )
-        base_molecule.save_xyz(
+        writers.save_xyz(
             file_name=os.path.join(config.project_name, "structure.xyz"),
+            labels=base_molecule.labels,
+            coords=base_molecule.coords,
             comment=f"Structure from {config.hyperfine_file}",
         )
         label_to_chem_label = {
@@ -1980,7 +1987,7 @@ def fit_corr_time_func(uargs):
             nuc.label: A_iso_dict_MHz[nuc.label] * 1e6 for nuc in base_molecule.nuclei
         }
         gamma_I_dict = {
-            label: ut.NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
+            label: NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
             for label in nuclei_coords
         }
 
@@ -2453,7 +2460,7 @@ def fit_corr_time_func(uargs):
         )
 
         # Save fit diagnostics
-        out.save_corr_time_fit_data(
+        writers.save_corr_time_fit_data(
             xdata=xdata,
             exp_r1=exp_r1,
             chem_labels=chem_labels,

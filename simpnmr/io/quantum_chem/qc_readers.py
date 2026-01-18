@@ -17,10 +17,9 @@ import numpy as np
 import numpy.linalg as la
 import numpy.typing as npt
 
-from simpnmr.tools.coords_tools import xyz_format as xyzf
-
 from ...__version__ import __version__
 from ...mappers import label_format as lf
+from ...tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
