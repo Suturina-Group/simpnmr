@@ -2610,8 +2610,7 @@ def read_args(arg_list=None):
     """
 
     epilog = (
-        "To display options for a specific program, use\n\n"
-        f"      {ut.cstr('simpnmr SUBPROGRAM -h', 'green')}"
+        "To display options for a specific program, use\n\n      simpnmr SUBPROGRAM -h"
     )
 
     parser = argparse.ArgumentParser(description=description, epilog=epilog)

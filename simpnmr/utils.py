@@ -229,51 +229,6 @@ def comp2ind(comp_str: str) -> list[int]:
     return _c2i[comp_str][0], _c2i[comp_str][1]
 
 
-def cstr(string: str, color: str):
-    """Applies ANSI color codes to a string.
-
-    Args:
-        string: String to colorize.
-        color: Color name. Supported values are ``red``, ``green``, ``yellow``,
-            ``blue``, ``magenta``, ``cyan``, ``white``, ``black_yellowbg``, and
-            ``black_bluebg``.
-
-    Returns:
-        The input string wrapped in ANSI escape codes.
-    """
-
-    ccodes = {
-        "red": "\u001b[31m",
-        "green": "\u001b[32m",
-        "yellow": "\u001b[33m",
-        "blue": "\u001b[34m",
-        "magenta": "\u001b[35m",
-        "cyan": "\u001b[36m",
-        "white": "\u001b[37m",
-        "black_yellowbg": "\u001b[30;43m\u001b[K",
-        "black_bluebg": "\u001b[30;44m\u001b[K",
-    }
-    end = "\033[0m\u001b[K"
-
-    # Count newlines at neither beginning nor end
-    num_c_nl = string.rstrip("\n").lstrip("\n").count("\n")
-
-    # Remove right new lines to count left new lines
-    num_l_nl = string.rstrip("\n").count("\n") - num_c_nl
-    l_nl = "".join(["\n"] * num_l_nl)
-
-    # Remove left new lines to count right new lines
-    num_r_nl = string.lstrip("\n").count("\n") - num_c_nl
-    r_nl = "".join(["\n"] * num_r_nl)
-
-    # Remove left and right newlines, will add in again later
-    _string = string.rstrip("\n").lstrip("\n")
-
-    out = "{}{}{}{}{}".format(l_nl, ccodes[color], _string, end, r_nl)
-
-    return out
-
-
 def find_index_of_nearest(array, value):
     """Returns the index of the nearest value in a sorted array."""
     idx = np.searchsorted(array, value, side="left")

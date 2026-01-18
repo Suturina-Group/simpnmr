@@ -236,7 +236,7 @@ class Experiment:
         """
 
         if not len(file_names):
-            raise ValueError(ut.cstr("No files provided", "red"))
+            raise ValueError("No files provided")
 
         if isinstance(file_names, str):
             file_names = [file_names]
@@ -1432,10 +1432,10 @@ class Nucleus:
         incoord = np.asarray(incoord)
 
         if len(incoord.shape) > 1:
-            raise ValueError(ut.cstr("Nucleus coordinates must be (1x3) array", "red"))
+            raise ValueError("Nucleus coordinates must be (1x3) array")
 
         elif incoord.shape[0] != 3:
-            raise ValueError(ut.cstr("Nucleus coordinates must be (1x3) array", "red"))
+            raise ValueError("Nucleus coordinates must be (1x3) array")
         self._coord = incoord
         return
 
@@ -2193,10 +2193,7 @@ class Molecule:
 
         if not len(centre_labels):
             raise ValueError(
-                ut.cstr(
-                    "Error: No paramagnetic centres specified for point dipole",
-                    "red",
-                )
+                "Error: No paramagnetic centres specified for point dipole"
             )
 
         # Find user specified centre(s)
@@ -2204,11 +2201,9 @@ class Molecule:
             it = [i for i, x in enumerate(self.labels) if x == centre]
 
             if len(it) > 1:
-                raise ValueError(
-                    ut.cstr("Error: More than one of specified label found", "red")
-                )
+                raise ValueError("Error: More than one of specified label found")
             elif not len(it):
-                raise ValueError(ut.cstr(f"Cant find {centre} in labels", "red"))
+                raise ValueError(f"Cant find {centre} in labels")
 
             for nuc in self.nuclei:
                 if nuc.label in centre_labels:
@@ -2246,7 +2241,7 @@ class Molecule:
                 nuc.shift.fc = Shift.calc_fcs(nuc.A, self.susc)
 
         if "fc" not in shift_terms and "pc" not in shift_terms:
-            raise ValueError(ut.cstr("Unknown shift specified", "red"))
+            raise ValueError("Unknown shift specified")
 
         return
 
@@ -2329,11 +2324,8 @@ class Molecule:
                 diff = np.sum(_coord - nuc.coord)
                 if diff > 1e-8:
                     raise ValueError(
-                        ut.cstr(
-                            f"Coordinates of {nuc.label} in chem_labels file\n"
-                            " do not match those of molecule.",
-                            "red",
-                        )
+                        f"Coordinates of {nuc.label} in chem_labels file "
+                        "do not match those of molecule."
                     )
 
         return
