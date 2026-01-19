@@ -10,11 +10,12 @@ import argparse
 import csv
 import logging
 
-from ..tools.coords_tools import xyz_format as xyzf
+from . import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
 
+# TODO: detect_xyz_formatting????
 def load_chemcraft_xyz(file_name: str):
     """
     Load a Chemcraft-annotated XYZ file and extract per-atom captions.
@@ -38,17 +39,13 @@ def load_chemcraft_xyz(file_name: str):
             invalid formatting.
     """
 
-    formatting = xyzf.detect_xyz_formatting(file_name)
-
     # Read labels and coordinates
     try:
-        _labels, coords = xyzf.load_xyz(
-            file_name, missing_headers=formatting["missing_headers"], check=False
-        )
+        _labels, coords = xyzf.load_xyz(file_name, check=False)
     except (ValueError, xyzf.XYZError) as vxe:
         raise ValueError(str(vxe))
 
-    if formatting["atomic_numbers"]:
+    if all(label.isdigit() for label in _labels):
         indexed_labels = xyzf.add_label_indices(xyzf.num_to_lab(_labels))
     else:
         indexed_labels = xyzf.add_label_indices(_labels)
@@ -58,7 +55,7 @@ def load_chemcraft_xyz(file_name: str):
     # Read chemical labels
     with open(file_name, "r") as f:
         for it, line in enumerate(f):
-            if it < 2 and not formatting["missing_headers"]:
+            if it < 2:
                 continue
             spl = line.split()
             if len(spl) > 4:
@@ -68,6 +65,11 @@ def load_chemcraft_xyz(file_name: str):
 
 
 def main():
+    # Configure logging for standalone entry-point usage
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)-7s | %(message)s",
+    )
     parser = argparse.ArgumentParser(
         description=(
             "This script converts annotated chemcraft .xyz files into a\n"
@@ -115,4 +117,4 @@ def main():
                 row.append(math_dict[k])
             writer.writerow(row)
 
-    logger.info("Chemical labels written to\n chemlabels.csv")
+    logger.info("Chemical labels written to chemlabels.csv")

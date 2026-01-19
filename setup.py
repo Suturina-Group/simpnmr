@@ -34,10 +34,10 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "simpnmr = simpnmr.cli:interface",
-            "plot_A_funcs = simpnmr.scripts.batch_hf_plot:main",
-            "plot_chi_funcs = simpnmr.scripts.batch_susc_plot:main",
-            "get_sh = simpnmr.scripts.get_sh:main",
-            "xyz_to_chemlabel = simpnmr.scripts.coords_tools.chemcraft_xyz:main",
+            "plot_A_funcs = simpnmr.tools.batch_hf_plot:main",
+            "plot_chi_funcs = simpnmr.tools.batch_susc_plot:main",
+            "get_sh = simpnmr.tools.get_sh:main",
+            "xyz_to_chemlabel = simpnmr.tools.coords_tools.chemcraft_xyz:main",
         ]
     },
 )
