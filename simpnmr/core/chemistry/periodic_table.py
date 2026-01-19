@@ -109,7 +109,7 @@ f_block_row_2 = [
 ]
 
 # All actinides
-actinides = f_block_row_1
+actinides = f_block_row_2
 
 # All f-block elements
 f_block = f_block_row_1 + f_block_row_2
