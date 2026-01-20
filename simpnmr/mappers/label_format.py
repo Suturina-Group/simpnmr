@@ -11,7 +11,7 @@ spectroscopic workflows.
 
 import re
 
-from simpnmr.core.chemistry import periodic_table
+from simpnmr.core.constants import periodic_table
 
 
 def title(string: str) -> str:

@@ -15,7 +15,7 @@ import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike
 
-from simpnmr.core.fitting import fitters
+from simpnmr.core.fitting import models
 from simpnmr.tools.coords_tools import xyz_format
 
 from ..__version__ import __version__
@@ -27,7 +27,7 @@ def save_susc(
     molecules: list,
     file_name: str = "susceptibility.csv",
     verbose: bool = True,
-    susc_models: list[fitters.SusceptibilityModel] = [],
+    susc_models: list[models.SusceptibilityModel] = [],
     susc_units: str = "A3",
     delimiter: str = ",",
     comment: str = "",
@@ -381,7 +381,7 @@ def save_corr_time_fit_data(
 
 
 def write_model_data(
-    models: list[fitters.SusceptibilityModel], file_name: str, verbose: bool = True
+    models: list[models.SusceptibilityModel], file_name: str, verbose: bool = True
 ) -> None:
     """Writes fitted model parameters for multiple temperatures to a text file.
 

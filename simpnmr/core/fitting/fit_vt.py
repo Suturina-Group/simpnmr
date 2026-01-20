@@ -65,7 +65,10 @@ def fit_chit_linear_model(
     def _model(T, A, B, tip):
         # TIP contributes a temperature-independent term in chi(T), which becomes
         # a linear-in-T term in chiT(T).
-        return A + B / T + tip * T
+        # return A + B / T + tip * T
+        # print(T)
+        x = 1 / T
+        return A * x + B + tip * 1 / x
 
     norm_factor = compute_curie_prefactor(spin)
 
@@ -122,7 +125,7 @@ def fit_chit_linear_model(
         }
         for name, val in zip(fit_param_names, theta, strict=False):
             params[name] = float(val)
-        return _model(T, params["intercept"], params["slope"], params["tip"])
+        return _model(T, params["slope"], params["intercept"], params["tip"])
 
     # Compute chiT values and chiT errors at the given temperatures
     chiT = chi_vals * fit_temps

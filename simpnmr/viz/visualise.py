@@ -16,9 +16,9 @@ from numpy.typing import ArrayLike, NDArray
 
 from simpnmr import utils as ut
 from simpnmr.core import main
-from simpnmr.core.chemistry import periodic_table
-from simpnmr.core.chemistry.gammas import NUCLEAR_GAMMAS
-from simpnmr.core.fitting import fitters
+from simpnmr.core.constants import periodic_table
+from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.fitting import models
 from simpnmr.io import writers
 from simpnmr.mappers import label_format as lf
 
@@ -252,7 +252,7 @@ def plot_hyperfine(
 def plot_fitted_shifts(
     molecule: main.Molecule,
     experiment: main.Experiment,
-    susc_model: fitters.SusceptibilityModel,
+    susc_model: models.SusceptibilityModel,
     average: bool = True,
     save: bool = True,
     show: bool = True,

@@ -21,7 +21,7 @@ from numpy.typing import ArrayLike, NDArray
 
 from simpnmr import utils as ut
 from simpnmr.__version__ import __version__
-from simpnmr.core.chemistry import isotopes, periodic_table
+from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.io.csv import readers
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.mappers import dataframes as ser

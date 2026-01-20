@@ -13,7 +13,7 @@ import numpy as np
 import scipy.constants as consts
 from numpy.typing import NDArray
 
-from simpnmr.core.chemistry.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.mappers import label_format as lf
 
 # Physical constants

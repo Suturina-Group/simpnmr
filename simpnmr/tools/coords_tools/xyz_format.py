@@ -14,7 +14,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy.typing import ArrayLike, NDArray
 
-from ...core.chemistry import periodic_table
+from ...core.constants import periodic_table
 
 logger = logging.getLogger(__name__)
 
