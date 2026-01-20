@@ -194,10 +194,18 @@ def plot_a_iso_ax_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> i
 
     config = cfg.PlotAConfig.from_file(uargs.input_file)
 
+    # Make output directory and file
+    os.makedirs(config.project_name, exist_ok=True)
+
     symbols = ["x", "o"]
     fig, ax = plt.subplots(1, 1)
 
-    for hf_file, symb in zip(config.hyperfine_file[1:], symbols):
+    hf_files = config.hyperfine_file
+    if isinstance(hf_files, str):
+        hf_files = [hf_files]
+
+    for i, hf_file in enumerate(hf_files):
+        symb = symbols[i % len(symbols)]
         # Either load hyperfines from DFT output file
         if config.hyperfine_method == "dft":
             qc_hyperfine_data = rdrs.QCA.guess_from_file(hf_file)
@@ -219,10 +227,10 @@ def plot_a_iso_ax_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> i
 
         # generate using point dipole approximation
         elif config.hyperfine_method == "pdip":
-            if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
-                labels, coords = xyzf.load_xyz(config.hyperfine_file)
-            elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:
-                QCS = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
+            if os.path.splitext(hf_file)[1] == ".xyz":
+                labels, coords = xyzf.load_xyz(hf_file)
+            elif os.path.splitext(hf_file)[1] in [".log", ".out"]:
+                QCS = rdrs.QCStructure.guess_from_file(hf_file)
                 labels = QCS.labels
                 coords = QCS.coords
             else:
