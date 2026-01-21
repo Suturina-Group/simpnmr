@@ -58,7 +58,7 @@ class Signal():
         Longitudinal relaxation rate in s^-1
     '''
 
-    def __init__(self, shift, width, area, assignment='UNK', l_to_g=1, r1=None):
+    def __init__(self, shift, width, area, assignment='UNK', l_to_g=1, r1=None, t1=None) -> None:
 
         self.shift = shift
         self.width = width
@@ -66,6 +66,7 @@ class Signal():
         self.assignment = assignment
         self.l_to_g = l_to_g
         self.r1 = r1
+        self.t1 = t1
 
         return
 
@@ -270,6 +271,12 @@ class Experiment():
             'integral': 'area',
             'integrals ()': 'area',
             'L/G ()': 'L/G',
+            't1': 't1',
+            'T1': 't1',
+            't1 (s)': 't1',
+            'T1 (s)': 't1',
+            't1(s)': 't1',
+            'T1(s)': 't1',
             'r1': 'R1',
             'r1 (s^-1)': 'R1',
             'R1 (s^-1)': 'R1',
@@ -336,8 +343,8 @@ class Experiment():
                         signal['area'],
                         signal['assignment'],
                         l_to_g=signal['L/G'],
-                        r1=signal.get('R1', None)
-
+                        r1=signal.get('R1', None),
+                        t1=signal.get('t1', None),
                     )
                     for _, signal in _e.iterrows()
                 ]

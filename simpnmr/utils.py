@@ -781,11 +781,9 @@ def sbm_r2_dipolar(
     omega_S : float
         Electron Larmor angular frequency (rad s^-1).
     tau_c1 : float
-        Correlation time for the electron-nuclear dipolar interaction
-        (usually rotational correlation time) in seconds.
+        Correlation time involving T1e.
     tau_c2 : float
-        Correlation time entering the cross terms (often tau_c1 or an
-        effective electronic correlation time) in seconds.
+        Correlation time involving T2e.
     spin : float
         Spin quantum number S of the paramagnetic centre.
     orbit : float
@@ -956,6 +954,419 @@ def sbm_r2_contact(
         )
         rate = prefactor * spectral_density
         rates[label] = rate
+    return rates
+
+
+def diagonalise_tensor_and_order_eigenvalues(tensor: NDArray) -> tuple[NDArray, NDArray]:
+    """Diagonalise and order a second-rank tensor.
+
+    Parameters
+    ----------
+    tensor : np.ndarray
+        3x3 second-rank tensor.
+
+    Returns
+    -------
+    eigvecs : np.ndarray
+        3x3 matrix whose columns are the ordered eigenvectors of the
+        input tensor.
+    eigvals : np.ndarray
+        1D array of length 3 containing the ordered eigenvalues of the
+        input tensor.
+    """
+    tensor = np.asarray(tensor, dtype=float)
+
+    # Symmetrise tensor
+    tensor_sym = 0.5 * (tensor + tensor.T)
+
+    # Diagonalise tensor
+    eigvals, eigvecs = np.linalg.eigh(tensor_sym)
+
+    # Isotropic part
+    eig_iso = np.trace(tensor_sym) / 3
+
+    # Sort eigenvalues according to:
+    # |eig_yy - eig_iso| <= |eig_xx - eig_iso| <= |eig_zz - eig_iso|
+    eig_order = np.argsort(eigvals - eig_iso)
+    eigvecs = eigvecs[:, eig_order]
+    eigvals = eigvals[eig_order]
+
+    return eigvecs, eigvals
+
+
+def ion_nucleus_polar_in_g_frame(
+        r_vec: NDArray,
+        g_tensor: NDArray,
+) -> tuple[float, float]:
+    """Compute polar coordinates of ion-nucleus vector in g-tensor PAS.
+
+    Parameters
+    ----------
+    r_vec : np.ndarray
+        Ion-nucleus vecor in the molecular frame.
+    g_tensor : np.ndarray
+        3x3 g-tensor in the molecular frame.
+
+    Returns
+    -------
+    theta : float
+        Polar angle θ (in radians) of nucleus in g-tensor frame.
+    phi : float
+        Azimuthal angle φ (in radians) of nucleus in g-tensor frame.
+    """
+    r_vec = np.asarray(r_vec, dtype=float)
+
+    # Symmetrise g-tensor, diagonalise to PAS, and order eigenvalues.
+    eigvecs, eigvals = diagonalise_tensor_and_order_eigenvalues(g_tensor)
+
+    # Rotate r_vec into g-frame
+    r_g_frame = eigvecs.T @ r_vec
+
+    # Convert to polar coordinates
+    x, y, z = r_g_frame
+    r = np.linalg.norm(r_g_frame)
+    if r == 0.0:
+        raise ValueError(
+            "Ion-nucleus vector has zero length; polar angles undefined.")
+    cos_theta = np.clip(z / r, -1.0, 1.0)
+    theta = np.arccos(cos_theta)
+    phi = np.arctan2(y, x)
+
+    return theta, phi
+
+
+def anisotropic_coefficients(
+        g_aniso: float,
+        eta: float,
+        theta: float,
+        phi: float,
+) -> tuple[complex, complex, complex]:
+    """
+    Compute anisotropic coefficients a, b, c for Zeeman-limit relaxation.
+
+    Parameters
+    ----------
+    g_aniso : float
+        Anisotropy of g-tensor, gzz - giso.
+    eta : float
+        Asymmetry parameter of g-tensor, (gyy - gxx) / g_aniso.
+    theta : float
+        Polar angle θ (in radians) of nucleus in g-tensor frame.
+    phi : float
+        Azimuthal angle φ (in radians) of nucleus in g-tensor frame.
+    Returns
+    -------
+    a, b, c : complex
+        Anisotropic coefficients
+    """
+    a = - (g_aniso / 2) * (1 - 3 * np.cos(theta)**2 + eta * np.cos(2 * phi) * np.sin(theta)**2)  # noqa
+
+    b = - (g_aniso / 2) * ((3 / 2) * np.sin(2 * theta)
+                          + (eta / 2) * np.sin(2 * theta) * np.cos(2 * phi)
+                          - 1.0j * eta * np.sin(2 * phi) * np.sin(theta))  # noqa
+
+    c = - (g_aniso / 2) * (1 - 3 * np.sin(theta)**2
+                              + eta * np.cos(2 * phi) * (1 + np.cos(theta)**2)
+                              - 2.0j * eta * np.cos(theta) * np.sin(2 * phi))  # noqa
+
+    return a, b, c
+
+
+def anisotropic_zeeman_limit_r1_dipolar(
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    g_tensor,
+    gamma_I_dict,
+    omega_I_dict,
+    omega_S,
+    tau_C11,
+    tau_C12,
+    tau_C21,
+    tau_C22,
+    spin
+):
+    """
+    Compute Zeeman-limit anisotropic dipolar contribution to R1 using the g-tensor,
+    as described in Vasavada and Rao (Journal of Magnetic Resonance, 1989), DOI: 10.1016/0022-2364(89)90059-0.
+
+    The scaling of the electron Larmor frequency, omega_S_avg = omega_S * g_iso / GE, is included as in Bertini, 
+    Luchinat, and Vasavada (Journal of Magnetic Resonance, 1990), DOI: 10.1016/0022-2364(90)90231.
+
+    Parameters
+    ----------
+    g_tensor : (3,3) array_like
+        Electronic g-tensor in the molecular frame.
+
+    Notes
+    -----
+    The g-tensor is diagonalised and its eigenvalues are ordered; g_iso, g_aniso and eta are derived from those
+    eigenvalues. The ion-nucleus vector is expressed in the g-tensor PAS, with the orientation parameterised
+    by polar angles.
+    """
+    # Diagonalise g-tensor and order eigenvalues
+    g_eigvals, g_eigvecs = diagonalise_tensor_and_order_eigenvalues(g_tensor)
+
+    # Use g tensor to define the asymmetry parameter (eta)
+    g_yy, g_xx, g_zz = g_eigvals
+    g_iso = (g_xx + g_yy + g_zz) / 3.0
+    g_aniso = g_zz - g_iso
+    eta = (g_yy - g_xx) / g_aniso if g_aniso != 0 else 0.0
+    omega_S_avg = omega_S * g_iso / GE
+
+    # Define first- and second-rank rotational correlation times
+
+    rates = {}
+
+    for label in nuclei_labels:
+        # Ion-nucleus vecor in moelcular frame
+        r_vec = nuclei_coords[label] - electron_coords
+        # Polar angles in g-PAS
+        theta, phi = ion_nucleus_polar_in_g_frame(r_vec, g_tensor)
+        # Angular coefficients
+        a, b, c = anisotropic_coefficients(g_aniso, eta, theta, phi)
+
+        r = np.linalg.norm(r_vec) * 1e-10
+        gamma_I_dict = gamma_I_dict[label]
+        omega_I = omega_I_dict[label]
+        prefactor = (
+            (1.0 / 3.0) * (MU0 / (4 * np.pi))**2
+            * (MUB**2 * gamma_I_dict**2 / r**6)
+            * spin * (spin + 1)
+        )
+        spectral_density = (1.0 / 5.0 * (
+                    6.0 * (g_iso + (a / 2.0))**2
+                    + np.abs(b)**2 / 2.0
+                    + np.abs(c)**2 / 2.0
+                )
+                * (
+                    2.0 * spectral_density_J(omega_S_avg + omega_I, tau_C22)
+                   + spectral_density_J(omega_I, tau_C21)
+                    + (1.0 / 3.0) * spectral_density_J(omega_S_avg - omega_I, tau_C22))
+                      + (3.0 / 2.0) * np.abs(b)**2 * (
+                          spectral_density_J(
+                              omega_I, tau_C11) + spectral_density_J(omega_S_avg - omega_I, tau_C12)
+                          )
+                          )  # noqa
+
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
+def anisotropic_zeeman_limit_r2_dipolar(
+        nuclei_labels,
+        nuclei_coords,
+        electron_coords,
+        g_tensor,
+        gamma_I_dict,
+        omega_I_dict,
+        omega_S,
+        tau_C11,
+        tau_C12,
+        tau_C21,
+        tau_C22,
+        spin
+):
+    """
+    Compute Zeeman-limit anisotropic dipolar contribution to R2 using the g-tensor,
+    as described in Vasavada and Rao (Journal of Magnetic Resonance, 1989), DOI: 10.1016/0022-2364(89)90059-0.
+
+    The scaling of the electron Larmor frequency, omega_S_avg = omega_S * g_iso / GE, is included as in Bertini,
+    Luchinat, and Vasavada (Journal of Magnetic Resonance, 1990), DOI: 10.1016/0022-2364(90)90231.
+
+    Parameters
+    ----------
+    g_tensor : (3,3) array_like
+        Electronic g-tensor in the molecular frame.
+
+    Notes
+    -----
+    The g-tensor is diagonalised and its eigenvalues are ordered using
+    diagonalise_g_tensor; g_iso, g_aniso and eta are derived from those
+    eigenvalues, consistent with ion_nucleus_polar_in_g_frame.
+    """
+    # Diagonalise g-tensor and order eigenvalues
+    g_eigvals, g_eigvecs = diagonalise_tensor_and_order_eigenvalues(g_tensor)
+
+    # Use g tensor to define the asymmetry parameter (eta)
+    g_yy, g_xx, g_zz = g_eigvals
+    g_iso = (g_xx + g_yy + g_zz) / 3.0
+    g_aniso = g_zz - g_iso
+    eta = (g_yy - g_xx) / g_aniso if g_aniso != 0 else 0.0
+    omega_S_avg = omega_S * g_iso / GE
+
+    rates = {}
+
+    for label in nuclei_labels:
+        # Ion-nucleus vecor in moelcular frame
+        r_vec = nuclei_coords[label] - electron_coords
+        # Polar angles in g-PAS
+        theta, phi = ion_nucleus_polar_in_g_frame(r_vec, g_tensor)
+        # Angular coefficients
+        a, b, c = anisotropic_coefficients(g_aniso, eta, theta, phi)
+
+        r = np.linalg.norm(r_vec) * 1e-10
+        gamma_I_dict = gamma_I_dict[label]
+        omega_I = omega_I_dict[label]
+        prefactor = (
+            (1.0 / 3.0) * (MU0 / (4 * np.pi))**2
+            * (MUB**2 * gamma_I_dict**2 / r**6)
+            * spin * (spin + 1)
+        )
+        spectral_density = (1.0 / 5.0 * (
+                    6.0 * (g_iso + (a / 2.0))**2
+                    + np.abs(b)**2 / 2.0
+                    + np.abs(c)**2 / 2.0
+                )
+                * (
+                    spectral_density_J(omega_S_avg + omega_I, tau_C22)
+                   + (1.0 / 2.0) * spectral_density_J(omega_I, tau_C21)
+                    + spectral_density_J(omega_S_avg, tau_C22)
+                     + (2.0 / 3.0) * spectral_density_J(0.0, tau_C21)
+                      + (1.0 / 6.0) * spectral_density_J(omega_S_avg - omega_I, tau_C22))
+                      + (3.0 / 2.0) * np.abs(b)**2 * (
+                          spectral_density_J(omega_I, tau_C11)
+                          + spectral_density_J(omega_S_avg, tau_C12)
+                          + (1.0 / 2.0) *
+                             spectral_density_J(omega_S_avg - omega_I, tau_C12)
+                          )
+                          )  # noqa
+
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
+def anisotropic_zeeman_limit_r1_contact(
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    g_tensor,
+    Aiso_dict,
+    omega_I_dict,
+    omega_S,
+    tau_e2,
+    spin
+):
+    """
+    Compute Zeeman-limit anisotropic contact contribution to R1,
+    as described in Vasavada and Rao (Journal of Magnetic Resonance, 1989), 
+    DOI: 10.1016/0022-2364(89)90059-0.
+
+    The scaling of the electron Larmor frequency, omega_S_avg = omega_S * g_iso / GE, is included as in Bertini,
+    Luchinat, and Vasavada (Journal of Magnetic Resonance, 1990), DOI: 10.1016/0022-2364(90)90231.
+
+    Parameters
+    ----------
+    g_tensor : (3,3) array_like
+        Electronic g-tensor in the molecular frame.
+
+    Notes
+    -----
+    The g-tensor is diagonalised and its eigenvalues are ordered; g_iso is derived from those eigenvalues.
+    """
+
+    # Diagonalise g-tensor and order eigenvalues
+    g_eigvals, g_eigvecs = diagonalise_tensor_and_order_eigenvalues(g_tensor)
+
+    # Use g tensor to define the asymmetry parameter (eta)
+    g_yy, g_xx, g_zz = g_eigvals
+    g_iso = (g_xx + g_yy + g_zz) / 3.0
+    g_aniso = g_zz - g_iso
+    eta = (g_yy - g_xx) / g_aniso if g_aniso != 0 else 0.0
+    omega_S_avg = omega_S * g_iso / GE
+
+    rates = {}
+
+    for label in nuclei_labels:
+        # Ion-nucleus vecor in moelcular frame
+        r_vec = nuclei_coords[label] - electron_coords
+        # Polar angles in g-PAS
+        theta, phi = ion_nucleus_polar_in_g_frame(r_vec, g_tensor)
+        # Angular coefficients
+        a, _, _ = anisotropic_coefficients(g_aniso, eta, theta, phi)
+
+        r = np.linalg.norm(r_vec) * 1e-10
+        Aiso = Aiso_dict[label]
+        gamma_I_dict = gamma_I_dict[label]
+        omega_I = omega_I_dict[label]
+
+        prefactor = (Aiso - (gamma_I_dict * MUB * a / r**3)
+                     )**2 * (2.0 / 3.0) * spin * (spin + 1)
+        spectral_density = spectral_density_J(omega_S_avg - omega_I, tau_e2)
+
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
+    return rates
+
+
+def anisotropic_zeeman_limit_r2_contact(
+    nuclei_labels,
+    nuclei_coords,
+    electron_coords,
+    g_tensor,
+    Aiso_dict,
+    omega_I_dict,
+    omega_S,
+    tau_e1,
+    tau_e2,
+    spin
+):
+    """
+    Compute Zeeman-limit anisotropic contact contribution to R2,
+    as described in Vasavada and Rao (Journal of Magnetic Resonance, 1989), 
+    DOI: 10.1016/0022-2364(89)90059-0.
+
+    The scaling of the electron Larmor frequency, omega_S_avg = omega_S * g_iso / GE, is included as in Bertini,
+    Luchinat, and Vasavada (Journal of Magnetic Resonance, 1990), DOI: 10.1016/0022-2364(90)90231.
+
+    Parameters
+    ----------
+    g_tensor : (3,3) array_like
+        Electronic g-tensor in the molecular frame.
+
+    Notes
+    -----
+    The g-tensor is diagonalised and its eigenvalues are ordered; g_iso is derived from those eigenvalues.
+    """
+
+    # Diagonalise g-tensor and order eigenvalues
+    g_eigvals, g_eigvecs = diagonalise_tensor_and_order_eigenvalues(g_tensor)
+
+    # Use g tensor to define the asymmetry parameter (eta)
+    g_yy, g_xx, g_zz = g_eigvals
+    g_iso = (g_xx + g_yy + g_zz) / 3.0
+    g_aniso = g_zz - g_iso
+    eta = (g_yy - g_xx) / g_aniso if g_aniso != 0 else 0.0
+    omega_S_avg = omega_S * g_iso / GE
+
+    rates = {}
+
+    for label in nuclei_labels:
+        # Ion-nucleus vecor in moelcular frame
+        r_vec = nuclei_coords[label] - electron_coords
+        # Polar angles in g-PAS
+        theta, phi = ion_nucleus_polar_in_g_frame(r_vec, g_tensor)
+        # Angular coefficients
+        a, _, _ = anisotropic_coefficients(g_aniso, eta, theta, phi)
+
+        r = np.linalg.norm(r_vec) * 1e-10
+        Aiso = Aiso_dict[label]
+        gamma_I_dict = gamma_I_dict[label]
+        omega_I = omega_I_dict[label]
+
+        prefactor = (Aiso - (gamma_I_dict * MUB * a / r**3)
+                     )**2 * (1.0 / 3.0) * spin * (spin + 1)
+        spectral_density = spectral_density_J(
+            0, tau_e1) + spectral_density_J(omega_S_avg - omega_I, tau_e2)
+
+        rate = prefactor * spectral_density
+        rates[label] = rate
+
     return rates
 
 

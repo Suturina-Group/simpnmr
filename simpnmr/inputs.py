@@ -795,7 +795,7 @@ class PredictConfig(FitSuscConfig):
 
     @relaxation_model.setter
     def relaxation_model(self, value: str):
-        if value.lower() not in ['sbm', 'curie', 'sbm curie', 'curie sbm', 'curie_aniso', 'zfs_anisotropic_dipolar']:
+        if value.lower() not in ['sbm', 'zeeman_aniso_sbm', 'curie', 'sbm curie', 'curie sbm', 'curie_aniso', 'zfs_aniso_dipolar']:
             raise ValueError(f'Unknown relaxation: model {value}')
         else:
             self._relaxation_model = value.lower()
@@ -990,6 +990,7 @@ class FitCorrTimeConfig(FitSuscConfig):
         'fit_corr_time': [
             'tau_R',
             'tau_E',
+            'use'
         ],
         'relaxation': [
             'model',
@@ -1018,6 +1019,7 @@ class FitCorrTimeConfig(FitSuscConfig):
         'fit_corr_time': [
             'tau_R',
             'tau_E',
+            'use'
         ],
         'relaxation': [
             'model',
@@ -1034,7 +1036,7 @@ class FitCorrTimeConfig(FitSuscConfig):
     def __init__(self, **kwargs):
         self._fit_corr_time_tau_R = None
         self._fit_corr_time_tau_E = None
-        self._fit_corr_time_fix = ''
+        self._fit_corr_time_use = ''
         self._relaxation_model = ''
         self._relaxation_electron_coords = None
 
@@ -1132,6 +1134,18 @@ class FitCorrTimeConfig(FitSuscConfig):
         return None
 
     @property
+    def fit_corr_time_use(self) -> str:
+        return self._fit_corr_time_use
+    
+    @fit_corr_time_use.setter
+    def fit_corr_time_use(self, value: str):
+        if value.lower() not in ['r1', 'linewidth']:
+            raise ValueError(f'Unknown fit_corr_time: use {value}. Must use "R1" or "linewidth".')
+        else:
+            self._fit_corr_time_use = value.lower()
+        return None
+
+    @property
     def relaxation_model(self) -> str:
         return self._relaxation_model
 
@@ -1168,6 +1182,105 @@ class FitCorrTimeConfig(FitSuscConfig):
     def from_file(cls, file_name: str) -> 'FitCorrTimeConfig':
         cls: FitCorrTimeConfig = super().from_file(file_name)
         return cls
+
+
+class FitSpectralDensityTensorConfig(FitSuscConfig):
+
+    REQ_KEYWORDS = {
+        'nuclei': [
+            'include'
+        ],
+        'experiment': [
+            'files'
+        ],
+        'fit_spectral_density_tensor': [
+            'spectral_density_tensor_omega',
+            'electron_coords'
+        ],
+        'project': [
+            'name'
+        ],
+        'chem_labels': [
+            'file'
+        ]
+    }
+
+    KEYWORDS = {
+        'hyperfine': [
+            'method',
+            'file',
+            'average',
+            'pdip_centre'],
+        'nuclei': [
+            'include'
+        ],
+        'experiment': [
+            'files'
+        ],
+        'fit_spectral_density_tensor': [
+            'spectral_density_tensor_omega',
+            'electron_coords'
+        ],
+        'project': [
+            'name'
+        ],
+        'chem_labels': [
+            'file'
+        ]
+    }
+
+    def __init__(self, **kwargs):
+        self._fit_spectral_density_tensor_omega = None
+        self._fit_spectral_density_tensor_electron_coords = None
+
+        super().__init__(**kwargs)
+
+    @property
+    def fit_spectral_density_tensor_omega(self) -> list[list[float], list[float], list[float]] | None:
+        return self._fit_spectral_density_tensor_omega
+
+    @fit_spectral_density_tensor_omega.setter
+    def fit_spectral_density_tensor_omega(self, value: list[list[float], list[float], list[float]] | None):
+        if value is None:
+            raise ValueError(
+                f"If 'fit_spectral_density_tensor' is specified, 'spectral_density_tensor_omega' must be set as an initial guess")
+        if isinstance(value, list) and len(value) == 3:
+            try:
+                tensor = []
+                for row in value:
+                    if not isinstance(row, (list, tuple)) or len(row) != 3:
+                        raise ValueError(
+                            f"Each row of spectral_density_tensor_omega must be a list of 3 floats")
+                    tensor.append([float(val) for val in row])
+                self._fit_spectral_density_tensor_omega = tensor
+            except Exception:
+                raise ValueError(
+                    f"Cannot convert spectral_density_tensor_omega {value} to 3x3 list of floats")
+        else:
+            raise ValueError(
+                f"spectral_density_tensor_omega must be a list of 3 lists, each with 3 floats")
+        return None
+
+    @property
+    def fit_spectral_density_tensor_electron_coords(self) -> list[float]:
+        return self._fit_spectral_density_tensor_electron_coords
+
+    @fit_spectral_density_tensor_electron_coords.setter
+    def fit_spectral_density_tensor_electron_coords(self, value: list[float] | float):
+        if value is None:
+            raise ValueError(
+                f"If 'fit_spectral_density_tensor' is specified, Cartesian 'electron_coords' must be set")
+        if isinstance(value, (list, tuple)) and len(value) == 3:
+            try:
+                self._fit_spectral_density_tensor_electron_coords = [
+                    float(val) for val in value]
+            except Exception:
+                raise ValueError(
+                    f"Cannot convert electron coordinates {value} to list of floats")
+        else:
+            raise ValueError(
+                f"Electron coordinates must be a list of 3 floats")
+        return None
 
 
 class PlotAConfig(FitSuscConfig):
