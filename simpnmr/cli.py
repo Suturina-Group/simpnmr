@@ -560,6 +560,12 @@ def read_args(arg_list=None):
 
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
 
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Parse inputs and initialise the pipeline, but exit before execution",
+    )
+
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
     parser.add_argument(
@@ -608,12 +614,6 @@ def read_args(arg_list=None):
         "input_file",
         type=str,
         help=("Input file for fit_susc -- see documentation for format"),
-    )
-
-    fit_susc.add_argument(
-        "--dry_run",
-        action="store_true",
-        help=("Checks input file, loads data, but quits before simulation"),
     )
 
     fit_susc.add_argument(

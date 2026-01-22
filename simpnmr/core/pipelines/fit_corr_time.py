@@ -11,9 +11,10 @@ from scipy.optimize import curve_fit  # noqa: E402
 from simpnmr import utils as ut  # noqa: E402
 from simpnmr.core import main
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS  # noqa: E402
+from simpnmr.core.pipelines.options import FitCorrTimeRunOptions
 
 # NOTE: The following imports are currently required by the legacy implementation.
-# They should be migrated to dedicated modules (io/viz/relaxation) later.
+# They should be migrated to dedicated modules
 from simpnmr.core.relaxation import gueron, sbm  # noqa: E402
 from simpnmr.io import writers  # noqa: E402
 from simpnmr.io.qc import qc_readers as rdrs
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 CSV_DELIMITER = ","
 
 
-def run_fit_corr_time(config) -> int:
+def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> int:
     """Fit correlation-time parameters to experimental R1 values.
 
     This pipeline reads experiments and hyperfine data, evaluates the requested
@@ -37,10 +38,8 @@ def run_fit_corr_time(config) -> int:
         Exit code: 0 on success.
     """
 
-    if config.spin_S is not None:
-        spin = config.spin_S
-    else:
-        spin = rdrs.QCSpin.guess_from_file(config.hyperfine_file).S
+    if options is None:
+        raise ValueError("FitCorrTimeRunOptions is required")
 
     orbit = config.orbit
 
@@ -192,8 +191,9 @@ def run_fit_corr_time(config) -> int:
             for label in nuclei_coords
         }
 
-        multiplicity = rdrs.read_gaussian_log_spin(config.hyperfine_file)
-        spin = (multiplicity - 1) / 2
+        # Load Spin
+        base_molecule.electronic.load_from_config(config)
+        spin = base_molecule.electronic.spin_S
 
         # --- Model function for curve_fit ---
         if fix_param == "tau_r":
@@ -707,7 +707,7 @@ def run_fit_corr_time(config) -> int:
         )
 
         # Print fitted value just below R^2, automated by fix_param
-        if fix_param.lower() == "tau_r":
+        if fix_param == "tau_r":
             plt.text(
                 0.01,
                 0.91,
@@ -717,7 +717,7 @@ def run_fit_corr_time(config) -> int:
                 va="top",
                 transform=plt.gca().transAxes,
             )
-        elif fix_param.lower() == "tau_e":
+        elif fix_param == "tau_e":
             plt.text(
                 0.01,
                 0.91,

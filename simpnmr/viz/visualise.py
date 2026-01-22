@@ -393,7 +393,7 @@ def plot_fitted_shifts(
 
     expression += "\n"
 
-    expression += rf"$R^2_\mathregular{{adj.}}$ = {susc_model.adj_r2:.3f}       "
+    expression += rf"$R^2_\mathregular{{adj.}}$ = {susc_model.adj_r2:.4f}       "
     expression += rf"$\mathrm{{MAE}} = {susc_model.mae:.3f}\ \mathrm{{ppm}}$       "
     expression += rf"$\mathrm{{RMSE}} = {susc_model.rmse:.3f}\ \mathrm{{ppm}}$"
 
