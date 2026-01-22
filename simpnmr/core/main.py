@@ -22,6 +22,7 @@ from numpy.typing import ArrayLike, NDArray
 from simpnmr import utils as ut
 from simpnmr.__version__ import __version__
 from simpnmr.core.constants import isotopes, periodic_table
+from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.io.csv import readers
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.mappers import dataframes as ser
@@ -1890,8 +1891,8 @@ class Molecule:
 
         # Convert units
         if converter.lower() != "null":
-            a_isos = ut.a_tensor_mhz_to_angstrom(ab_initio.a_iso)
-            a_dips = ut.a_tensor_mhz_to_angstrom(ab_initio.a_dip)
+            a_isos = hfc.a_tensor_mhz_to_angstrom(ab_initio.a_iso)
+            a_dips = hfc.a_tensor_mhz_to_angstrom(ab_initio.a_dip)
         else:
             a_isos = ab_initio.a_iso
             a_dips = ab_initio.a_dip
