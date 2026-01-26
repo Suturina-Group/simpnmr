@@ -11,7 +11,9 @@ from numpy.typing import NDArray
 from scipy.optimize import least_squares, lsq_linear
 from scipy.optimize._optimize import OptimizeResult
 
-from simpnmr.core import main
+from simpnmr.core.domain.experiment import Experiment
+from simpnmr.core.domain.molecule import Molecule, Nucleus
+from simpnmr.core.domain.tensors import Susceptibility
 
 logger = logging.getLogger(__name__)
 
@@ -259,9 +261,7 @@ class SusceptibilityModel(ABC):
 
     @staticmethod
     @abstractmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Evaluates the model prediction for paramagnetic shifts.
 
         Args:
@@ -273,14 +273,14 @@ class SusceptibilityModel(ABC):
         """
         raise NotImplementedError
 
-    def tosusceptibility(self) -> main.Susceptibility:
-        """Converts the fitted model into a `main.Susceptibility` instance.
+    def tosusceptibility(self) -> Susceptibility:
+        """Converts the fitted model into a `Susceptibility` instance.
 
         Returns:
-            A `main.Susceptibility` object at `self.temperature`.
+            A `Susceptibility` object at `self.temperature`.
         """
         tensor = self.totensor(self.final_var_values)
-        susc = main.Susceptibility(tensor, self.temperature)
+        susc = Susceptibility(tensor, self.temperature)
         return susc
 
     @staticmethod
@@ -310,7 +310,7 @@ class SusceptibilityModel(ABC):
     def residuals(
         self,
         parameters: dict[str, float],
-        nuclei: list[main.Nucleus],
+        nuclei: list[Nucleus],
         al_to_para_shift: dict[str, float],
         average_labels: list[list[str]] = [],
     ) -> list[float]:
@@ -358,7 +358,7 @@ class SusceptibilityModel(ABC):
         new_vals: list[float],
         fit_vars: dict[str, float],
         fix_vars: dict[str, float],
-        nuclei: list[main.Nucleus],
+        nuclei: list[Nucleus],
         al_to_para_shift: dict[str, float],
         average_labels: list[list[str]] = [],
     ) -> list[float]:
@@ -396,8 +396,8 @@ class SusceptibilityModel(ABC):
 
     def fit_to(
         self,
-        molecule: main.Molecule,
-        experiment: main.Experiment,
+        molecule: Molecule,
+        experiment: Experiment,
         verbose: bool = True,
         average_labels: list[list[str]] = [],
     ) -> None:
@@ -496,8 +496,8 @@ class SusceptibilityModel(ABC):
 class LinearSusceptibilityModel(SusceptibilityModel):
     def fit_to(
         self,
-        molecule: main.Molecule,
-        experiment: main.Experiment,
+        molecule: Molecule,
+        experiment: Experiment,
         verbose: bool = True,
         average_labels: list[list[str]] = [],
     ) -> None:
@@ -576,7 +576,7 @@ class LinearSusceptibilityModel(SusceptibilityModel):
 
     @staticmethod
     @abstractmethod
-    def design_matrix(nuclei: list[main.Nucleus], fix_vars: dict[str, float]):
+    def design_matrix(nuclei: list[Nucleus], fix_vars: dict[str, float]):
         """Builds the design matrix for the linear model.
 
         Args:
@@ -591,8 +591,8 @@ class LinearSusceptibilityModel(SusceptibilityModel):
     @staticmethod
     @abstractmethod
     def target_vector(
-        nuclei: list[main.Nucleus],
-        experiment: main.Experiment,
+        nuclei: list[Nucleus],
+        experiment: Experiment,
         fix_vars: dict[str, float],
     ):
         """Builds the target vector for the linear model.
@@ -641,9 +641,7 @@ class SplitFitter(SusceptibilityModel):
     }
 
     @staticmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Computes predicted paramagnetic shifts for the split-tensor model.
 
         The model uses an isotropic term and a traceless anisotropic tensor written
@@ -721,9 +719,7 @@ class IsoAxRhoFitter(SusceptibilityModel):
     }
 
     @staticmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Computes predicted paramagnetic shifts for the iso/ax/rho model.
 
         The anisotropic part is parameterized by axiality and a rhombicity ratio
@@ -825,9 +821,7 @@ class EigenFitter(SusceptibilityModel):
     BOUNDS = {"x": [-np.inf, np.inf], "y": [-np.inf, np.inf], "z": [-np.inf, np.inf]}
 
     @staticmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Computes predicted paramagnetic shifts for the eigenvalue model.
 
         Args:
@@ -897,9 +891,7 @@ class IsoEigenFitter(SusceptibilityModel):
     BOUNDS = {"dxx": [-np.inf, np.inf], "dyy": [-np.inf, np.inf], "iso": [0, np.inf]}
 
     @staticmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Computes predicted paramagnetic shifts for the iso + deviatoric eigen model.
 
         Args:
@@ -981,9 +973,7 @@ class FullSuscFitter(SusceptibilityModel):
     }
 
     @staticmethod
-    def model(
-        parameters: dict[str, float], nuclei: list[main.Nucleus]
-    ) -> dict[str, float]:
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
         """Computes predicted paramagnetic shifts for the full susceptibility model.
 
         Args:
@@ -1003,7 +993,7 @@ class FullSuscFitter(SusceptibilityModel):
         return shifts
 
     @staticmethod
-    def design_matrix(nuclei: list[main.Nucleus], fix_vars: dict[str, float]):
+    def design_matrix(nuclei: list[Nucleus], fix_vars: dict[str, float]):
         """Builds the design matrix for the full susceptibility linear model.
 
         Args:
@@ -1037,8 +1027,8 @@ class FullSuscFitter(SusceptibilityModel):
 
     @staticmethod
     def target_vector(
-        nuclei: list[main.Nucleus],
-        experiment: main.Experiment,
+        nuclei: list[Nucleus],
+        experiment: Experiment,
         fix_vars: dict[str, float],
     ):
         """Builds the target vector for the full susceptibility linear model.
