@@ -1334,7 +1334,7 @@ class FitCorrTimeConfig(FitSuscConfig):
         return cls
 
 
-class PlotAConfig(FitSuscConfig):
+class PlotHFCConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [

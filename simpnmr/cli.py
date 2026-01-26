@@ -9,19 +9,11 @@ pNMR prediction, susceptibility fitting, hyperfine plotting, and data extraction
 
 import argparse
 import logging
-import os
 import sys
 
-import matplotlib.pyplot as plt
-import numpy as np
-
 from simpnmr.config import config as cfg
-from simpnmr.core import main
 from simpnmr.core.pipelines.setup.options import RuntimeSettings
 from simpnmr.core.pipelines.setup.settings import apply_runtime_settings
-from simpnmr.io.qc import qc_readers as rdrs
-from simpnmr.tools.coords_tools import xyz_format as xyzf
-from simpnmr.viz import visualise as vis
 
 logger = logging.getLogger(__name__)
 
@@ -59,414 +51,16 @@ def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
         root.addHandler(handler)
 
 
-def extract_dia_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Extract diamagnetic isotropic shifts and save them to a CSV file.
+def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for the predict pipeline."""
 
-    If a reference output file is provided, the shifts are referenced by atom type
-    (non-indexed labels).
+    from simpnmr.core.pipelines.predict import run_predict
+    from simpnmr.core.pipelines.setup.options import PredictRunOptions
 
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
+    config = cfg.PredictConfig.from_file(uargs.input_file)
+    options = PredictRunOptions.from_namespace(uargs)
 
-    Returns:
-        None
-    """
-    logger.info("Extracting shifts from %s", uargs.output_file)
-
-    data = rdrs.QCCS.guess_from_file(uargs.output_file)
-
-    if len(uargs.ref_output_file):
-        ref_data = rdrs.QCCS.guess_from_file(uargs.ref_output_file)
-        logger.info("Extracting reference shifts from %s", uargs.ref_output_file)
-
-        ref_labels = list(ref_data.cs_iso.keys())
-        ref_labels_nn = xyzf.remove_label_indices(ref_labels)
-
-        avg_ref_iso = dict.fromkeys(ref_labels_nn, 0.0)
-
-        for lab, lab_nn in zip(ref_labels, ref_labels_nn):
-            avg_ref_iso[lab_nn] += ref_data.cs_iso[lab]
-
-        for lab_nn in np.unique(ref_labels_nn):
-            avg_ref_iso[lab_nn] /= ref_labels_nn.count(lab_nn)
-
-        # Subtract from reference shifts based on atom type
-        labels = list(data.cs_iso.keys())
-        labels_nn = xyzf.remove_label_indices(labels)
-
-        for lab, lab_nn in zip(labels, labels_nn):
-            if lab_nn in avg_ref_iso.keys():
-                data.cs_iso[lab] = avg_ref_iso[lab_nn] - data.cs_iso[lab]
-
-    # Save diamagnetic shifts to file
-    iso_shifts = list(data.cs_iso.values())
-    labels = list(data.cs_iso.keys())
-    labels = xyzf.remove_label_indices(labels)
-    labels = xyzf.add_label_indices(labels)
-
-    out = [f"{label}, {value:.6f}" for label, value in zip(labels, iso_shifts)]
-
-    np.savetxt(
-        "extracted_dia.csv",
-        out,
-        delimiter=runtime.csv_delimiter,
-        header="atom_label, shift",
-        fmt="%s",
-        comments="",
-    )
-
-    logger.info("Extracted shifts saved to extracted_dia.csv")
-
-    return 0
-
-
-def plot_a_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Plot hyperfine data from a single quantum-chemistry output file.
-
-    Depending on the flags provided, this generates spread and/or component plots and
-    optionally saves the figures to disk.
-
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
-
-    Returns:
-        None
-    """
-    # Load quantum chemical hyperfine data
-    calc_data = rdrs.QCA.guess_from_file(uargs.calculation_data)
-
-    # Create molecule object from quantum chemical hyperfine data
-    # to convert units
-    molecule = main.Molecule.from_QCA(
-        calc_data, converter="MHz_to_Ang-3", elements=uargs.elements
-    )
-
-    if uargs.chem_labels is not None:
-        molecule.add_chem_labels_from_file(uargs.chem_labels)
-
-    file_head = os.path.splitext(uargs.calculation_data)[0]
-
-    if not (uargs.hide_plots and not uargs.save):
-        if uargs.chem_labels is not None:
-            vis.plot_hyperfine_spread(
-                molecule.nuclei,
-                components=uargs.components,
-                save=uargs.save,
-                show=False,
-                save_name=f"hyperfine_spread_{file_head}{runtime.plot_format}",
-                window_title=(
-                    f"Spread of hyperfine data from {uargs.calculation_data}"
-                ),
-                verbose=True,
-            )
-
-        vis.plot_hyperfine(
-            molecule.nuclei,
-            components=uargs.components,
-            save=uargs.save,
-            show=False,
-            save_name=f"hyperfine_{file_head}{runtime.plot_format}",
-            window_title=f"Hyperfine data from {uargs.calculation_data}",
-            verbose=True,
-        )
-
-        if not uargs.hide_plots:
-            plt.show()
-
-    return 0
-
-
-def plot_a_iso_ax_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Plot isotropic-vs-axial hyperfine ratios for multiple input files.
-
-    This handler loads the base configuration from a YAML file, computes
-    A_iso/(A_xx + A_yy) per nucleus, and generates a comparison plot.
-
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
-
-    Returns:
-        None
-    """
-
-    config = cfg.PlotAConfig.from_file(uargs.input_file)
-
-    # Make output directory and file
-    os.makedirs(config.project_name, exist_ok=True)
-
-    symbols = ["x", "o"]
-    fig, ax = plt.subplots(1, 1)
-    order: list[int] | None = None
-
-    hf_files = config.hyperfine_file
-    if isinstance(hf_files, str):
-        hf_files = [hf_files]
-
-    for i, hf_file in enumerate(hf_files):
-        symb = symbols[i % len(symbols)]
-        # Either load hyperfines from DFT output file
-        if config.hyperfine_method == "dft":
-            qc_hyperfine_data = rdrs.QCA.guess_from_file(hf_file)
-            # Write raw calculation data to output file
-            qc_hyperfine_data.save_to_csv(
-                os.path.join(config.project_name, "dft_hyperfines.csv"),
-                verbose=True,
-                delimiter=runtime.csv_delimiter,
-                comment=f"# Data taken from file {hf_file}",
-            )
-
-            # Create molecule object from quantum chemical hyperfine data
-            # Retain only the atoms that are given in the labels file
-            base_molecule = main.Molecule.from_QCA(
-                qc_hyperfine_data,
-                converter="MHz_to_Ang-3",
-                elements=config.nuclei_include,
-            )
-
-        # generate using point dipole approximation
-        elif config.hyperfine_method == "pdip":
-            if os.path.splitext(hf_file)[1] == ".xyz":
-                labels, coords = xyzf.load_xyz(hf_file)
-            elif os.path.splitext(hf_file)[1] in [".log", ".out"]:
-                QCS = rdrs.QCStructure.guess_from_file(hf_file)
-                labels = QCS.labels
-                coords = QCS.coords
-            else:
-                raise ValueError(
-                    "Specified hyperfine file format "
-                    f"{os.path.splitext(hf_file)[1]} unsupported"
-                )
-
-            # Create molecule
-            base_molecule = main.Molecule.from_labels_coords(
-                labels, coords, elements=config.nuclei_include
-            )
-
-            # Calculate point dipole hyperfine
-            base_molecule.calc_pdip(config.hyperfine_pdip_centres)
-
-        if len(config.hyperfine_average):
-            for av in config.hyperfine_average:
-                base_molecule.average_hyperfine(av)
-
-        if len(config.chem_labels_file):
-            base_molecule.add_chem_labels_from_file(config.chem_labels_file)
-
-        file_head = os.path.splitext(hf_file)[0]
-
-        iso_div_ax = {
-            nuc.chem_math_label: nuc.A.iso / (nuc.A.dip[0, 0] + nuc.A.dip[1, 1])
-            for nuc in base_molecule.nuclei
-        }
-
-        if order is None:
-            order = [int(i) for i in np.argsort(list(iso_div_ax.values()))]
-
-        if not (uargs.hide_plots and not uargs.save):
-            if order is None:
-                raise RuntimeError("Internal error: plot order was not initialised.")
-            vis.plot_hyperfine_iso_vs_ax(
-                iso_div_ax,
-                order,
-                fig=fig,
-                ax=ax,
-                symbol=symb,
-                save=uargs.save,
-                show=False,
-                save_name=f"hyperfine_iso_ax_{file_head}{runtime.plot_format}",
-                verbose=True,
-                window_title=f"Hyperfine data from {hf_file}",
-            )
-
-    xlims = ax.get_xlim()
-
-    ax.hlines(0, *xlims, colors="k")
-
-    ax.set_xlim(xlims)
-    plt.show()
-    return 0
-
-
-def extract_a_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Extract hyperfine data from a quantum-chemistry output file and write a CSV.
-
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
-
-    Returns:
-        None
-    """
-    # Load quantum chemical hyperfine data
-    calc_data = rdrs.QCA.guess_from_file(uargs.calculation_data)
-
-    # Create molecule object from quantum chemical hyperfine data
-    # to convert units
-    base = main.Molecule.from_QCA(calc_data, converter="MHz_to_Ang-3")
-
-    base.to_csv(
-        "hyperfine_{}.csv".format(uargs.calculation_data),
-        verbose=True,
-        delimiter=runtime.csv_delimiter,
-    )
-
-    return 0
-
-
-def calc_pdip_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Compute point-dipole hyperfine dipolar tensors for a structure and optionally plot.
-
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
-
-    Returns:
-        None
-    """
-
-    # Parse user specified centres
-    centres = [centre.lower().capitalize() for centre in uargs.centres]
-
-    if os.path.splitext(uargs.structure_file)[1] == ".xyz":
-        labels, coords = xyzf.load_xyz(uargs.structure_file)
-    elif os.path.splitext(uargs.structure_file)[1] in [".log", ".out"]:
-        QCS = rdrs.QCStructure.guess_from_file(uargs.structure_file)
-        labels = QCS.labels
-        coords = QCS.coords
-    else:
-        raise ValueError(
-            "Specified hyperfine file format "
-            f"{os.path.splitext(uargs.structure_file)[1]} unsupported"
-        )
-
-    # Create molecule
-    molecule = main.Molecule.from_labels_coords(labels, coords, elements=uargs.elements)
-
-    # Calculate point dipole A_dip tensor
-    molecule.calc_pdip(centres)
-
-    if uargs.chem_labels is not None:
-        molecule.add_chem_labels_from_file(uargs.chem_labels)
-
-    # Save hyperfine data to file
-    out = np.array(
-        [
-            "{}, {}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}".format(
-                nuc.label,
-                nuc.chem_label,
-                *nuc.A.dip[0, :],
-                *nuc.A.dip[1, 1:],
-                nuc.A.dip[2, 2],
-            )
-            for nuc in molecule.nuclei
-        ]
-    )
-
-    # Save to file
-    file_head = os.path.splitext(uargs.structure_file)[0]
-    file_name = f"point_dipole_A_dip_{file_head}.csv"
-
-    header = (
-        "Label, Adip_xx (ppm Å^-3), "
-        "Adip_xy (ppm Å^-3), "
-        "Adip_xz (ppm Å^-3), "
-        "Adip_yy (ppm Å^-3), "
-        "Adip_yz (ppm Å^-3), "
-        "Adip_zz (ppm Å^-3)"
-    )
-
-    np.savetxt(file_name, out, delimiter=runtime.csv_delimiter, header=header, fmt="%s")
-    logger.info("Point dipole dipolar tensors saved to %s", file_name)
-
-    if len(uargs.plot_components):
-        vis.plot_hyperfine(
-            molecule.nuclei,
-            uargs.plot_components,
-            save=True,
-            show=False,
-            save_name=f"point_dipole_A_dip_{file_head}{runtime.plot_format}",
-            verbose=True,
-            window_title="Point-Dipole Hyperfines",
-        )
-
-        if uargs.chem_labels is not None:
-            vis.plot_hyperfine_spread(
-                molecule.nuclei,
-                uargs.plot_components,
-                save=True,
-                show=False,
-                save_name=f"spread_point_dipole_A_dip_{file_head}{runtime.plot_format}",
-                verbose=True,
-                window_title="Point-Dipole Hyperfines Spread",
-            )
-
-        plt.show()
-
-    return 0
-
-
-def calc_pcs_iso_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Generate PCS isosurfaces for selected temperatures using an isotropic chi tensor.
-
-    The script loads a structure, reads susceptibility data (ORCA or CSV formats),
-    and writes a cube file for each requested temperature.
-
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
-
-    Returns:
-        None
-    """
-
-    if os.path.splitext(uargs.structure_file)[1] == ".xyz":
-        labels, coords = xyzf.load_xyz(uargs.structure_file)
-    elif os.path.splitext(uargs.structure_file)[1] in [".log", ".out"]:
-        QCS = rdrs.QCStructure.guess_from_file(uargs.structure_file)
-        labels = QCS.labels
-        coords = QCS.coords
-    else:
-        raise ValueError(
-            "Specified structure file format "
-            f"{os.path.splitext(uargs.structure_file)[1]} unsupported"
-        )
-
-    if uargs.central_atom not in labels:
-        raise ValueError(
-            "Specified central atom not present in structure file \n"
-            "Perhaps try with indexing e.g. Ni1"
-        )
-
-    # Load susceptibility information
-    if "orca" in uargs.susc_format:
-        suscs = main.Susceptibility.from_orca(
-            uargs.susc_file, section=uargs.susc_format.split("orca_")[1]
-        )
-    elif "csv" in uargs.susc_format:
-        suscs = main.Susceptibility.from_csv(uargs.susc_file)
-    elif "molcas" in uargs.susc_format:
-        raise ValueError("Molcas files are not currently supported")
-
-    for susc in suscs:
-        if susc.temperature in uargs.temperatures:
-            # Calculate irreducible representations of susceptibility tensor
-            susc.calc_irred()
-
-            # Generate and save PCS isosurface
-            susc.save_pcs_isosurface(
-                labels,
-                coords,
-                uargs.central_atom,
-                comment=(
-                    f"PCS Isosurface from {uargs.susc_file} at {susc.temperature:.2f} K"
-                ),
-                file_name=f"pcs_isosurface_{susc.temperature:.2f}_K.cube",
-            )
-
-    return 0
+    return run_predict(config, options)
 
 
 def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
@@ -481,18 +75,6 @@ def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     return run_fit_susc(config, options)
 
 
-def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """Thin CLI wrapper for the predict pipeline."""
-
-    from simpnmr.core.pipelines.predict import run_predict
-    from simpnmr.core.pipelines.setup.options import PredictRunOptions
-
-    config = cfg.PredictConfig.from_file(uargs.input_file)
-    options = PredictRunOptions.from_namespace(uargs)
-
-    return run_predict(config, options)
-
-
 def fit_corr_time_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the fit_corr_time pipeline."""
 
@@ -505,52 +87,106 @@ def fit_corr_time_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> in
     return run_fit_corr_time(config, options)
 
 
-# # TODO
-# def plot_shift_tdep_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-#     """Thin CLI wrapper for the plot_shift_tdep pipeline."""
+def plot_hfc_iso_ax_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for plot_hfc_iso_ax pipeline."""
 
-#     from simpnmr.core.pipelines.plot_shift_tdep import run_plot_shift_tdep
-#     from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
+    from simpnmr.core.pipelines.plot_hfc_iso_ax import run_plot_hfc_iso_ax
+    from simpnmr.core.pipelines.setup.options import PlotHFCIsoAxRunOptions
 
-#     config = cfg.
-#     options = PlotShiftTdepRunOptions.from_namespace(uargs)
+    config = cfg.PlotHFCConfig.from_file(uargs.input_file)
+    options = PlotHFCIsoAxRunOptions.from_namespace(uargs)
 
-#     return run_plot_shift_tdep(config, options)
+    return run_plot_hfc_iso_ax(config, options)
 
 
-def plot_shift_tdep_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
-    """
-    Plot temperature dependence of chemical shifts from experimental datasets.
+def plot_shift_tdep_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for plot_shift_tdep pipeline."""
 
-    This CLI handler loads one or more experimental CSV files and generates
-    shift-versus-temperature and shift-versus-inverse-temperature plots.
+    from simpnmr.core.pipelines.plot_shift_tdep import run_plot_shift_tdep
+    from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
 
-    Args:
-        uargs (argparse.Namespace): Parsed CLI arguments.
+    options = PlotShiftTdepRunOptions.from_namespace(uargs)
 
-    Returns:
-        None
-    """
+    return run_plot_shift_tdep(uargs.experiment_files, options)
 
-    experiments = main.Experiment.from_file(uargs.experiment_files)
 
-    vis.plot_shift_tdep(
-        experiments,
-        "ShiftT_vs_T",
-        show=True,
-        save=True,
-        save_name=f"shift_x_T_vs_T{runtime.plot_format}",
+def calc_pcs_iso_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for calc_pcs_iso pipeline."""
+
+    from simpnmr.core.pipelines.calc_pcs_iso import run_calc_pcs_iso
+    from simpnmr.core.pipelines.setup.options import CalcPcsIsoRunOptions
+
+    options = CalcPcsIsoRunOptions.from_namespace(uargs)
+
+    return run_calc_pcs_iso(
+        susc_file=uargs.susc_file,
+        susc_format=uargs.susc_format,
+        temperatures=uargs.temperatures,
+        structure_file=uargs.structure_file,
+        central_atom=uargs.central_atom,
+        options=options,
     )
 
-    vis.plot_shift_tdep(
-        experiments,
-        "Shift_vs_1/T",
-        show=True,
-        save=True,
-        save_name=f"shift_vs_T-1{runtime.plot_format}",
+
+def calc_pdip_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for calc_pdip pipeline."""
+
+    from simpnmr.core.pipelines.calc_pdip import run_calc_pdip
+    from simpnmr.core.pipelines.setup.options import CalcPdipRunOptions
+
+    options = CalcPdipRunOptions.from_namespace(uargs)
+
+    return run_calc_pdip(
+        structure_file=uargs.structure_file,
+        centres=uargs.centres,
+        elements=uargs.elements,
+        chem_labels=uargs.chem_labels,
+        plot_components=uargs.plot_components,
+        options=options,
     )
 
-    return 0
+
+def extract_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for extract_hfc pipeline."""
+
+    from simpnmr.core.pipelines.extract_hfc import run_extract_hfc
+    from simpnmr.core.pipelines.setup.options import ExtractHFCRunOptions
+
+    options = ExtractHFCRunOptions.from_namespace(uargs)
+
+    return run_extract_hfc(uargs.calculation_data, options)
+
+
+def plot_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for plot_hfc pipeline."""
+
+    from simpnmr.core.pipelines.plot_hfc import run_plot_hfc
+    from simpnmr.core.pipelines.setup.options import PlotHFCRunOptions
+
+    options = PlotHFCRunOptions.from_namespace(uargs)
+
+    return run_plot_hfc(
+        calculation_data=uargs.calculation_data,
+        components=uargs.components,
+        chem_labels=uargs.chem_labels,
+        elements=uargs.elements,
+        options=options,
+    )
+
+
+def extract_dia_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for extract_dia pipeline."""
+
+    from simpnmr.core.pipelines.extract_diamagnetic import run_extract_dia
+    from simpnmr.core.pipelines.setup.options import ExtractDiaRunOptions
+
+    options = ExtractDiaRunOptions.from_namespace(uargs)
+
+    return run_extract_dia(
+        output_file=uargs.output_file,
+        ref_output_file=uargs.ref_output_file or None,
+        options=options,
+    )
 
 
 def read_args(arg_list=None):
@@ -562,8 +198,7 @@ def read_args(arg_list=None):
             If None, arguments are read from `sys.argv`.
 
     Returns:
-        argparse.Namespace: Parsed arguments object
-        (after `args.func(args)` is executed).
+        argparse.Namespace: Parsed CLI arguments.
     """
 
     description = """
@@ -598,7 +233,7 @@ def read_args(arg_list=None):
         "extract_dia",
         description="Extract diamagnetic shifts from quantum chemistry output",
     )
-    extract_dia.set_defaults(func=extract_dia_func)
+    extract_dia.set_defaults(func=extract_dia_cli)
 
     extract_dia.add_argument(
         "output_file",
@@ -714,31 +349,31 @@ def read_args(arg_list=None):
         ),
     )
 
-    extract_a = subparsers.add_parser(
-        "extract_a",
+    extract_hfc = subparsers.add_parser(
+        "extract_hfc",
         description=("Extract A tensor information from quantum chemistry output"),
     )
-    extract_a.set_defaults(func=extract_a_func)
+    extract_hfc.set_defaults(func=extract_hfc_cli)
 
-    extract_a.add_argument(
+    extract_hfc.add_argument(
         "calculation_data",
         type=str,
         help=("Gaussian log file, or Orca output or property file"),
     )
 
-    plot_a = subparsers.add_parser(
-        "plot_a",
+    plot_hfc = subparsers.add_parser(
+        "plot_hfc",
         description=("Plot A tensor information from quantum chemistry output"),
     )
-    plot_a.set_defaults(func=plot_a_func)
+    plot_hfc.set_defaults(func=plot_hfc_cli)
 
-    plot_a.add_argument(
+    plot_hfc.add_argument(
         "calculation_data",
         type=str,
         help=("Gaussian log file, or Orca output or property file"),
     )
 
-    plot_a.add_argument(
+    plot_hfc.add_argument(
         "components",
         choices=[
             "iso",
@@ -767,9 +402,11 @@ def read_args(arg_list=None):
         help=("Component() to plot"),
     )
 
-    plot_a.add_argument("--chem_labels", type=str, help=("chemical label file (.csv)"))
+    plot_hfc.add_argument(
+        "--chem_labels", type=str, help=("chemical label file (.csv)")
+    )
 
-    plot_a.add_argument(
+    plot_hfc.add_argument(
         "--elements",
         type=str,
         nargs="*",
@@ -777,25 +414,29 @@ def read_args(arg_list=None):
         help=("Elements to include in plot"),
     )
 
-    plot_a.add_argument("--save", action="store_false", help=("Save plot to file"))
+    plot_hfc.add_argument("--save", action="store_true", help="Save plot(s) to file")
 
-    plot_a.add_argument(
-        "--hide_plots", action="store_true", help=("Display plot on screen")
+    plot_hfc.add_argument(
+        "--hide_plots",
+        action="store_true",
+        help="Do not display plots on screen",
     )
 
-    plot_a_iso = subparsers.add_parser(
-        "plot_a_iso_ax",
-        description=("Plot A tensor information from quantum chemistry output"),
+    plot_hfc_iso = subparsers.add_parser(
+        "plot_hfc_iso_ax",
+        description=("Plot HFC tensor information from quantum chemistry output"),
     )
 
-    plot_a_iso.set_defaults(func=plot_a_iso_ax_func)
+    plot_hfc_iso.set_defaults(func=plot_hfc_iso_ax_cli)
 
-    plot_a_iso.add_argument("input_file", type=str, help=("simpnmr Input file"))
+    plot_hfc_iso.add_argument("input_file", type=str, help=("simpnmr Input file"))
 
-    plot_a_iso.add_argument("--save", action="store_true", help=("Save plot to file"))
+    plot_hfc_iso.add_argument("--save", action="store_true", help=("Save plot to file"))
 
-    plot_a_iso.add_argument(
-        "--hide_plots", action="store_true", help=("Display plot on screen")
+    plot_hfc_iso.add_argument(
+        "--hide_plots",
+        action="store_true",
+        help="Do not display plots on screen",
     )
 
     calc_pdip = subparsers.add_parser(
@@ -804,7 +445,7 @@ def read_args(arg_list=None):
             "Calculate dipolar Hyperfine tensor using point dipole approximation"
         ),
     )
-    calc_pdip.set_defaults(func=calc_pdip_func)
+    calc_pdip.set_defaults(func=calc_pdip_cli)
 
     calc_pdip.add_argument(
         "structure_file",
@@ -858,7 +499,7 @@ def read_args(arg_list=None):
         "calc_pcs_iso",
         description=("Calculates PCS isosurface and saves to .cube file"),
     )
-    calc_pcs_iso.set_defaults(func=calc_pcs_iso_func)
+    calc_pcs_iso.set_defaults(func=calc_pcs_iso_cli)
 
     calc_pcs_iso.add_argument("susc_file", help="File containing susceptibility data")
 
@@ -917,7 +558,7 @@ def read_args(arg_list=None):
         "plot_shift_tdep",
         description="Calculate shifts using Hyperfine and Susceptibility",
     )
-    plot_shift_tdep.set_defaults(func=plot_shift_tdep_func)
+    plot_shift_tdep.set_defaults(func=plot_shift_tdep_cli)
 
     plot_shift_tdep.add_argument(
         "experiment_files", type=str, nargs="+", help=("simpnmr experiment.csv files")

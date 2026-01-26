@@ -20,6 +20,7 @@ from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io import writers
 from simpnmr.io.csv import readers
 from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.mappers import label_format as lf
 from simpnmr.tools.coords_tools import transform as tfm
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis
@@ -391,7 +392,7 @@ def _apply_relaxation_linewidths(
     nuclei_coords = {
         nuc.label: nuc.coord
         for nuc in base_molecule.nuclei
-        if ut.lf.remove_numbers(nuc.label) in nuclei_labels
+        if lf.remove_numbers(nuc.label) in nuclei_labels
     }
     electron_coords = config.relaxation_electron_coords
     B0 = config.relaxation_magnetic_field_tesla
@@ -413,7 +414,7 @@ def _apply_relaxation_linewidths(
         }
 
     gamma_I_dict = {
-        label: NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
+        label: NUCLEAR_GAMMAS[lf.remove_numbers(label)] * 2 * np.pi * 1e6
         for label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}

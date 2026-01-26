@@ -52,7 +52,7 @@ def find_mean_values(values: list[float], thresh: float = 0.1) -> list[int]:
     # and mark indices at which to split
     split_indices = np.where(mask)[0] + 1
 
-    return split_indices.tolist()
+    return [int(i) for i in split_indices]
 
 
 def comp2ind(comp_str: str) -> list[int]:

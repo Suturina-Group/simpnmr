@@ -76,3 +76,94 @@ class FitSuscRunOptions:
             isoaxrho_plots=ns.isoaxrho_plots,
             pcs_isosurface=ns.pcs_isosurface,
         )
+
+
+@dataclass(frozen=True)
+class PlotShiftTdepRunOptions:
+    runtime: RuntimeSettings
+    show: bool = True
+    save: bool = True
+
+    @classmethod
+    def from_namespace(cls, ns):
+        return cls(
+            runtime=ns.runtime,
+            show=True,
+            save=True,
+        )
+
+
+@dataclass(frozen=True)
+class CalcPCSIsoRunOptions:
+    runtime: RuntimeSettings
+
+    @classmethod
+    def from_namespace(cls, ns):
+        return cls(runtime=ns.runtime)
+
+
+@dataclass(frozen=True)
+class CalcPdipRunOptions:
+    """Runtime options for point-dipole PCS calculation."""
+
+    runtime: RuntimeSettings
+    plot_mode: PlotMode = "save"
+    plot_components: list[str] | None = None
+
+    @classmethod
+    def from_namespace(cls, ns):
+        return cls(
+            runtime=ns.runtime,
+            plot_mode=getattr(ns, "plot_mode", "save"),
+            plot_components=getattr(ns, "plot_components", None),
+        )
+
+
+@dataclass(frozen=True)
+class ExtractHFCRunOptions:
+    runtime: RuntimeSettings
+
+    @classmethod
+    def from_namespace(cls, ns):
+        return cls(runtime=ns.runtime)
+
+
+@dataclass(frozen=True)
+class PlotHFCIsoAxRunOptions:
+    runtime: RuntimeSettings
+    save: bool
+    show: bool
+
+    @classmethod
+    def from_namespace(cls, ns) -> "PlotHFCIsoAxRunOptions":
+        return cls(
+            runtime=ns.runtime,
+            save=bool(getattr(ns, "save", False)),
+            show=not bool(getattr(ns, "hide_plots", False)),
+        )
+
+
+@dataclass(frozen=True)
+class PlotHFCRunOptions:
+    runtime: RuntimeSettings
+    save: bool
+    show: bool
+
+    @classmethod
+    def from_namespace(cls, ns) -> "PlotHFCRunOptions":
+        return cls(
+            runtime=ns.runtime,
+            save=bool(getattr(ns, "save", False)),
+            show=not bool(getattr(ns, "hide_plots", False)),
+        )
+
+
+@dataclass(frozen=True)
+class ExtractDiaRunOptions:
+    """Run options for the extract_dia CLI-driven pipeline."""
+
+    runtime: RuntimeSettings
+
+    @classmethod
+    def from_namespace(cls, ns) -> "ExtractDiaRunOptions":
+        return cls(runtime=ns.runtime)

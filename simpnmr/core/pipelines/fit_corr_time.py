@@ -18,6 +18,7 @@ from simpnmr.core.pipelines.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.relaxation import gueron, sbm  # noqa: E402
 from simpnmr.io import writers  # noqa: E402
 from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.mappers import label_format as lf
 from simpnmr.tools.coords_tools import xyz_format as xyzf  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             nuc.label: A_iso_dict_MHz[nuc.label] * 1e6 for nuc in base_molecule.nuclei
         }
         gamma_I_dict = {
-            label: NUCLEAR_GAMMAS[ut.lf.remove_numbers(label)] * 2 * np.pi * 1e6
+            label: NUCLEAR_GAMMAS[lf.remove_numbers(label)] * 2 * np.pi * 1e6
             for label in nuclei_coords
         }
 
