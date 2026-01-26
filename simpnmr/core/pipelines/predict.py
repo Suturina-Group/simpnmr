@@ -15,7 +15,7 @@ from simpnmr import utils as ut
 from simpnmr.config import config as cfg
 from simpnmr.core import main
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
-from simpnmr.core.pipelines.options import PredictRunOptions
+from simpnmr.core.pipelines.setup.options import PredictRunOptions
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io import writers
 from simpnmr.io.csv import readers

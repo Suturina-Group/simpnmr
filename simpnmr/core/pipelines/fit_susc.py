@@ -9,8 +9,8 @@ from pathos import multiprocessing as mp
 from simpnmr import utils as ut
 from simpnmr.core import main
 from simpnmr.core.fitting import fit_vt, models
-from simpnmr.core.pipelines import plotting as pl
-from simpnmr.core.pipelines.options import FitSuscRunOptions
+from simpnmr.core.pipelines.setup import plotting as pl
+from simpnmr.core.pipelines.setup.options import FitSuscRunOptions
 from simpnmr.io import writers
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf

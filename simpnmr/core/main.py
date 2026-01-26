@@ -1644,7 +1644,10 @@ class Molecule:
 
     @classmethod
     def from_labels_coords(
-        cls, labels: list[str], coords: ArrayLike, elements: list[str] | str = "all"
+        cls,
+        labels: ArrayLike,
+        coords: ArrayLike,
+        elements: list[str] | str = "all",
     ) -> "Molecule":
         """Create a `Molecule` from labels and coordinates.
 
@@ -1657,6 +1660,9 @@ class Molecule:
             A `Molecule` instance.
         """
 
+        # Normalize inputs to stable Python types.
+        labels_list: list[str] = [str(lab) for lab in list(np.asarray(labels))]
+
         if isinstance(elements, str):
             elements = [elements]
 
@@ -1665,14 +1671,14 @@ class Molecule:
         elements_to_include = []
         for ele in elements:
             if ele == "all":
-                elements_to_include = labels
+                elements_to_include = labels_list
                 break
             elif "all_" in ele or ele in periodic_table.elements:
                 if "all_" in ele:
                     _e = ele[4:]
                 else:
                     _e = ele
-                tmp = [la for la in labels if _e == xyzf.remove_label_indices(la)]
+                tmp = [la for la in labels_list if _e == xyzf.remove_label_indices(la)]
                 elements_to_include += tmp
             else:
                 elements_to_include.append(ele)
@@ -1681,12 +1687,12 @@ class Molecule:
         # selecting only those elements requested by user
         nuclei = [
             Nucleus(label, coord, Hyperfine())
-            for label, coord in zip(labels, coords)
+            for label, coord in zip(labels_list, coords)
             if label in elements_to_include
         ]
 
         # Generate Molecule using ALL labels and coords
-        base = cls(labels, coords, nuclei)
+        base = cls(labels_list, coords, nuclei)
 
         return base
 

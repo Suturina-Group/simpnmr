@@ -17,8 +17,8 @@ import numpy as np
 
 from simpnmr.config import config as cfg
 from simpnmr.core import main
-from simpnmr.core.pipelines.options import RuntimeSettings
-from simpnmr.core.pipelines.settings import apply_runtime_settings
+from simpnmr.core.pipelines.setup.options import RuntimeSettings
+from simpnmr.core.pipelines.setup.settings import apply_runtime_settings
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis
@@ -83,7 +83,7 @@ def extract_dia_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int
         ref_labels = list(ref_data.cs_iso.keys())
         ref_labels_nn = xyzf.remove_label_indices(ref_labels)
 
-        avg_ref_iso = dict.fromkeys(ref_labels_nn, 0)
+        avg_ref_iso = dict.fromkeys(ref_labels_nn, 0.0)
 
         for lab, lab_nn in zip(ref_labels, ref_labels_nn):
             avg_ref_iso[lab_nn] += ref_data.cs_iso[lab]
@@ -199,6 +199,7 @@ def plot_a_iso_ax_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> i
 
     symbols = ["x", "o"]
     fig, ax = plt.subplots(1, 1)
+    order: list[int] | None = None
 
     hf_files = config.hyperfine_file
     if isinstance(hf_files, str):
@@ -261,10 +262,12 @@ def plot_a_iso_ax_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> i
             for nuc in base_molecule.nuclei
         }
 
-        if symb == "x":
-            order = np.argsort(list(iso_div_ax.values()))
+        if order is None:
+            order = [int(i) for i in np.argsort(list(iso_div_ax.values()))]
 
         if not (uargs.hide_plots and not uargs.save):
+            if order is None:
+                raise RuntimeError("Internal error: plot order was not initialised.")
             vis.plot_hyperfine_iso_vs_ax(
                 iso_div_ax,
                 order,
@@ -470,7 +473,7 @@ def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the fit_susc pipeline."""
 
     from simpnmr.core.pipelines.fit_susc import run_fit_susc
-    from simpnmr.core.pipelines.options import FitSuscRunOptions
+    from simpnmr.core.pipelines.setup.options import FitSuscRunOptions
 
     config = cfg.FitSuscConfig.from_file(uargs.input_file)
     options = FitSuscRunOptions.from_namespace(uargs)
@@ -481,8 +484,8 @@ def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the predict pipeline."""
 
-    from simpnmr.core.pipelines.options import PredictRunOptions
     from simpnmr.core.pipelines.predict import run_predict
+    from simpnmr.core.pipelines.setup.options import PredictRunOptions
 
     config = cfg.PredictConfig.from_file(uargs.input_file)
     options = PredictRunOptions.from_namespace(uargs)
@@ -494,12 +497,25 @@ def fit_corr_time_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> in
     """Thin CLI wrapper for the fit_corr_time pipeline."""
 
     from simpnmr.core.pipelines.fit_corr_time import run_fit_corr_time
-    from simpnmr.core.pipelines.options import FitCorrTimeRunOptions
+    from simpnmr.core.pipelines.setup.options import FitCorrTimeRunOptions
 
     config = cfg.FitCorrTimeConfig.from_file(uargs.input_file)
     options = FitCorrTimeRunOptions.from_namespace(uargs)
 
     return run_fit_corr_time(config, options)
+
+
+# # TODO
+# def plot_shift_tdep_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+#     """Thin CLI wrapper for the plot_shift_tdep pipeline."""
+
+#     from simpnmr.core.pipelines.plot_shift_tdep import run_plot_shift_tdep
+#     from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
+
+#     config = cfg.
+#     options = PlotShiftTdepRunOptions.from_namespace(uargs)
+
+#     return run_plot_shift_tdep(config, options)
 
 
 def plot_shift_tdep_func(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:

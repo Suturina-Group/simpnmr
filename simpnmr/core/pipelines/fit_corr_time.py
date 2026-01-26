@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit  # noqa: E402
 from simpnmr import utils as ut  # noqa: E402
 from simpnmr.core import main
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS  # noqa: E402
-from simpnmr.core.pipelines.options import FitCorrTimeRunOptions
+from simpnmr.core.pipelines.setup.options import FitCorrTimeRunOptions
 
 # NOTE: The following imports are currently required by the legacy implementation.
 # They should be migrated to dedicated modules
