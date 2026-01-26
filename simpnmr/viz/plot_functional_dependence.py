@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 import simpnmr.core.main as pnmr
-import simpnmr.io.qc.qc_readers as rdrs
+from simpnmr.io.qc import qc_readers as rdrs
 
 
 def load_hyperfine_data(

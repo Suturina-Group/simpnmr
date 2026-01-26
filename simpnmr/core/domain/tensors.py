@@ -11,9 +11,8 @@ import numpy.linalg as la
 import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
-from simpnmr.io.csv import readers
+from simpnmr.io.csv.susceptibility import read_susceptibilities_csv
 from simpnmr.io.qc import qc_readers as rdrs
-from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -550,44 +549,10 @@ class Susceptibility:
             A list of susceptibility tensors.
         """
 
-        data = readers.read_csv_safe(file_name)
-
-        # Forward conversion, A^3 --> Key
-        convs = {
-            "(A^3)": 1.0,
-            "(Å^3 mol^-1)": constants.Avogadro,
-            "(A^3 mol^-1)": constants.Avogadro,
-            "(cm^3)": 1e-24,
-            "(cm^3 mol^-1)": 1e-24 * constants.Avogadro / (4 * np.pi),
+        suscs = {
+            cls(tensor, temperature=t)
+            for tensor, t in read_susceptibilities_csv(file_name)
         }
-
-        # Check names of columns and convert units to angstrom cubed
-        renamer = {}
-        for name in data.keys():
-            for unit in convs.keys():
-                # Apply conversion backwards
-                if unit in name:
-                    data[name] /= convs[unit]
-                    renamer[name] = name.replace(unit, "(Å^3)")
-
-        # Rename column headers to angstrom cubed
-        data.rename(renamer, inplace=True, axis=1)
-
-        # Read susceptibility tensor
-        suscs = [
-            cls(
-                np.array(
-                    [
-                        [row["chi_xx (Å^3)"], row["chi_xy (Å^3)"], row["chi_xz (Å^3)"]],
-                        [row["chi_xy (Å^3)"], row["chi_yy (Å^3)"], row["chi_yz (Å^3)"]],
-                        [row["chi_xz (Å^3)"], row["chi_yz (Å^3)"], row["chi_zz (Å^3)"]],
-                    ]
-                ),
-                temperature=row["Temperature (K)"],
-            )
-            for _, row in data.iterrows()
-        ]
-
         return suscs
 
     @classmethod
@@ -699,36 +664,18 @@ class Susceptibility:
         isosurf *= 1e7
 
         # Write the computed PCS isosurface to a cube file
-        with open(file_name, "w") as f:
-            f.write(f"{comment}\n")
-            f.write("Comment line\n")
-            f.write(
-                "{:d}   {:.6f} {:.6f} {:.6f}\n".format(len(labels), lower, lower, lower)
-            )
-            f.write("{:d}   {:.6f}    0.000000    0.000000\n".format(x.shape[0], step))
-            f.write("{:d}   0.000000    {:.6f}    0.000000\n".format(y.shape[1], step))
-            f.write("{:d}   0.000000    0.000000    {:.6f}\n".format(z.shape[2], step))
+        from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 
-            # Write atomic labels and coordinates
-            for lbl, c in zip(labels, coords):
-                f.write(
-                    "{:d}   0.000000  {:.6f} {:.6f} {:.6f}\n".format(
-                        xyzf.lab_to_num(lbl), *c
-                    )
-                )
-
-            # Write PCS values into the cube file
-            a = 0
-            for i in range(x.shape[0]):
-                for j in range(x.shape[1]):
-                    for k in range(x.shape[2]):
-                        a += 1
-                        f.write("{:.5e} ".format(isosurf[i, j, k]))
-                        if a == 6:
-                            f.write("\n")
-                            a = 0
-                    f.write("\n")
-                    a = 0
+        write_pcs_cube(
+            file_name=file_name,
+            comment=comment,
+            labels=labels,
+            coords_bohr=coords,
+            origin_bohr=(lower, lower, lower),
+            step_bohr=step,
+            grid_shape=x.shape,
+            values=isosurf,
+        )
 
         if verbose:
             logger.info("PCS isosurface written to %s", file_name)

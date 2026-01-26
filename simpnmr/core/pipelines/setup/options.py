@@ -94,7 +94,7 @@ class PlotShiftTdepRunOptions:
 
 
 @dataclass(frozen=True)
-class CalcPCSIsoRunOptions:
+class CalcPcsIsoRunOptions:
     runtime: RuntimeSettings
 
     @classmethod

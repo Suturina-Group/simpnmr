@@ -6,8 +6,8 @@ import numpy as np
 
 from simpnmr.core import main, vis
 from simpnmr.core.pipelines.setup.options import CalcPdipRunOptions
-from simpnmr.io.qc import readers as rdrs
-from simpnmr.io.text import xyz_format as xyzf
+from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 

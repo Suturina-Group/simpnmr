@@ -104,55 +104,12 @@ def read_spectrum(file_name: str):
     return spectrum
 
 
-def assemble_experiments_table(
-    frames: "pd.DataFrame | list[pd.DataFrame] | tuple[pd.DataFrame, ...]",
-) -> pd.DataFrame:
-    """Combine one or more experiment DataFrames into a single normalized table.
+def assemble_experiments_table(frames):
+    """Combine multiple experiment DataFrames into a single normalized table."""
 
-    This is a low-level helper used by higher-level IO adapters. It should not
-    construct domain objects; it only concatenates and normalizes tabular data.
-
-    Args:
-        frames: A single DataFrame or a sequence of DataFrames representing
-            experiment signal tables (optionally with metadata columns already
-            attached).
-
-    Returns:
-        A single DataFrame with concatenated rows, sorted by temperature (then
-        by shift if present) and with a clean, consecutive index.
-
-    Raises:
-        ValueError: If no frames are provided or if required columns are missing.
-    """
-    if frames is None:
+    if not frames:
         raise ValueError("No experiment data frames provided to assemble")
 
-    # Accept a single DataFrame or a sequence.
-    if isinstance(frames, pd.DataFrame):
-        frames_list: list[pd.DataFrame] = [frames]
-    else:
-        frames_list = list(frames)
-
-    if not frames_list:
-        raise ValueError("No experiment data frames provided to assemble")
-
-    data = pd.concat(frames_list, ignore_index=True)
-
-    # Validate minimal required columns for downstream processing.
-    required = {"temperature"}
-    missing = required - set(data.columns)
-    if missing:
-        raise ValueError(
-            f"Experiment table is missing required column(s): {sorted(missing)}"
-        )
-
-    # Coerce temperature to numeric for stable sorting (errors become NaN).
-    data["temperature"] = pd.to_numeric(data["temperature"], errors="coerce")
-
-    sort_cols = ["temperature"]
-    if "shift" in data.columns:
-        sort_cols.append("shift")
-        data["shift"] = pd.to_numeric(data["shift"], errors="coerce")
-
-    data = data.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
+    data = pd.concat(frames, ignore_index=True)
+    data = data.sort_values("temperature")
     return data

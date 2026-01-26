@@ -2,8 +2,8 @@ import os
 
 from simpnmr.core import main
 from simpnmr.core.pipelines.setup.options import CalcPcsIsoRunOptions
-from simpnmr.io.qc import readers as rdrs
-from simpnmr.io.text import xyz_format as xyzf
+from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 
 def run_calc_pcs_iso(
@@ -62,18 +62,26 @@ def run_calc_pcs_iso(
     else:
         raise ValueError(f"Unknown susceptibility format: {susc_format}")
 
-    # Generate PCS isosurfaces
-    for susc in suscs:
-        if susc.temperature not in temperatures:
-            continue
+    matched = [
+        s
+        for s in suscs
+        if round(s.temperature, 2) in {round(t, 2) for t in temperatures}
+    ]
 
-        susc.calc_irred()
-        susc.save_pcs_isosurface(
+    if not matched:
+        raise ValueError(
+            f"No susceptibility tensors matched temperatures {temperatures}. "
+            f"Available: {[s.temperature for s in suscs]}"
+        )
+
+    for s in matched:
+        s.calc_irred()
+        s.save_pcs_isosurface(
             labels,
             coords,
             central_atom,
-            comment=(f"PCS Isosurface from {susc_file} at {susc.temperature:.2f} K"),
-            file_name=f"pcs_isosurface_{susc.temperature:.2f}_K.cube",
+            comment=f"PCS Isosurface from {susc_file} at {s.temperature:.2f} K",
+            file_name=f"pcs_isosurface_{s.temperature:.2f}_K.cube",
         )
 
     return 0

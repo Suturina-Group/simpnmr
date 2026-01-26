@@ -2,7 +2,7 @@ import os
 
 from simpnmr.core import main
 from simpnmr.core.pipelines.setup.options import ExtractHFCRunOptions
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import qc_readers as rdrs
 
 
 def run_extract_hfc(
