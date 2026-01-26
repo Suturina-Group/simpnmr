@@ -3,17 +3,11 @@
 
 """TODO"""
 
-import datetime
 import logging
 from itertools import chain, permutations, product
 
 import numpy as np
 from numpy.typing import ArrayLike
-
-from simpnmr import utils as ut
-from simpnmr.__version__ import __version__
-from simpnmr.io.csv import readers
-from simpnmr.mappers import dataframes as ser
 
 logger = logging.getLogger(__name__)
 
@@ -171,122 +165,10 @@ class Experiment:
 
     @classmethod
     def from_file(cls, file_names: str | list[str]) -> list["Experiment"]:
-        """Creates experiments from one or more assignment CSV files.
+        """Backward-compatible wrapper for CSV IO."""
+        from simpnmr.io.csv.experiment import load_experiments_from_csv
 
-        Each file is expected to contain signal assignments and parameters
-        (shift, width, area, etc.). Additional metadata (temperature, field,
-        isotope) is read via ``experiment.read_exp_metadata``.
-
-        Args:
-            file_names: Path to a CSV file or a list of CSV files.
-
-        Returns:
-            A list of `Experiment` objects (one per input file).
-
-        Raises:
-            ValueError: If `file_names` is an empty string or an empty list.
-        """
-
-        if not len(file_names):
-            raise ValueError("No files provided")
-
-        if isinstance(file_names, str):
-            file_names = [file_names]
-
-        # Standardise column names
-        name_convertor = {
-            "shifts": "shift",
-            "shifts (ppm)": "shift",
-            "shift (ppm)": "shift",
-            "ppm": "shift",
-            "assignment": "assignment",
-            "assignments": "assignment",
-            "assignments ()": "assignment",
-            "assignment ()": "assignment",
-            "widths": "width",
-            "width ()": "width",
-            "width(Hz)": "width",
-            "width (Hz)": "width",
-            "widths ()": "width",
-            "areas": "area",
-            "area ()": "area",
-            "areas ()": "area",
-            "integral": "area",
-            "integral ()": "area",
-            "integrals ()": "area",
-            "L/G ()": "L/G",
-            "r1": "R1",
-            "r1 (s^-1)": "R1",
-            "R1 (s^-1)": "R1",
-            "1/T1": "R1",
-            "1/T1 (s^-1)": "R1",
-        }
-        others = {}
-        for key, val in name_convertor.items():
-            others[key.capitalize()] = val
-            others[val.capitalize()] = val
-        name_convertor.update(others)
-
-        # Read each file
-        final = []
-        for file_name in file_names:
-            _data = readers.read_csv_safe(file_name)
-            _data.rename(columns=name_convertor, inplace=True)
-            _temperature, _magnetic_field, _isotope = readers.read_exp_metadata(
-                file_name
-            )
-            _data["temperature"] = _temperature
-            _data["magnetic_field"] = _magnetic_field
-            _data["isotope"] = _isotope
-            final.append(_data)
-
-        # Assemble and normalize experiment table
-        data = readers.assemble_experiments_table(final)
-
-        # Add linewidth ratio if missing
-        if "L/G" not in data.columns:
-            data["L/G"] = 1.0
-
-        # Split by mean temperature
-        split_indices = ut.find_mean_values(data["temperature"], thresh=0.1)
-
-        if len(split_indices):
-            split_indices = [0] + split_indices
-            split_indices.append(len(data))
-            _exp = [
-                data.iloc[split_indices[n] : split_indices[n + 1]]
-                for n in range(len(split_indices) - 1)
-            ]
-        else:
-            _exp = [data]
-
-        # Then sort by shift
-        for _e in _exp:
-            _e.sort_values("shift")
-            _e.reset_index(inplace=True)
-
-        # and create experiments
-        experiments = [
-            cls(
-                _e["temperature"][0],
-                _e["magnetic_field"][0],
-                _e["isotope"][0],
-                [
-                    Signal(
-                        signal["shift"],
-                        signal["width"],
-                        signal["area"],
-                        signal["assignment"],
-                        l_to_g=signal["L/G"],
-                        r1=signal.get("R1", None),
-                    )
-                    for _, signal in _e.iterrows()
-                ],
-            )
-            for _e in _exp
-        ]
-
-        return experiments
+        return load_experiments_from_csv(file_names)
 
     def to_csv(
         self,
@@ -295,40 +177,16 @@ class Experiment:
         comment: str = "",
         verbose: bool = True,
     ) -> None:
-        """Writes the experiment (assigned signals) to a CSV file.
+        """Backward-compatible wrapper for CSV IO."""
+        from simpnmr.io.csv.experiment import write_experiment_to_csv
 
-        Args:
-            file_name: Output file path.
-            delimiter: CSV delimiter.
-            comment: Optional additional comment line to append.
-            verbose: If ``True``, prints the output file path.
-
-        Returns:
-            None.
-        """
-
-        df = ser.build_experiment_signals_df(self)
-
-        _comment = (
-            f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
-                datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")
-            )
+        write_experiment_to_csv(
+            self,
+            file_name,
+            delimiter=delimiter,
+            comment=comment,
+            verbose=verbose,
         )
-        _comment += f"#temperature = {self.temperature:.3f}\n"
-        _comment += f"#magnetic_field = {self.magnetic_field:.3f}\n"
-        _comment += f"#isotope = {self.isotope}\n"
-
-        _comment += comment + "\n"
-
-        with open(file_name, "w") as _f:
-            _f.write(_comment)
-
-            df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
-
-        if verbose:
-            logger.info("Assigned experiment saved to %s", file_name)
-
-        return
 
     @classmethod
     def generate_permutations(
