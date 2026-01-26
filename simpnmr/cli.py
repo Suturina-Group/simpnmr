@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 
+from simpnmr import __version__
 from simpnmr.config import config as cfg
 from simpnmr.core.pipelines.setup.options import RuntimeSettings
 from simpnmr.core.pipelines.setup.settings import apply_runtime_settings
@@ -223,6 +224,12 @@ def read_args(arg_list=None):
         "--quiet",
         action="store_true",
         help="Show only errors",
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"simpnmr {__version__}",
     )
 
     parser._positionals.title = "Subprograms"

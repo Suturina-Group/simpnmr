@@ -31,6 +31,11 @@ setuptools.setup(
         "pyyaml-include",
         "adjustText",
     ],
+    extras_require={
+        "dev": [
+            "pytest>=8.0",
+        ]
+    },
     entry_points={
         "console_scripts": [
             "simpnmr = simpnmr.cli:interface",
