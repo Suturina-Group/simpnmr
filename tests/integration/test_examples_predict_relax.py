@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.integration
 def test_examples_predict_relax():
     cwd = Path("examples/prediction/predict_relax")
     cmd = ["simpnmr", "predict", "input.yml"]
