@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr import utils as ut
+from simpnmr.app.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Susceptibility
-from simpnmr.core.pipelines.setup.options import PredictRunOptions
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io import writers
 from simpnmr.io.csv import readers

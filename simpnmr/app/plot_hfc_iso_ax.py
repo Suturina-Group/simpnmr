@@ -3,9 +3,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.app.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.pipelines.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis

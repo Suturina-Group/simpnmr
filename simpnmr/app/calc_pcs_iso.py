@@ -1,7 +1,7 @@
 import os
 
+from simpnmr.app.setup.options import CalcPcsIsoRunOptions
 from simpnmr.core.domain.tensors import Susceptibility
-from simpnmr.core.pipelines.setup.options import CalcPcsIsoRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 

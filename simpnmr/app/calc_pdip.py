@@ -4,8 +4,8 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.app.setup.options import CalcPdipRunOptions
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.pipelines.setup.options import CalcPdipRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise

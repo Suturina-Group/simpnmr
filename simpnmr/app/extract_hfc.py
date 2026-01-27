@@ -1,7 +1,7 @@
 import os
 
+from simpnmr.app.setup.options import ExtractHFCRunOptions
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.pipelines.setup.options import ExtractHFCRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 
 

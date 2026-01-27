@@ -12,9 +12,9 @@ import logging
 import sys
 
 from simpnmr import __version__
+from simpnmr.app.setup.options import RuntimeSettings
+from simpnmr.app.setup.settings import apply_runtime_settings
 from simpnmr.config import config as cfg
-from simpnmr.core.pipelines.setup.options import RuntimeSettings
-from simpnmr.core.pipelines.setup.settings import apply_runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +55,8 @@ def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
 def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the predict pipeline."""
 
-    from simpnmr.core.pipelines.predict import run_predict
-    from simpnmr.core.pipelines.setup.options import PredictRunOptions
+    from simpnmr.app.predict import run_predict
+    from simpnmr.app.setup.options import PredictRunOptions
 
     config = cfg.PredictConfig.from_file(uargs.input_file)
     options = PredictRunOptions.from_namespace(uargs)
@@ -67,8 +67,8 @@ def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the fit_susc pipeline."""
 
-    from simpnmr.core.pipelines.fit_susc import run_fit_susc
-    from simpnmr.core.pipelines.setup.options import FitSuscRunOptions
+    from simpnmr.app.fit_susc import run_fit_susc
+    from simpnmr.app.setup.options import FitSuscRunOptions
 
     config = cfg.FitSuscConfig.from_file(uargs.input_file)
     options = FitSuscRunOptions.from_namespace(uargs)
@@ -79,8 +79,8 @@ def fit_susc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def fit_corr_time_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for the fit_corr_time pipeline."""
 
-    from simpnmr.core.pipelines.fit_corr_time import run_fit_corr_time
-    from simpnmr.core.pipelines.setup.options import FitCorrTimeRunOptions
+    from simpnmr.app.fit_corr_time import run_fit_corr_time
+    from simpnmr.app.setup.options import FitCorrTimeRunOptions
 
     config = cfg.FitCorrTimeConfig.from_file(uargs.input_file)
     options = FitCorrTimeRunOptions.from_namespace(uargs)
@@ -91,8 +91,8 @@ def fit_corr_time_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> in
 def plot_hfc_iso_ax_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for plot_hfc_iso_ax pipeline."""
 
-    from simpnmr.core.pipelines.plot_hfc_iso_ax import run_plot_hfc_iso_ax
-    from simpnmr.core.pipelines.setup.options import PlotHFCIsoAxRunOptions
+    from simpnmr.app.plot_hfc_iso_ax import run_plot_hfc_iso_ax
+    from simpnmr.app.setup.options import PlotHFCIsoAxRunOptions
 
     config = cfg.PlotHFCConfig.from_file(uargs.input_file)
     options = PlotHFCIsoAxRunOptions.from_namespace(uargs)
@@ -103,8 +103,8 @@ def plot_hfc_iso_ax_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> 
 def plot_shift_tdep_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for plot_shift_tdep pipeline."""
 
-    from simpnmr.core.pipelines.plot_shift_tdep import run_plot_shift_tdep
-    from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
+    from simpnmr.app.plot_shift_tdep import run_plot_shift_tdep
+    from simpnmr.app.setup.options import PlotShiftTdepRunOptions
 
     options = PlotShiftTdepRunOptions.from_namespace(uargs)
 
@@ -114,8 +114,8 @@ def plot_shift_tdep_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> 
 def calc_pcs_iso_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for calc_pcs_iso pipeline."""
 
-    from simpnmr.core.pipelines.calc_pcs_iso import run_calc_pcs_iso
-    from simpnmr.core.pipelines.setup.options import CalcPcsIsoRunOptions
+    from simpnmr.app.calc_pcs_iso import run_calc_pcs_iso
+    from simpnmr.app.setup.options import CalcPcsIsoRunOptions
 
     options = CalcPcsIsoRunOptions.from_namespace(uargs)
 
@@ -132,8 +132,8 @@ def calc_pcs_iso_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int
 def calc_pdip_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for calc_pdip pipeline."""
 
-    from simpnmr.core.pipelines.calc_pdip import run_calc_pdip
-    from simpnmr.core.pipelines.setup.options import CalcPdipRunOptions
+    from simpnmr.app.calc_pdip import run_calc_pdip
+    from simpnmr.app.setup.options import CalcPdipRunOptions
 
     options = CalcPdipRunOptions.from_namespace(uargs)
 
@@ -150,8 +150,8 @@ def calc_pdip_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def extract_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for extract_hfc pipeline."""
 
-    from simpnmr.core.pipelines.extract_hfc import run_extract_hfc
-    from simpnmr.core.pipelines.setup.options import ExtractHFCRunOptions
+    from simpnmr.app.extract_hfc import run_extract_hfc
+    from simpnmr.app.setup.options import ExtractHFCRunOptions
 
     options = ExtractHFCRunOptions.from_namespace(uargs)
 
@@ -161,8 +161,8 @@ def extract_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def plot_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for plot_hfc pipeline."""
 
-    from simpnmr.core.pipelines.plot_hfc import run_plot_hfc
-    from simpnmr.core.pipelines.setup.options import PlotHFCRunOptions
+    from simpnmr.app.plot_hfc import run_plot_hfc
+    from simpnmr.app.setup.options import PlotHFCRunOptions
 
     options = PlotHFCRunOptions.from_namespace(uargs)
 
@@ -178,8 +178,8 @@ def plot_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 def extract_dia_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for extract_dia pipeline."""
 
-    from simpnmr.core.pipelines.extract_diamagnetic import run_extract_dia
-    from simpnmr.core.pipelines.setup.options import ExtractDiaRunOptions
+    from simpnmr.app.extract_diamagnetic import run_extract_dia
+    from simpnmr.app.setup.options import ExtractDiaRunOptions
 
     options = ExtractDiaRunOptions.from_namespace(uargs)
 

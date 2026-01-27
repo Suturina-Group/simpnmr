@@ -2,8 +2,8 @@ import os
 
 import matplotlib.pyplot as plt
 
+from simpnmr.app.setup.options import PlotHFCRunOptions
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.pipelines.setup.options import PlotHFCRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.viz import visualise as vis
 

@@ -1,5 +1,5 @@
+from simpnmr.app.setup.options import PlotShiftTdepRunOptions
 from simpnmr.core.domain.experiment import Experiment
-from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
 from simpnmr.viz import visualise as vis
 
 
