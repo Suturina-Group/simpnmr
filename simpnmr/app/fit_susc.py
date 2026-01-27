@@ -436,6 +436,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             susc_models=susc_models,
             plot_mode=options.isoaxrho_plots,
             plot_format=plot_format,
+            susc_units=options.susc_units,
         )
 
     vis.plot_pred_spectrum(
@@ -460,6 +461,7 @@ def _fit_isoaxrho_vt(
     susc_models,
     plot_mode: pl.PlotMode,
     plot_format: str,
+    susc_units: str,
 ) -> None:
     # Define the components to fit
     fit_component = ["iso", "ax", "rho"]
@@ -604,21 +606,32 @@ def _fit_isoaxrho_vt(
         chiT_err_reduced[comp] = errs
         chiT_fit_params[comp] = params
 
+    # Precompute inverse temperature for plotting
+    inv_temps_fit = 1.0 / temps_fit
+
+    # Write iso/ax/rho fit parameters to CSV
+    out_file = os.path.join(config.project_name, "isoaxrho_fit.csv")
+    fits_list = [
+        chiT_fit_params.get("iso"),
+        chiT_fit_params.get("ax"),
+        chiT_fit_params.get("rho"),
+    ]
+    writers.save_slope_intercept(fits_list, out_file)
+
     # Plot chiT temperature dependence
     vis.plot_isoaxrho(
         vals=chiT_reduced,
         errs=chiT_err_reduced,
         params=chiT_fit_params,
-        temperatures=temps_fit,
+        inv_t=inv_temps_fit,
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
-        y_label=r"$\chi T$",
+        y_label=r"$\chi T^{\mathrm{red}}$",
         save_name=os.path.join(
             config.project_name, f"susceptibility_components_chiT{plot_format}"
         ),
         window_title="ChiT Susceptibility components",
         verbose=True,
-        out_file=os.path.join(config.project_name, "isoaxrho_fit.csv"),
     )
 
     # Plot chi temperature dependence
@@ -626,16 +639,15 @@ def _fit_isoaxrho_vt(
         vals=chi_vals,
         errs=chi_errors,
         params=None,
-        temperatures=temps_fit,
+        inv_t=inv_temps_fit,
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
-        y_label=r"$\chi$",
+        y_label=rf"$\chi\;\mathrm{{{susc_units}}}$",
         save_name=os.path.join(
             config.project_name, f"susceptibility_components_chi{plot_format}"
         ),
         window_title="Susceptibility components",
         verbose=True,
-        out_file=None,
     )
 
     return

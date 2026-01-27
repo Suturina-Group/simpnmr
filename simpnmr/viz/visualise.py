@@ -20,7 +20,6 @@ from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule, Nucleus
 from simpnmr.core.fitting import models
-from simpnmr.io import writers
 from simpnmr.mappers import label_format as lf
 
 logger = logging.getLogger(__name__)
@@ -696,7 +695,6 @@ def plot_shift_spread(
             color="k",
             lw=0,
             marker="o",
-            fillstyle="none",
             markersize=7,
         )
         legend_markers = [
@@ -813,6 +811,10 @@ def plot_shift_spread(
     fig.subplots_adjust(right=0.950)
 
     if save:
+        out_dir = os.path.dirname(save_name)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
         fig.savefig(save_name, dpi=400)
         if verbose:
             logger.info("Shift spread plot saved to %s", save_name)
@@ -1165,128 +1167,187 @@ def plot_isoaxrho(
     vals: dict,
     errs: dict,
     params: dict | None,
-    temperatures: np.ndarray,
+    inv_t: np.ndarray,
     show: bool = True,
     save: bool = True,
     y_label: str = "ChiT",
-    save_name: str = "iso_ax_rho_tdep.png",
+    save_name: str = "susceptibility_components.pdf",
     window_title: str = "Isotropic, Axial, and Rhombic susceptibilities",
     verbose: bool = True,
-    out_file: str = "isoaxrho_fit.csv",
-) -> tuple[plt.Figure, tuple[plt.Axes]]:
-    """Plots temperature dependence of isotropic/axial/rhombic susceptibility.
+) -> None:
+    """Plots iso/ax/rho susceptibility components vs x-values.
 
-    The function supports plotting either ``chi*T`` or ``chi`` versus temperature.
+    Notes:
+        - This function is intentionally "dumb": it only visualizes arrays that are
+          passed in and does not evaluate fit models.
+        - `temperatures` are treated as x-values. In the current pipeline they are
+          expected to be inverse temperatures (1/T) prepared upstream.
+        - If `params` are provided, the function will only plot fit curves/bands if
+          precomputed arrays are present under:
+              params[component]["fit_y"]
+              params[component]["fit_y_low"]
+              params[component]["fit_y_high"]
     """
+    # Early guard clause for empty vals
+    if not vals:
+        raise ValueError("plot_isoaxrho: no components provided in `vals`")
 
-    def plot_component(
-        vals: np.ndarray,
-        errs: np.ndarray,
-        params: dict | None,
-        temperatures: np.ndarray,
-        y_label: str,
-        ax: plt.Axes,
-        bax: plt.Axes,
-        name: str,
-    ):
-        # Plot experimental chiT values with error bars
-        ax.errorbar(
-            temperatures,
-            vals,
-            yerr=errs,
-            lw=0,
-            elinewidth=1.5,
-            fillstyle="none",
-            color="black",
-            capsize=1.5,
-            marker="x",
-            ms=5,
+    for component in vals.keys():
+        p = None if params is None else params.get(component)
+
+        fig, ax = plt.subplots(
+            1,
+            1,
+            figsize=(7.0, 5.0),
+            num=f"{window_title} — {component}",
         )
 
-        ax.set_xlabel(r"$T$ / K")
-        ax.set_ylabel(f"{y_label} {name}")
+        # Experimental values with error bars (markers only)
+        ax.errorbar(
+            inv_t,
+            vals[component],
+            yerr=errs[component],
+            lw=0,
+            elinewidth=1.5,
+            color="black",
+            capsize=1.5,
+            marker="o",
+            ms=5,
+            label="SimpNMR Fit",
+        )
 
-        ax.spines[["right", "top"]].set_visible(False)
+        # Optional: precomputed fit curve + precomputed uncertainty band
+        caption_lines = []
+        if p is not None:
+            fit_y = p.get("fit_y")
+            fit_y_low = p.get("fit_y_low")
+            fit_y_high = p.get("fit_y_high")
 
-        if params is not None:
-            ax.plot(
-                temperatures,
-                params["intercept"]
-                + params["slope"] / temperatures
-                + params["tip"] * temperatures,
-            )
-            # Build annotation string with fitted parameters and uncertainties
-            annotation = (
-                rf"$Intercept = {params['intercept']:.1f} "
-                rf"\pm {params['intercept_err']:.1f}$"
-                + "\n"
-                + rf"$Slope = {params['slope']:.1f} "
-                rf"\pm {params['slope_err']:.1f}$"
-            )
+            if fit_y is not None:
+                ax.plot(
+                    inv_t,
+                    fit_y,
+                    linestyle="-",
+                    linewidth=1.5,
+                    color="black",
+                    label="Slope/Intercept Fit",
+                )
 
-            _adj_r2 = params.get("adj_r2")
+            if fit_y_low is not None and fit_y_high is not None:
+                ax.fill_between(
+                    inv_t,
+                    fit_y_low,
+                    fit_y_high,
+                    alpha=0.15,
+                    linewidth=0,
+                )
+
+            # Caption panel: only display values already present in params
+            _adj_r2 = p.get("adj_r2")
             if _adj_r2 is None or np.isnan(_adj_r2):
                 _adj_r2_txt = "N/A"
             else:
                 _adj_r2_txt = f"{_adj_r2:.3f}"
 
-            # Display adj_r2 and fit parameters in the bottom annotation panel
-            bax.annotate(
-                text=rf"$r^2_\mathregular{{adj}} = {_adj_r2_txt}$" + "\n" + annotation,
-                xy=(0.1, 0.5),
+            caption_lines = [rf"$R^2_\mathregular{{adj.}} = {_adj_r2_txt}$"]
+
+            if "intercept" in p and "intercept_err" in p:
+                caption_lines.append(
+                    rf"$Intercept = {p['intercept']:.1f} \pm {p['intercept_err']:.1f}$"
+                )
+            elif "intercept" in p:
+                caption_lines.append(rf"$Intercept = {p['intercept']:.1f}$")
+
+            if "slope" in p and "slope_err" in p:
+                caption_lines.append(
+                    rf"$Slope = {p['slope']:.1f} \pm {p['slope_err']:.1f}$"
+                )
+            elif "slope" in p:
+                caption_lines.append(rf"$Slope = {p['slope']:.1f}$")
+
+            if "tip" in p:
+                caption_lines.append(rf"$TIP = {p['tip']:.3g}$")
+
+        y_min, y_max = ax.get_ylim()
+        y_range = y_max - y_min
+        if np.isfinite(y_range) and y_range > 0:
+            y_pad_frac = 0.20
+            pad = y_pad_frac * y_range
+            ax.set_ylim(y_min - pad, y_max + pad)
+
+        # Move the caption annotation inside the main axis
+        if caption_lines:
+            y_box = 0.03
+            va = "bottom"
+
+            ax.annotate(
+                " ".join(str(s) for s in caption_lines if s),
+                xy=(0.97, y_box),
                 xycoords="axes fraction",
+                ha="right",
+                va=va,
+                fontsize=10,
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    fc="white",
+                    ec="black",
+                    lw=1.0,
+                ),
             )
 
-        # Add minor ticks
+        # Axis labels/styling
+        ax.set_xlabel(r"$1/T$ K$^{-1}$", fontsize=14)
+        ax.set_ylabel(f"{y_label} {component}", fontsize=14)
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-        # Remove all bottom plot features to give an effective text box
-        bax.spines[["right", "top", "left", "bottom"]].set_visible(False)
-        bax.xaxis.set_ticks([])
-        bax.yaxis.set_ticks([])
+        # Secondary top axis for T(K): uses axis transform only
+        def _inv_to_t(inv: float | np.ndarray) -> float | np.ndarray:
+            inv_arr = np.asarray(inv, dtype=float)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                out = 1.0 / inv_arr
+            return out
 
-        if params is None:
-            return 0, 0
-        return params["intercept"], params["slope"]
+        def _t_to_inv(t: float | np.ndarray) -> float | np.ndarray:
+            t_arr = np.asarray(t, dtype=float)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                out = 1.0 / t_arr
+            return out
 
-    fig, ax = plt.subplots(
-        2,
-        3,
-        figsize=[10, 3.5],
-        num=window_title,
-        gridspec_kw={"height_ratios": [10, 1]},
-    )
+        top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
+        top_ax.set_xlabel(r"$T$ K", fontsize=14)
+        top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-    # Loop over susceptibility components (iso, ax, rho) and populate columns
-    for col, component in enumerate(vals.keys()):
-        p = None if params is None else params.get(component)
-        plot_component(
-            vals=vals[component],
-            errs=errs[component],
-            params=p,
-            temperatures=temperatures,
-            y_label=y_label,
-            ax=ax[0, col],
-            bax=ax[1, col],
-            name=component,
+        # Legend styling (white background + black border)
+        leg = ax.legend(
+            loc="upper left",
+            ncol=2,
+            frameon=True,
+            fancybox=True,
+            framealpha=1.0,
+            fontsize="10",
+            columnspacing=1.2,
+            handletextpad=0.6,
+            borderpad=0.6,
         )
+        leg.get_frame().set_facecolor("white")
+        leg.get_frame().set_edgecolor("black")
+        leg.get_frame().set_linewidth(1.0)
 
-    fig.tight_layout()
+        ax.tick_params(axis="both", labelsize=12)
+        top_ax.tick_params(axis="x", labelsize=12)
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("%s vs T plots saved to %s", y_label, save_name)
-    if show:
-        plt.show()
+        fig.tight_layout()
 
-    # Save fitted intercept and slope values to a CSV file if requested
-    if params is not None and out_file is not None:
-        fits_list = [params.get("iso"), params.get("ax"), params.get("rho")]
-        writers.save_slope_intercept(fits_list, out_file)
+        if save:
+            root, _ = os.path.splitext(save_name)
+            comp_save_name = f"{root}_{component}{'.pdf'}"
+            fig.savefig(comp_save_name)
+            if verbose:
+                logger.info("Temperature dependence plot saved to %s", comp_save_name)
 
-    return fig, ax
+        if show:
+            plt.show()
 
 
 def plot_hyperfine_iso_vs_ax(

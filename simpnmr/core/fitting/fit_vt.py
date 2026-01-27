@@ -19,6 +19,10 @@ The main outputs of the fitting workflow are
     - chiT_reduced
     - chi_errT_reduced
     - fit_results containing intercept, slope, their uncertainties, and adj_r2
+
+The fit_results dict may also include precomputed plotting arrays:
+    `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
+    for downstream visualization.
 """
 
 import numpy as np
@@ -36,7 +40,7 @@ def fit_chit_linear_model(
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
     susc_vt_variables: dict,
-) -> tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Fit a linear chiT(T) = A + B / T + tip * T model to
     Curie-normalised susceptibility data
@@ -54,17 +58,22 @@ def fit_chit_linear_model(
             provided as `["fit", <guess>]` or `["fix", <value>]`.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+        tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
             - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless).
             - chi_errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`.
-            - fit_results (dict[str, float | None]): Fit parameters and statistics.
+            - fit_results (dict[str, float | None | np.ndarray]):
+            Fit parameters and statistics.
               Includes `intercept`, `slope`, optional `tip`, and their uncertainties,
               along with `adj_r2`.
+              The dict may also include precomputed plotting arrays:
+              `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
+              for downstream visualization.
     """
 
     def _model(T, A, B, tip):
         # TIP contributes a temperature-independent term in chi(T), which becomes
         # a linear-in-T term in chiT(T).
+
         # x = 1 / T
         # return A * x + B + tip * 1 / x
         return A + B / T + tip * T
@@ -125,6 +134,7 @@ def fit_chit_linear_model(
         for name, val in zip(fit_param_names, theta, strict=False):
             params[name] = float(val)
         # return _model(T, params["slope"], params["intercept"], params["tip"])
+
         return _model(T, params["intercept"], params["slope"], params["tip"])
 
     # Compute chiT values and chiT errors at the given temperatures
@@ -137,7 +147,7 @@ def fit_chit_linear_model(
 
     # Detect the degenerate case of identically zero chiT
     if np.allclose(chiT_reduced, 0.0):
-        fit_results: dict[str, float | None] = {
+        fit_results: dict[str, float | None | np.ndarray] = {
             "intercept": 0.0,
             "slope": 0.0,
             "tip": 0.0,
@@ -145,6 +155,9 @@ def fit_chit_linear_model(
             "slope_err": 0.0,
             "tip_err": 0.0,
             "adj_r2": None,
+            "fit_y": chiT_reduced.copy(),
+            "fit_y_low": None,
+            "fit_y_high": None,
         }
 
         return chiT_reduced, chi_errT_reduced, fit_results
@@ -170,7 +183,7 @@ def fit_chit_linear_model(
                 len(chiT_reduced) - 2 - 1
             )
 
-        fit_results: dict[str, float | None] = {
+        fit_results: dict[str, float | None | np.ndarray] = {
             "intercept": float(fixed_intercept),
             "slope": float(fixed_slope),
             "tip": float(fixed_tip if fixed_tip is not None else 0.0),
@@ -178,6 +191,9 @@ def fit_chit_linear_model(
             "slope_err": 0.0,
             "tip_err": 0.0,
             "adj_r2": (None if adj_r2 is None else float(adj_r2)),
+            "fit_y": np.asarray(yhat, dtype=float),
+            "fit_y_low": None,
+            "fit_y_high": None,
         }
 
         return chiT_reduced, chi_errT_reduced, fit_results
@@ -200,6 +216,36 @@ def fit_chit_linear_model(
     }
     for name, val in zip(fit_param_names, popt, strict=False):
         params[name] = float(val)
+
+    # Precompute fit curve and 1-sigma band for downstream visualization.
+    fit_y = np.asarray(
+        _model(fit_temps, params["intercept"], params["slope"], params["tip"]),
+        dtype=float,
+    )
+
+    # Build a full 3x3 covariance matrix in (intercept, slope, tip) order.
+    pcov_full = np.zeros((3, 3), dtype=float)
+    name_to_idx = {"intercept": 0, "slope": 1, "tip": 2}
+    for i_name, i in name_to_idx.items():
+        if i_name not in fit_param_names:
+            continue
+        ii = fit_param_names.index(i_name)
+        for j_name, j in name_to_idx.items():
+            if j_name not in fit_param_names:
+                continue
+            jj = fit_param_names.index(j_name)
+            pcov_full[i, j] = float(pcov[ii, jj])
+
+    # Jacobian of y wrt (intercept, slope, tip): [1, 1/T, T]
+    T = np.asarray(fit_temps, dtype=float)
+    J = np.column_stack([np.ones_like(T), 1.0 / T, T])  # shape (n, 3)
+
+    # Var(y) ≈ J * pcov_full * J^T (parameter uncertainty only)
+    var_y = np.einsum("ni,ij,nj->n", J, pcov_full, J)
+    std_y = np.sqrt(np.maximum(var_y, 0.0))
+
+    fit_y_low = fit_y - std_y
+    fit_y_high = fit_y + std_y
 
     # R^2 metrics (guard against zero variance)
     yhat = _model(fit_temps, params["intercept"], params["slope"], params["tip"])
@@ -227,7 +273,7 @@ def fit_chit_linear_model(
         float(perr[fit_param_names.index("tip")]) if "tip" in fit_param_names else 0.0
     )
 
-    fit_results: dict[str, float | None] = {
+    fit_results: dict[str, float | None | np.ndarray] = {
         "intercept": float(params["intercept"]),
         "slope": float(params["slope"]),
         "tip": float(params["tip"]),
@@ -235,6 +281,9 @@ def fit_chit_linear_model(
         "slope_err": slope_err,
         "tip_err": tip_err,
         "adj_r2": (None if adj_r2 is None else float(adj_r2)),
+        "fit_y": fit_y,
+        "fit_y_low": fit_y_low,
+        "fit_y_high": fit_y_high,
     }
 
     return chiT_reduced, chi_errT_reduced, fit_results
@@ -245,7 +294,7 @@ def compute_chit_high_t_limit(
     fit_temps: np.ndarray,
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Evaluate the high-temperature chiT limit assuming a zero slope
 
@@ -260,12 +309,15 @@ def compute_chit_high_t_limit(
         of the same shape
 
     Returns:
-        tuple[np.ndarray, np.ndarray, dict[str, float | None]]:
+        tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
             - chiT_reduced (np.ndarray): Curie-normalised chiT values (dimensionless)
             - errT_reduced (np.ndarray): Uncertainties for `chiT_reduced`
-            - fit_results (dict[str, float | None]): Fit parameters for the
+            - fit_results (dict[str, float | None | np.ndarray]): Fit parameters for the
             fixed-slope branch (intercept from max(T) point,
             slope=0, tip=0, uncertainties, adj_r2=1)
+            The dict may also include precomputed plotting arrays:
+            `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
+            for downstream visualization.
     """
     norm_factor = compute_curie_prefactor(spin)
 
@@ -279,7 +331,7 @@ def compute_chit_high_t_limit(
 
     intercept = float(chiT_reduced[idx])
 
-    fit_results: dict[str, float | None] = {
+    fit_results: dict[str, float | None | np.ndarray] = {
         "intercept": intercept,
         "slope": 0.0,
         "tip": 0.0,
@@ -287,6 +339,9 @@ def compute_chit_high_t_limit(
         "slope_err": 0.0,
         "tip_err": 0.0,
         "adj_r2": 1.0,
+        "fit_y": np.asarray(chiT_reduced, dtype=float),
+        "fit_y_low": None,
+        "fit_y_high": None,
     }
 
     return chiT_reduced, errT_reduced, fit_results
