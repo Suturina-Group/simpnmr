@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr.config import config as cfg
-from simpnmr.core import main
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.pipelines.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
@@ -35,7 +35,7 @@ def run_plot_hfc_iso_ax(
                 delimiter=options.runtime.csv_delimiter,
                 comment=f"# Data taken from file {hf_file}",
             )
-            base_molecule = main.Molecule.from_QCA(
+            base_molecule = Molecule.from_QCA(
                 qc_hyperfine_data,
                 converter="MHz_to_Ang-3",
                 elements=config.nuclei_include,
@@ -51,7 +51,7 @@ def run_plot_hfc_iso_ax(
             else:
                 raise ValueError(f"Unsupported hyperfine file format: {ext}")
 
-            base_molecule = main.Molecule.from_labels_coords(
+            base_molecule = Molecule.from_labels_coords(
                 labels, coords, elements=config.nuclei_include
             )
             base_molecule.calc_pdip(config.hyperfine_pdip_centres)

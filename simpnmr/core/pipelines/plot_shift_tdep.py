@@ -1,4 +1,4 @@
-from simpnmr.core import main
+from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.pipelines.setup.options import PlotShiftTdepRunOptions
 from simpnmr.viz import visualise as vis
 
@@ -7,7 +7,7 @@ def run_plot_shift_tdep(
     experiment_files: list[str],
     options: PlotShiftTdepRunOptions,
 ) -> int:
-    experiments = main.Experiment.from_file(experiment_files)
+    experiments = Experiment.from_file(experiment_files)
 
     vis.plot_shift_tdep(
         experiments,

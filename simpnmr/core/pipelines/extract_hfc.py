@@ -1,6 +1,6 @@
 import os
 
-from simpnmr.core import main
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.pipelines.setup.options import ExtractHFCRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 
@@ -23,7 +23,7 @@ def run_extract_hfc(
     calc_data = rdrs.QCA.guess_from_file(calculation_data)
 
     # Create molecule object and convert units
-    molecule = main.Molecule.from_QCA(
+    molecule = Molecule.from_QCA(
         calc_data,
         converter="MHz_to_Ang-3",
     )

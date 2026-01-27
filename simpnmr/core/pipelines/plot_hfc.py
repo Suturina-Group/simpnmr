@@ -2,7 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 
-from simpnmr.core import main
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.pipelines.setup.options import PlotHFCRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.viz import visualise as vis
@@ -19,7 +19,7 @@ def run_plot_hfc(
 
     calc_data = rdrs.QCA.guess_from_file(calculation_data)
 
-    molecule = main.Molecule.from_QCA(
+    molecule = Molecule.from_QCA(
         calc_data,
         converter="MHz_to_Ang-3",
         elements=elements,

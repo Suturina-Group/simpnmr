@@ -9,8 +9,9 @@ from matplotlib import pyplot as plt  # noqa: E402
 from scipy.optimize import curve_fit  # noqa: E402
 
 from simpnmr import utils as ut  # noqa: E402
-from simpnmr.core import main
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS  # noqa: E402
+from simpnmr.core.domain.experiment import Experiment
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.pipelines.setup.options import FitCorrTimeRunOptions
 
 # NOTE: The following imports are currently required by the legacy implementation.
@@ -91,7 +92,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
         getattr(config, "fit_corr_time_tau_R", None) is not None
         and getattr(config, "relaxation_model", None) is not None
     ):
-        experiments = main.Experiment.from_file(config.experiment_files)
+        experiments = Experiment.from_file(config.experiment_files)
 
         # Filter signals to only those with valid R1 values
         # Only include signals for specified elements (e.g., 'C')
@@ -135,7 +136,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                 delimiter=CSV_DELIMITER,
                 comment=f"# Data taken from file {config.hyperfine_file}",
             )
-            base_molecule = main.Molecule.from_QCA(
+            base_molecule = Molecule.from_QCA(
                 qc_hyperfine_data,
                 converter="MHz_to_Ang-3",
                 elements=config.nuclei_include,
@@ -152,12 +153,12 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                     "Specified hyperfine file format "
                     f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
                 )
-            base_molecule = main.Molecule.from_labels_coords(
+            base_molecule = Molecule.from_labels_coords(
                 labels, coords, elements=config.nuclei_include
             )
             base_molecule.calc_pdip(config.hyperfine_pdip_centres)
         elif config.hyperfine_method == "csv":
-            base_molecule = main.Molecule.from_csv(
+            base_molecule = Molecule.from_csv(
                 config.hyperfine_file, elements=config.nuclei_include
             )
 

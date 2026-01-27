@@ -4,10 +4,11 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from simpnmr.core import main, vis
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.pipelines.setup.options import CalcPdipRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
+from simpnmr.viz import visualise
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def run_calc_pdip(
         raise ValueError(f"Unsupported structure file format: {ext}")
 
     # Create molecule
-    molecule = main.Molecule.from_labels_coords(labels, coords, elements=elements)
+    molecule = Molecule.from_labels_coords(labels, coords, elements=elements)
 
     # Calculate point dipole A_dip tensor
     molecule.calc_pdip(centres)
@@ -83,7 +84,7 @@ def run_calc_pdip(
     logger.info("Point dipole dipolar tensors saved to %s", file_name)
 
     if plot_components:
-        vis.plot_hyperfine(
+        visualise.plot_hyperfine(
             molecule.nuclei,
             plot_components,
             save=options.save,
@@ -94,7 +95,7 @@ def run_calc_pdip(
         )
 
         if chem_labels is not None:
-            vis.plot_hyperfine_spread(
+            visualise.plot_hyperfine_spread(
                 molecule.nuclei,
                 plot_components,
                 save=options.save,

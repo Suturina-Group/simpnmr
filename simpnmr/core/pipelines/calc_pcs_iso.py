@@ -1,6 +1,6 @@
 import os
 
-from simpnmr.core import main
+from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.pipelines.setup.options import CalcPcsIsoRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
@@ -51,12 +51,12 @@ def run_calc_pcs_iso(
 
     # Load susceptibility tensors
     if "orca" in susc_format:
-        suscs = main.Susceptibility.from_orca(
+        suscs = Susceptibility.from_orca(
             susc_file,
             section=susc_format.split("orca_")[1],
         )
     elif "csv" in susc_format:
-        suscs = main.Susceptibility.from_csv(susc_file)
+        suscs = Susceptibility.from_csv(susc_file)
     elif "molcas" in susc_format:
         raise ValueError("Molcas files are not currently supported")
     else:

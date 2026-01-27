@@ -1,9 +1,9 @@
 import pandas as pd
 
-from simpnmr.core import main
+from simpnmr.core.domain.experiment import Experiment
 
 
-def build_experiment_signals_df(experiment: "main.Experiment") -> pd.DataFrame:
+def build_experiment_signals_df(experiment: "Experiment") -> pd.DataFrame:
     columns = ["assignment ()", "shift (ppm)", "width (Hz)", "area ()", "L/G ()"]
 
     data = {

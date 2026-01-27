@@ -15,9 +15,10 @@ import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
 
 from simpnmr import utils as ut
-from simpnmr.core import main
 from simpnmr.core.constants import periodic_table
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.domain.experiment import Experiment
+from simpnmr.core.domain.molecule import Molecule, Nucleus
 from simpnmr.core.fitting import models
 from simpnmr.io import writers
 from simpnmr.mappers import label_format as lf
@@ -130,7 +131,7 @@ def lorentzian(x: ArrayLike, fwhm, x0, area) -> NDArray:
 
 
 def plot_hyperfine(
-    nuclei: list[main.Nucleus],
+    nuclei: list[Nucleus],
     components: list[str],
     save: bool = False,
     show: bool = True,
@@ -250,8 +251,8 @@ def plot_hyperfine(
 
 
 def plot_fitted_shifts(
-    molecule: main.Molecule,
-    experiment: main.Experiment,
+    molecule: Molecule,
+    experiment: Experiment,
     susc_model: models.SusceptibilityModel,
     average: bool = True,
     save: bool = True,
@@ -433,7 +434,7 @@ def plot_fitted_shifts(
 
 
 def plot_pred_spectrum(
-    molecule: main.Molecule,
+    molecule: Molecule,
     isotope: str,
     shift_range: ArrayLike,
     save: bool = True,
@@ -591,8 +592,8 @@ def plot_pred_spectrum(
 
 
 def plot_shift_spread(
-    molecule: main.Molecule,
-    experiment: main.Experiment | None = None,
+    molecule: Molecule,
+    experiment: Experiment | None = None,
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
     save: bool = True,
@@ -823,8 +824,8 @@ def plot_shift_spread(
 
 
 def plot_shift_contrib(
-    molecule: main.Molecule,
-    experiment: main.Experiment | None,
+    molecule: Molecule,
+    experiment: Experiment | None,
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
     save: bool = True,
@@ -1050,8 +1051,8 @@ def plot_shift_contrib(
 
 
 def plot_relax_contrib(
-    molecule: main.Molecule,
-    experiment: main.Experiment | None,
+    molecule: Molecule,
+    experiment: Experiment | None,
     order="ascending",
     save: bool = True,
     show: bool = True,
@@ -1081,7 +1082,7 @@ def plot_relax_contrib(
 
 
 def plot_shift_tdep(
-    experiments: list[main.Experiment],
+    experiments: list[Experiment],
     tdep: str = "",
     save: bool = True,
     show: bool = True,
@@ -1327,7 +1328,7 @@ def plot_hyperfine_iso_vs_ax(
 
 
 def plot_hyperfine_spread(
-    nuclei: list[main.Nucleus],
+    nuclei: list[Nucleus],
     components: list[str] | None = None,
     save: bool = False,
     show: bool = True,
@@ -1448,10 +1449,10 @@ def plot_hyperfine_spread(
 
 
 def plot_raw_deconv_pred(
-    molecule: main.Molecule,
+    molecule: Molecule,
     isotope: str,
     shift_range: ArrayLike,
-    experiment: main.Experiment,
+    experiment: Experiment,
     save: bool = True,
     show: bool = True,
     save_name: str = "pred_and_exp_spectrum.png",

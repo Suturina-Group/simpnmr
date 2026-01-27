@@ -7,7 +7,9 @@ import numpy as np
 from pathos import multiprocessing as mp
 
 from simpnmr import utils as ut
-from simpnmr.core import main
+from simpnmr.core.domain.experiment import Experiment
+from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.fitting import fit_vt, models
 from simpnmr.core.pipelines.setup import plotting as pl
 from simpnmr.core.pipelines.setup.options import FitSuscRunOptions
@@ -55,7 +57,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
         # Create molecule object from quantum chemical hyperfine data
         # Retain only the atoms that are given in the labels file
-        base_molecule = main.Molecule.from_QCA(
+        base_molecule = Molecule.from_QCA(
             qc_hyperfine_data, converter="MHz_to_Ang-3", elements=config.nuclei_include
         )
         logger.info("Group(s)/Atoms included: %s", config.nuclei_include)
@@ -74,7 +76,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             )
 
         # Create molecule
-        base_molecule = main.Molecule.from_labels_coords(
+        base_molecule = Molecule.from_labels_coords(
             labels, coords, elements=config.nuclei_include
         )
 
@@ -83,7 +85,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
     # or load from CSV
     elif config.hyperfine_method == "csv":
-        base_molecule = main.Molecule.from_csv(
+        base_molecule = Molecule.from_csv(
             config.hyperfine_file, elements=config.nuclei_include
         )
 
@@ -134,7 +136,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         base_molecule.average_hyperfine(config.hyperfine_average)
 
     # Create experiments
-    experiments = main.Experiment.from_file(config.experiment_files)
+    experiments = Experiment.from_file(config.experiment_files)
 
     # Check the number of experiments is consistent across the files
     # and issue warning if not
@@ -208,7 +210,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ]
             # For the current experiment, generate a new set in which
             # the assignment is permuted according to user defined groups
-            permed_assignments = main.Experiment.generate_permutations(
+            permed_assignments = Experiment.generate_permutations(
                 experiment=experiment, groups=config.assignment_groups
             )
 
@@ -493,7 +495,7 @@ def _fit_isoaxrho_vt(
 
         section = config.susc_vt_ab_initio_format.split("orca_", 1)[1]
 
-        suscs_ab_initio = main.Susceptibility.from_orca(
+        suscs_ab_initio = Susceptibility.from_orca(
             config.susc_vt_ab_initio_file,
             section=section,
         )
@@ -640,10 +642,10 @@ def _fit_isoaxrho_vt(
 
 
 def _obtain_r2a(
-    molecule: main.Molecule,
+    molecule: Molecule,
     assignment: list[str],
     model: models.SusceptibilityModel,
-    experiment: main.Experiment,
+    experiment: Experiment,
     average_labels: list[list[str]],
     echo_r2: bool,
 ):
@@ -654,10 +656,10 @@ def _obtain_r2a(
     permutations.
 
     Args:
-        molecule (main.Molecule): Molecule instance used for shift prediction.
+        molecule (Molecule): Molecule instance used for shift prediction.
         assignment (list[str]): Proposed assignment list (one per signal).
         model (models.SusceptibilityModel): Model instance to fit.
-        experiment (main.Experiment): Experiment data to fit against.
+        experiment (Experiment): Experiment data to fit against.
         average_labels (list[list[str]]): Groups of labels to average during fitting.
 
     Returns:

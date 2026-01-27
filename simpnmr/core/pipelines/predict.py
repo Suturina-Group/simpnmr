@@ -13,8 +13,10 @@ import numpy as np
 
 from simpnmr import utils as ut
 from simpnmr.config import config as cfg
-from simpnmr.core import main
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.domain.experiment import Experiment
+from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.pipelines.setup.options import PredictRunOptions
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io import writers
@@ -63,7 +65,7 @@ def run_predict(
 
         # Create molecule object from quantum chemical hyperfine data
         # Retain only the atoms that are given in the labels file
-        base_molecule = main.Molecule.from_QCA(
+        base_molecule = Molecule.from_QCA(
             qc_hyperfine_data, converter="MHz_to_Ang-3", elements=config.nuclei_include
         )
 
@@ -82,7 +84,7 @@ def run_predict(
             )
 
         # Create molecule
-        base_molecule = main.Molecule.from_labels_coords(
+        base_molecule = Molecule.from_labels_coords(
             labels, coords, elements=config.nuclei_include
         )
 
@@ -91,7 +93,7 @@ def run_predict(
 
     # or load from CSV
     elif config.hyperfine_method == "csv":
-        base_molecule = main.Molecule.from_csv(
+        base_molecule = Molecule.from_csv(
             config.hyperfine_file, elements=config.nuclei_include
         )
 
@@ -139,13 +141,13 @@ def run_predict(
 
     # Load susceptibility information
     if "orca" in config.susceptibility_format:
-        suscs = main.Susceptibility.from_orca(
+        suscs = Susceptibility.from_orca(
             config.susceptibility_file,
             section=config.susceptibility_format.split("orca_")[1],
             # section = 'auto'
         )
     elif "csv" in config.susceptibility_format:
-        suscs = main.Susceptibility.from_csv(config.susceptibility_file)
+        suscs = Susceptibility.from_csv(config.susceptibility_file)
     elif "molcas" in config.susceptibility_format:
         raise ValueError("Molcas files are not currently supported")
 
@@ -174,7 +176,7 @@ def run_predict(
 
     # Load experimental data from file into list of experiment objects
     if len(config.experiment_files):
-        experiments = main.Experiment.from_file(config.experiment_files)
+        experiments = Experiment.from_file(config.experiment_files)
         for susc, exp in zip(suscs, experiments):
             if susc.temperature != exp.temperature:
                 logger.warning(
@@ -363,9 +365,7 @@ def run_predict(
     return 0
 
 
-def _apply_relaxation_linewidths(
-    config: cfg.PredictConfig, base_molecule: main.Molecule
-):
+def _apply_relaxation_linewidths(config: cfg.PredictConfig, base_molecule: Molecule):
     """
     Apply linewidths using a user-specified relaxation model.
 
@@ -375,7 +375,7 @@ def _apply_relaxation_linewidths(
     Args:
         config (PredictConfig): Prediction configuration containing relaxation
             settings and physical parameters.
-        base_molecule (main.Molecule): Molecule instance to update in-place.
+        base_molecule (Molecule): Molecule instance to update in-place.
 
     Returns:
         None
