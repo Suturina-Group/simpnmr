@@ -54,16 +54,28 @@ def load_experiments_from_csv(
 
     # Build one Experiment per (temperature, magnetic_field, isotope) block.
     def _pick_col(df_, candidates: list[str]) -> str:
-        for c in candidates:
-            if c in df_.columns:
-                return c
-        raise KeyError(f"Missing required column. Expected one of: {candidates}")
+        """Pick a required column from a dataframe using tolerant header matching."""
+        # Map normalized column names -> actual column names.
+        norm_to_actual = {str(c).strip().lower(): c for c in df_.columns}
+
+        for candidate in candidates:
+            norm = str(candidate).strip().lower()
+            if norm in norm_to_actual:
+                return norm_to_actual[norm]
+
+        raise KeyError(
+            f"Missing required column. Expected one of: {candidates}. "
+            f"Found columns: {list(df_.columns)}"
+        )
 
     shift_col = _pick_col(
         table, ["shift", "shifts", "ppm", "shift (ppm)", "shifts (ppm)"]
     )
     width_col = _pick_col(table, ["width", "widths", "width (Hz)", "width(Hz)"])
-    area_col = _pick_col(table, ["area", "areas", "integral", "integrals"])
+    area_col = _pick_col(
+        table,
+        ["area", "areas", "area ()", "area()", "integral", "integrals"],
+    )
     assignment_col = _pick_col(table, ["assignment", "assignments"])
 
     l_to_g_col = next((c for c in ["L/G", "L/G ()"] if c in table.columns), None)
