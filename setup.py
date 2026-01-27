@@ -38,7 +38,7 @@ setuptools.setup(
     },
     entry_points={
         "console_scripts": [
-            "simpnmr = simpnmr.cli:interface",
+            "simpnmr = simpnmr.cli.cli:interface",
             "plot_A_funcs = simpnmr.tools.batch_hf_plot:main",
             "plot_chi_funcs = simpnmr.tools.batch_susc_plot:main",
             "get_sh = simpnmr.tools.get_sh:main",

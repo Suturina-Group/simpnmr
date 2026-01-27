@@ -9,47 +9,15 @@ pNMR prediction, susceptibility fitting, hyperfine plotting, and data extraction
 
 import argparse
 import logging
-import sys
+import os
 
 from simpnmr import __version__
 from simpnmr.app.setup.options import RuntimeSettings
 from simpnmr.app.setup.settings import apply_runtime_settings
+from simpnmr.cli.setup_logging import setup_logging
 from simpnmr.config import config as cfg
 
 logger = logging.getLogger(__name__)
-
-
-class ColorFormatter(logging.Formatter):
-    COLORS = {
-        logging.DEBUG: "\033[90m",  # gray
-        logging.INFO: "\033[36m",  # cyan
-        logging.WARNING: "\033[33m",  # yellow
-        logging.ERROR: "\033[31m",  # red
-        logging.CRITICAL: "\033[41m",  # red background
-    }
-    RESET = "\033[0m"
-
-    def format(self, record):
-        msg = super().format(record)
-        color = self.COLORS.get(record.levelno, self.RESET)
-        return f"{color}{msg}{self.RESET}"
-
-
-def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
-    level = logging.INFO
-    if verbose:
-        level = logging.DEBUG
-    if quiet:
-        level = logging.ERROR
-
-    root = logging.getLogger()
-    root.setLevel(level)
-
-    if not root.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = ColorFormatter("%(levelname)-7s |  %(message)s")
-        handler.setFormatter(formatter)
-        root.addHandler(handler)
 
 
 def predict_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
@@ -591,15 +559,20 @@ def read_args(arg_list=None):
 
 def interface(argv=None):
     args = read_args(argv)
-    setup_logging(verbose=args.verbose, quiet=args.quiet)
+
+    setup_logging(verbose=args.verbose, quiet=args.quiet, base_dir=os.getcwd())
+    logger.info("Output directory: %s", os.getcwd())
+
     runtime = apply_runtime_settings()
     args.runtime = runtime
 
     try:
         raise SystemExit(args.func(args, runtime))
+
     except ValueError as err:
         logger.error("%s", err)
         raise SystemExit(1) from None
+
     except FileNotFoundError as err:
         logger.error("File not found: %s", err.filename)
         raise SystemExit(1) from None
