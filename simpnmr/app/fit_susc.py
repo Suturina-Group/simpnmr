@@ -13,8 +13,9 @@ from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.fitting import fit_vt, models
-from simpnmr.io import writers
+from simpnmr.io.csv import fitting, susceptibility
 from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis
 
@@ -109,7 +110,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         )
 
     # Save xyz file with chemical labels for chemcraft
-    writers.save_xyz(
+    xyz.save_xyz(
         file_name=os.path.join(config.project_name, "structure.xyz"),
         labels=base_molecule.labels,
         coords=base_molecule.coords,
@@ -393,7 +394,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         )
 
     # Write susceptibility tensor with model terms
-    writers.save_susc(
+    susceptibility.save_susc(
         molecules,
         os.path.join(config.project_name, "susceptibility_tensor.csv"),
         susc_models=susc_models,
@@ -616,7 +617,7 @@ def _fit_isoaxrho_vt(
         chiT_fit_params.get("ax"),
         chiT_fit_params.get("rho"),
     ]
-    writers.save_slope_intercept(fits_list, out_file)
+    fitting.save_slope_intercept(fits_list, out_file)
 
     # Plot chiT temperature dependence
     vis.plot_isoaxrho(

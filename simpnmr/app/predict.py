@@ -12,16 +12,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr import utils as ut
+from simpnmr.app.loaders.susceptibility import load_susceptibilities
 from simpnmr.app.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.relaxation import gueron, sbm
-from simpnmr.io import writers
-from simpnmr.io.csv import readers
+from simpnmr.io.csv import relaxation, susceptibility
+from simpnmr.io.csv.spectrum import read_spectrum
 from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.io.xyz import xyz
 from simpnmr.mappers import label_format as lf
 from simpnmr.tools.coords_tools import transform as tfm
 from simpnmr.tools.coords_tools import xyz_format as xyzf
@@ -111,7 +112,7 @@ def run_predict(
         )
 
     # Save xyz file with chemical labels for chemcraft
-    writers.save_xyz(
+    xyz.save_xyz(
         file_name=os.path.join(config.project_name, "structure.xyz"),
         labels=base_molecule.labels,
         coords=base_molecule.coords,
@@ -140,22 +141,16 @@ def run_predict(
         tfm.rotate_coords_to_chi_frame(config.project_name, config)
 
     # Load susceptibility information
-    if "orca" in config.susceptibility_format:
-        suscs = Susceptibility.from_orca(
-            config.susceptibility_file,
-            section=config.susceptibility_format.split("orca_")[1],
-            # section = 'auto'
-        )
-    elif "csv" in config.susceptibility_format:
-        suscs = Susceptibility.from_csv(config.susceptibility_file)
-    elif "molcas" in config.susceptibility_format:
-        raise ValueError("Molcas files are not currently supported")
+    suscs = load_susceptibilities(
+        config.susceptibility_file,
+        config.susceptibility_format,
+    )
 
     suscs = [
         susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
     ]
 
-    if not len(suscs):
+    if not suscs:
         raise ValueError("No susceptibility data found for specified temperature(s)")
 
     # Calculate linewidths using user-specified relaxation model (optional)
@@ -199,7 +194,7 @@ def run_predict(
 
     if len(config.experiment_spectrum_files):
         for experiment, spectrum in zip(experiments, config.experiment_spectrum_files):
-            spectrum_array = readers.read_spectrum(spectrum)
+            spectrum_array = read_spectrum(spectrum)
             experiment.spectrum = spectrum_array
 
     _terms = ["pc", "fc", "d"]
@@ -342,7 +337,7 @@ def run_predict(
     # TODO If more than one temperature, then make a stacked plot of spectra
 
     # Save susceptibility data to file
-    writers.save_susc(
+    susceptibility.save_susc(
         molecules,
         os.path.join(config.project_name, "susceptibility_tensor.csv"),
         comment="#Data from {} ({})".format(
@@ -668,7 +663,7 @@ def _apply_relaxation_linewidths(config: cfg.PredictConfig, base_molecule: Molec
         }
 
     # Save the relaxation data to CSV
-    writers.save_relaxation_decomposition(
+    relaxation.save_relaxation_decomposition(
         file_name=os.path.join(config.project_name, "relaxation_decomposition.csv"),
         avg_r1_by_chem_label=avg_r1_by_chem_label,
         avg_r2_by_chem_label=avg_r2_by_chem_label,

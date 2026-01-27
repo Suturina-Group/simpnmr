@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
+
+"""TODO"""
+
+import datetime
+import logging
+
+import numpy as np
+from numpy.typing import ArrayLike
+
+from simpnmr.__version__ import __version__
+from simpnmr.tools.coords_tools import xyz_format
+
+logger = logging.getLogger(__name__)
+
+
+def save_xyz(
+    file_name: str,
+    labels: ArrayLike,
+    coords: ArrayLike,
+    with_numbers: bool = False,
+    verbose: bool = True,
+    mask: list | None = None,
+    atomic_numbers: bool = False,
+    comment: str = "",
+) -> None:
+    """Write an XYZ file from labels and coordinates.
+
+    Args:
+        file_name: Output file name.
+        labels: Atomic labels.
+        coords: Cartesian coordinates with shape (n_atoms, 3).
+        with_numbers: If True, overwrite labels with freshly assigned indices.
+        verbose: If True, print a confirmation message after writing.
+        mask: Indices of atoms to exclude from output.
+        atomic_numbers: If True, write atomic numbers instead of element symbols.
+        comment: User comment appended after an auto-generated provenance string
+        on the second line of the XYZ file.
+
+    Returns:
+        None.
+
+    Raises:
+        OSError: For underlying I/O errors.
+    """
+
+    coords = np.asarray(coords)
+    mask = mask or []
+
+    _comment = f"This file was generated with SimpNMR v{__version__} at {{}}. ".format(
+        datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y")
+    )
+    _comment += comment
+    if not _comment.endswith("\n"):
+        _comment += "\n"
+
+    # Option to have numbers added
+    if with_numbers:
+        # Remove and re-add numbers to be safe
+        _labels = xyz_format.remove_label_indices(labels)
+        _labels = xyz_format.add_label_indices(_labels)
+    else:
+        _labels = labels
+
+    # Set up masks
+    if mask:
+        coords = np.delete(coords, mask, axis=0)
+        _labels = np.delete(_labels, mask, axis=0).tolist()
+
+    n_atoms = len(_labels)
+
+    if atomic_numbers:
+        _labels = xyz_format.remove_label_indices(_labels)
+        _numbers = xyz_format.lab_to_num(_labels)
+        _identifier = _numbers
+    else:
+        _identifier = _labels
+
+    with open(file_name, "w") as f:
+        f.write(f"{n_atoms:d}\n")
+        f.write(_comment)
+
+        for i, (ident, trio) in enumerate(zip(_identifier, coords)):
+            if i == 0:
+                f.write("{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
+            else:
+                f.write("\n{:5} {:15.7f} {:15.7f} {:15.7f}".format(ident, *trio))
+
+    if verbose:
+        logger.info("New XYZ file written to %s", file_name)
+
+    return

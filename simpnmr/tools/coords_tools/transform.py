@@ -16,7 +16,7 @@ import re
 import numpy as np
 import numpy.linalg as la
 
-from simpnmr.io.writers import save_xyz
+from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import xyz_format
 
 from ...config import config as inps
@@ -184,7 +184,7 @@ def rotate_coords_to_chi_frame(file_path, cfg: inps.PredictConfig):
     _comment = "NEVPT2 coordinates rotated into the susceptibility (chi) frame."
 
     # Save XYZ
-    save_xyz(
+    xyz.save_xyz(
         file_name=xyz_filename,
         labels=clean_labels,
         coords=nevpt2_coords_chi_frame,

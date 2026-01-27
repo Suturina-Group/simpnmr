@@ -8,11 +8,7 @@ import logging
 
 import numpy as np
 import numpy.linalg as la
-import scipy.constants as constants
 from numpy.typing import ArrayLike, NDArray
-
-from simpnmr.io.csv.susceptibility import read_susceptibilities_csv
-from simpnmr.io.qc import qc_readers as rdrs
 
 logger = logging.getLogger(__name__)
 
@@ -534,52 +530,6 @@ class Susceptibility:
         )
 
         return irred
-
-    @classmethod
-    def from_csv(cls, file_name: str) -> list["Susceptibility"]:
-        """Loads susceptibility tensors from a CSV file.
-
-        The CSV header is expected to match the format written by
-        `Susceptibility.save_susc`.
-
-        Args:
-            file_name: Path to the CSV file.
-
-        Returns:
-            A list of susceptibility tensors.
-        """
-
-        suscs = {
-            cls(tensor, temperature=t)
-            for tensor, t in read_susceptibilities_csv(file_name)
-        }
-        return suscs
-
-    @classmethod
-    def from_orca(cls, file_name: str, section: str) -> list["Susceptibility"]:
-        """Loads susceptibility tensors from an ORCA output file.
-
-        Args:
-            file_name: Path to the ORCA output file.
-            section: Section identifier to extract (e.g., ``"cas"`` or ``"nev"``).
-
-        Returns:
-            A list of susceptibility tensors (one per temperature).
-        """
-
-        # Extract all possible susceptibility tensors from ORCA output file
-        tensors = rdrs.read_orca_susceptibility(file_name, section)
-
-        # Orca units of XT are cm3 mol-1 K, so convert to Angstrom^3 K
-        conv = 1e-24 * constants.Avogadro / (4 * np.pi)
-        conv = 1 / conv
-
-        suscs = [
-            cls(tensor / temperature * conv, temperature=temperature)
-            for temperature, tensor in tensors.items()
-        ]
-
-        return suscs
 
     def save_pcs_isosurface(
         self,

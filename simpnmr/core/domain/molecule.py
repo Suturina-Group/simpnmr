@@ -17,7 +17,7 @@ from simpnmr.__version__ import __version__
 from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
-from simpnmr.io.csv import readers
+from simpnmr.io.csv.utils import read_csv_safe
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.mappers import dataframes as ser
 from simpnmr.mappers import label_format as lf
@@ -501,7 +501,7 @@ class Molecule:
                 incomplete.
         """
 
-        data = readers.read_csv_safe(file_name)
+        data = read_csv_safe(file_name)
 
         required_cols = ["atom_label ()", "x (Å)", "y (Å)", "z (Å)"]
         split_hyperfine_cols = [
@@ -743,7 +743,7 @@ class Molecule:
         """
 
         if file_type == "csv":
-            dia = readers.read_csv_safe(file_name)
+            dia = read_csv_safe(file_name)
             if "atom_label" in dia.keys():
                 dia.set_index("atom_label", inplace=True)
                 for nuc in self.nuclei:
@@ -778,7 +778,7 @@ class Molecule:
 
         if len(ref_file_name):
             if ref_file_type == "csv":
-                ref = readers.read_csv_safe(ref_file_name)
+                ref = read_csv_safe(ref_file_name)
 
                 # Average by nucleus
                 ref["atom_label"] = xyzf.remove_label_indices(ref["atom_label"])
@@ -1000,7 +1000,7 @@ class Molecule:
                 structure.
         """
 
-        _tmp = readers.read_csv_safe(file_name)
+        _tmp = read_csv_safe(file_name)
 
         # Check for duplicate atom labels
         if any([val > 1 for val in _tmp["atom_label"].value_counts()]):

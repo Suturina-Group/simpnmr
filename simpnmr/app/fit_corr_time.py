@@ -5,22 +5,20 @@ import os
 from collections import defaultdict
 
 import numpy as np
-from matplotlib import pyplot as plt  # noqa: E402
-from scipy.optimize import curve_fit  # noqa: E402
+from matplotlib import pyplot as plt
+from scipy.optimize import curve_fit
 
-from simpnmr import utils as ut  # noqa: E402
+from simpnmr import utils as ut
 from simpnmr.app.setup.options import FitCorrTimeRunOptions
-from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS  # noqa: E402
+from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
-
-# NOTE: The following imports are currently required by the legacy implementation.
-# They should be migrated to dedicated modules
-from simpnmr.core.relaxation import gueron, sbm  # noqa: E402
-from simpnmr.io import writers  # noqa: E402
+from simpnmr.core.relaxation import gueron, sbm
+from simpnmr.io.csv import relaxation
 from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.io.xyz import xyz
 from simpnmr.mappers import label_format as lf
-from simpnmr.tools.coords_tools import xyz_format as xyzf  # noqa: E402
+from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +166,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             base_molecule.save_chemcraft_xyz(
                 file_name=os.path.join(config.project_name, "chemcraft_structure.xyz")
             )
-        writers.save_xyz(
+        xyz.save_xyz(
             file_name=os.path.join(config.project_name, "structure.xyz"),
             labels=base_molecule.labels,
             coords=base_molecule.coords,
@@ -665,7 +663,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
         )
 
         # Save fit diagnostics
-        writers.save_corr_time_fit_data(
+        relaxation.save_corr_time_fit_data(
             xdata=xdata,
             exp_r1=exp_r1,
             chem_labels=chem_labels,
