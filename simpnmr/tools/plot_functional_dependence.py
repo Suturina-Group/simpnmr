@@ -18,18 +18,18 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 
-import simpnmr.core.main as pnmr
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.io.qc import qc_readers as rdrs
 
 
 def load_hyperfine_data(
     sources: dict[str, str], chem_labels: str
-) -> dict[str, pnmr.Molecule]:
+) -> dict[str, Molecule]:
     """
     Load hyperfine data from multiple sources and return Molecule objects.
 
     For each entry in `sources`, the function reads a quantum-chemistry output file,
-    constructs a `pnmr.Molecule` (including unit conversion via the Molecule factory),
+    constructs a `Molecule` (including unit conversion via the Molecule factory),
     and attaches chemical labels from `chem_labels`.
 
     Args:
@@ -39,7 +39,7 @@ def load_hyperfine_data(
             optionally math labels) for atoms.
 
     Returns:
-        dict[str, pnmr.Molecule]: Mapping from source name to a populated Molecule
+        dict[str, Molecule]: Mapping from source name to a populated Molecule
         instance for that source.
     """
 
@@ -51,7 +51,7 @@ def load_hyperfine_data(
 
         # Create molecule object from quantum chemical hyperfine data
         # to convert units
-        molecule = pnmr.Molecule.from_QCA(
+        molecule = Molecule.from_QCA(
             calc_data, converter="MHz_to_Ang-3", elements="all_H"
         )
 
