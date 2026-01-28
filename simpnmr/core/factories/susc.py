@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 Suturina Group
 
-"""TODO"""
+"""Factories for constructing magnetic susceptibility objects and values.
+
+This module contains physics-aware conversions and helpers for building
+susceptibility quantities from ab initio outputs (e.g. ORCA XT tensors),
+ensuring all unit conversions and physical conventions are centralised
+in the core layer.
+"""
 
 import numpy as np
 import scipy.constants as consts
@@ -17,6 +23,34 @@ H = consts.h  # [J s radian-1]
 KB = consts.physical_constants["Boltzmann constant"][0]  # Boltzmann constant k [J·K⁻¹]
 GE = abs(consts.physical_constants["electron g factor"][0])  # g value of free electron
 EGAMMA = consts.physical_constants["electron gyromag. ratio in MHz/T"][0]
+
+
+def susc_from_orca_xt(
+    temperature: float,
+    tensor_xt: NDArray,
+) -> NDArray:
+    """Convert an ORCA XT tensor to a susceptibility tensor in Å³.
+
+    ORCA reports XT in units of cm^3 mol^-1 K. This factory converts XT to
+    a molar susceptibility tensor X (Å^3) by applying the appropriate
+    physical conversion and dividing by temperature.
+
+    Args:
+        temperature: Temperature in Kelvin.
+        tensor_xt: ORCA XT tensor as a (3, 3) array in cm^3 mol^-1 K.
+
+    Returns:
+        Susceptibility tensor in Å^3.
+    """
+
+    # Conversion factor:
+    # 1 cm^3 mol^-1 = 1e-6 m^3 / N_A
+    # then convert m^3 -> Å^3 (1 m^3 = 1e30 Å^3)
+    conv = 1e-24 * consts.Avogadro / (4.0 * np.pi)
+    conv = 1.0 / conv
+
+    chi_tensor = tensor_xt / temperature * conv
+    return chi_tensor
 
 
 def get_spin_only_susc(

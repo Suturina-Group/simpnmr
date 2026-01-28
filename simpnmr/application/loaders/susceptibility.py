@@ -21,10 +21,8 @@ from __future__ import annotations
 
 from typing import Final
 
-import numpy as np
-import scipy.constants as constants
-
 from simpnmr.core.domain.tensors import Susceptibility
+from simpnmr.core.factories.susc import susc_from_orca_xt
 from simpnmr.io.csv.susceptibility import read_susceptibilities_csv
 from simpnmr.io.qc import qc_readers as rdrs
 
@@ -72,16 +70,15 @@ def load_susceptibilities(
         if not tensors:
             raise ValueError("No susceptibility data found in ORCA output")
 
-        # ORCA units of X*T are cm^3 mol^-1 K. Convert to Angstrom^3 K.
-        conv = 1e-24 * constants.Avogadro / (4.0 * np.pi)
-        conv = 1.0 / conv
-
         suscs: list[Susceptibility] = []
         for temperature, tensor_xt in tensors.items():
-            # Convert X*T -> X by dividing by temperature.
+            chi_tensor = susc_from_orca_xt(
+                temperature=float(temperature),
+                tensor_xt=tensor_xt,
+            )
             suscs.append(
                 Susceptibility(
-                    tensor_xt / float(temperature) * conv,
+                    chi_tensor,
                     temperature=float(temperature),
                 )
             )
