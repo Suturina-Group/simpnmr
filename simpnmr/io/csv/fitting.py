@@ -83,3 +83,40 @@ def save_slope_intercept(
         logger.info("Temperature dependence data is written to %s", file_name)
 
     return
+
+
+def read_chiT_regression_csv(filename: str) -> dict[str, float]:
+    """
+    Read a Curie-normalised chiT regression CSV file and return fit parameters.
+
+    The CSV is expected to contain columns: `type`, `intercept`, and `slope`. Each row
+    is flattened into keys of the form `{type}_intercept` and `{type}_slope`.
+
+    Args:
+        filename (str): Path to the regression CSV file.
+
+    Returns:
+        dict[str, float]: Flattened fit parameters keyed by `{type}_{intercept|slope}`.
+
+    Raises:
+        ValueError: If required columns are missing from the CSV.
+    """
+
+    # Read CSV, skipping comment lines
+    df = pd.read_csv(filename, comment="#")
+
+    # Sanity check
+    required_cols = {"type", "intercept", "slope", "intercept_err", "slope_err"}
+    if not required_cols.issubset(df.columns):
+        raise ValueError(f"CSV must contain {required_cols}")
+
+    params = {}
+
+    for _, row in df.iterrows():
+        label = row["type"]
+        params[f"{label}_intercept"] = float(row["intercept"])
+        params[f"{label}_slope"] = float(row["slope"])
+        params[f"{label}_intercept_err"] = float(row["intercept_err"])
+        params[f"{label}_slope_err"] = float(row["slope_err"])
+
+    return params

@@ -12,9 +12,10 @@ or an axial-only analytic approximation.
 import argparse
 
 import numpy as np
-import pandas as pd
 from scipy.constants import physical_constants
 from sympy import nsolve, symbols
+
+from simpnmr.io.csv.fitting import read_chiT_regression_csv
 
 # Imports
 G_E = abs(physical_constants["electron g factor"][0])
@@ -22,43 +23,6 @@ MU_B = physical_constants["Bohr magneton"][0]
 K = physical_constants["Boltzmann constant"][0]
 H = physical_constants["Planck constant"][0]
 C = physical_constants["speed of light in vacuum"][0]
-
-
-def read_chiT_regression_csv(filename: str) -> dict[str, float]:
-    """
-    Read a Curie-normalised chiT regression CSV file and return fit parameters.
-
-    The CSV is expected to contain columns: `type`, `intercept`, and `slope`. Each row
-    is flattened into keys of the form `{type}_intercept` and `{type}_slope`.
-
-    Args:
-        filename (str): Path to the regression CSV file.
-
-    Returns:
-        dict[str, float]: Flattened fit parameters keyed by `{type}_{intercept|slope}`.
-
-    Raises:
-        ValueError: If required columns are missing from the CSV.
-    """
-
-    # Read CSV, skipping comment lines
-    df = pd.read_csv(filename, comment="#")
-
-    # Sanity check
-    required_cols = {"type", "intercept", "slope", "intercept_err", "slope_err"}
-    if not required_cols.issubset(df.columns):
-        raise ValueError(f"CSV must contain {required_cols}")
-
-    params = {}
-
-    for _, row in df.iterrows():
-        label = row["type"]
-        params[f"{label}_intercept"] = float(row["intercept"])
-        params[f"{label}_slope"] = float(row["slope"])
-        params[f"{label}_intercept_err"] = float(row["intercept_err"])
-        params[f"{label}_slope_err"] = float(row["slope_err"])
-
-    return params
 
 
 def compute_g_tensor(
