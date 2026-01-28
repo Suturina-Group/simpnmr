@@ -8,9 +8,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
-from simpnmr import utils as ut
 from simpnmr.app.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.relaxation import gueron, sbm
@@ -224,7 +224,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                     omega_I_dict = {
                         label: -gamma_I_dict[label] * B0 for label in nuclei_coords
                     }
-                    omega_S = -ut.EGAMMA * B0 * 2 * np.pi * 1e6
+                    omega_S = -EGAMMA * B0 * 2 * np.pi * 1e6
 
                     # Calculate relaxation rates for current tau_R, tau_E
                     if config.relaxation_model == "sbm":
@@ -372,7 +372,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                     omega_I_dict = {
                         label: -gamma_I_dict[label] * B0 for label in nuclei_coords
                     }
-                    omega_S = -ut.EGAMMA * B0 * 2 * np.pi * 1e6
+                    omega_S = -EGAMMA * B0 * 2 * np.pi * 1e6
 
                     # Calculate relaxation rates for current tau_R, tau_E
                     if config.relaxation_model == "sbm":
@@ -531,7 +531,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                     omega_I_dict = {
                         label: -gamma_I_dict[label] * B0 for label in nuclei_coords
                     }
-                    omega_S = -ut.EGAMMA * B0 * 2 * np.pi * 1e6
+                    omega_S = -EGAMMA * B0 * 2 * np.pi * 1e6
 
                     if config.relaxation_model == "sbm":
                         sbm_dipolar_r1_rates = sbm.calc_r1_dipolar(

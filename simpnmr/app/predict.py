@@ -11,11 +11,11 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
-from simpnmr import utils as ut
 from simpnmr.app.loaders.susceptibility import load_susceptibilities
 from simpnmr.app.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
@@ -414,7 +414,7 @@ def _apply_relaxation_linewidths(config: cfg.PredictConfig, base_molecule: Molec
         for label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}
-    omega_S = ut.EGAMMA * B0 * 2 * np.pi * 1e6
+    omega_S = EGAMMA * B0 * 2 * np.pi * 1e6
     tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
     tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
     tau_e1 = config.relaxation_T1e

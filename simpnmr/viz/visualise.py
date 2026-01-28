@@ -14,14 +14,15 @@ import pandas as pd
 import scipy.constants as constants
 from numpy.typing import ArrayLike
 
-from simpnmr import utils as ut
 from simpnmr.core.constants import periodic_table
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule, Nucleus
 from simpnmr.core.fitting import models
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
+from simpnmr.core.utils.arrays import find_index_of_nearest
 from simpnmr.mappers import label_format as lf
+from simpnmr.viz.utils import comp2ind
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +122,7 @@ def plot_hyperfine(
                 complabels[component] = r"$A_\mathregular{dip, rho}$"
         elif "d" in component:
             for nuc in nuclei:
-                hf_components[component][nuc.label] = nuc.A.dip[
-                    ut.comp2ind(component[1:])
-                ]
+                hf_components[component][nuc.label] = nuc.A.dip[comp2ind(component[1:])]
                 complabels[component] = (
                     rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"
                 )
@@ -134,9 +133,7 @@ def plot_hyperfine(
                 complabels[component] = rf"$A_{{\mathregular{{{component}}}}}$"
         else:
             for nuc in nuclei:
-                hf_components[component][nuc.label] = nuc.A.tensor[
-                    ut.comp2ind(component)
-                ]
+                hf_components[component][nuc.label] = nuc.A.tensor[comp2ind(component)]
                 complabels[component] = rf"$A_\mathregular{{{component}}}$"
 
     fig, ax = plt.subplots(1, 1, num=window_title)
@@ -436,9 +433,7 @@ def plot_pred_spectrum(
     sorted_shifts = [shift for _, shift in sorted_shifts_labels]
 
     # Grid y value closest to peak position
-    closest_y = [
-        y_intensity[ut.find_index_of_nearest(x_grid, sh)] for sh in sorted_shifts
-    ]
+    closest_y = [y_intensity[find_index_of_nearest(x_grid, sh)] for sh in sorted_shifts]
 
     # Marker at shift peak position
     ax.plot(sorted_shifts, closest_y, lw=0, marker="x", color="k", markersize=7)
@@ -491,7 +486,7 @@ def plot_pred_spectrum(
         )
 
         # Draw segmented line from peak to label via horizontal line
-        peak_index = ut.find_index_of_nearest(x_grid, shift)
+        peak_index = find_index_of_nearest(x_grid, shift)
         ax.plot(
             [x_grid[peak_index], x_grid[peak_index], label_x],
             [y_intensity[peak_index], label_barrier, label_y],
@@ -502,7 +497,7 @@ def plot_pred_spectrum(
         )
 
     ax.set_xlabel(
-        r"{} $\delta$ (ppm)".format(ut.isotope_format(isotope)), fontsize="18"
+        r"{} $\delta$ (ppm)".format(lf.isotope_format(isotope)), fontsize="18"
     )
 
     # Deactivate borders, y axis and y ticks
@@ -717,7 +712,7 @@ def plot_shift_spread(
     # Shift label, specify isotope/nucleus if only one type plotted
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(ut.isotope_format(molecule.nuclei[0].isotope)),
+            r"{} $\delta$ (ppm)".format(lf.isotope_format(molecule.nuclei[0].isotope)),
             fontsize="18",
         )
     else:
@@ -953,7 +948,7 @@ def plot_shift_contrib(
 
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(ut.isotope_format(molecule.nuclei[0].isotope)),
+            r"{} $\delta$ (ppm)".format(lf.isotope_format(molecule.nuclei[0].isotope)),
             fontsize="18",
         )
     else:
@@ -1389,7 +1384,7 @@ def plot_hyperfine_spread(
         elif "d" in component:
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
-                    nuc.A.dip[ut.comp2ind(component[1:])]
+                    nuc.A.dip[comp2ind(component[1:])]
                 )
                 legend_labels[component] = (
                     rf"$A_{{\mathregular{{dip, }}\mathregular{{{component[1:]}}}}}$"
@@ -1397,7 +1392,7 @@ def plot_hyperfine_spread(
         else:
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
-                    nuc.A.tensor[ut.comp2ind(component)]
+                    nuc.A.tensor[comp2ind(component)]
                 )
                 legend_labels[component] = rf"$A_\mathregular{{{component}}}$"
 
@@ -1511,7 +1506,7 @@ def plot_raw_deconv_pred(
 
     # Extract simulated peak heights at the nearest grid points to each shift
     sim_peak_heights = [
-        y_sim_intensity[ut.find_index_of_nearest(x_grid, sh)] for sh in shifts
+        y_sim_intensity[find_index_of_nearest(x_grid, sh)] for sh in shifts
     ]
 
     # Construct deconvoluted (processed experimental) spectrum intensities (y-axis)
@@ -1635,7 +1630,7 @@ def plot_raw_deconv_pred(
 
     # Set x-axis at the bottom of the plot
     ax[-1].xaxis.set_minor_locator(ticker.AutoMinorLocator())
-    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(ut.isotope_format(isotope)))
+    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(lf.isotope_format(isotope)))
 
     # Remove y-axis ticks, labels, and spines for a cleaner stacked-spectra layout
     for axis in ax:

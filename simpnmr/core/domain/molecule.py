@@ -12,11 +12,11 @@ import re
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from simpnmr import utils as ut
 from simpnmr.__version__ import __version__
 from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
+from simpnmr.core.utils.arrays import flatten
 from simpnmr.io.csv.utils import read_csv_safe
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.mappers import dataframes as ser
@@ -876,7 +876,7 @@ class Molecule:
             )
 
         # Check labels exist in molecule
-        _fl_av_chemlabels = ut.flatten(av_chemlabels)
+        _fl_av_chemlabels = flatten(av_chemlabels)
         all_chemlabels = [nuc.chem_label for nuc in self.nuclei]
         if any([cl not in all_chemlabels for cl in _fl_av_chemlabels]):
             print(set(all_chemlabels).difference(set(_fl_av_chemlabels)))

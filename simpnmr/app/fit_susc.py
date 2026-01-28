@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathos import multiprocessing as mp
 
-from simpnmr import utils as ut
 from simpnmr.app.setup import plotting as pl
 from simpnmr.app.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Susceptibility
+from simpnmr.core.factories.susc import get_g_corr_iso_susc
 from simpnmr.core.fitting import fit_vt, models
 from simpnmr.io.csv import fitting, susceptibility
 from simpnmr.io.qc import qc_readers as rdrs
@@ -531,7 +531,7 @@ def _fit_isoaxrho_vt(
         D_J, E_J = fit_vt.calculate_E_D_components(eff_H_rot)
 
         # Compute the corrected isotropic component of the susceptibility tensor
-        susc_ab_initio.iso = ut.get_true_iso_susceptibility(
+        susc_ab_initio.iso = get_g_corr_iso_susc(
             spin=spin,
             orbit=config.orbit,
             g_tensor=g_tensor,

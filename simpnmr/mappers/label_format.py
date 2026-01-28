@@ -149,3 +149,24 @@ def atom_range_to_list(atom_range: str) -> list[str]:
     else:
         atom_list = [f"{ele}{it}" for it in range(start, end + 1)]
     return atom_list
+
+
+def isotope_format(isotope_string: str) -> str:
+    r"""Formats an isotope label as Matplotlib mathtext.
+
+    Args:
+        isotope_string: Isotope label, e.g. ``"1H"`` or ``"13C"``.
+
+    Returns:
+        A mathtext string, e.g. ``$^\mathregular{13} \mathregular{C}$``.
+    """
+
+    # Split at number letter boundary
+    for it, char in enumerate(isotope_string):
+        if char not in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+            split_at = it
+            break
+    nums = isotope_string[:split_at]
+    lets = isotope_string[split_at:]
+
+    return r"$^\mathregular{{{}}} \mathregular{{{}}}$".format(nums, lets)
