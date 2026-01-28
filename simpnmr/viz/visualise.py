@@ -18,7 +18,7 @@ from simpnmr.core.constants import periodic_table
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule, Nucleus
-from simpnmr.core.fitting import models
+from simpnmr.core.fitting import fit_models
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.utils.arrays import find_index_of_nearest
 from simpnmr.mappers import label_format as lf
@@ -195,7 +195,7 @@ def plot_hyperfine(
 def plot_fitted_shifts(
     molecule: Molecule,
     experiment: Experiment,
-    susc_model: models.SusceptibilityModel,
+    susc_model: fit_models.SusceptibilityModel,
     average: bool = True,
     save: bool = True,
     show: bool = True,

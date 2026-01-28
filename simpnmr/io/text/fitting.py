@@ -5,13 +5,13 @@
 
 import logging
 
-from simpnmr.core.fitting import models
+from simpnmr.core.fitting import fit_models
 
 logger = logging.getLogger(__name__)
 
 
 def write_model_data(
-    models: list[models.SusceptibilityModel], file_name: str, verbose: bool = True
+    models: list[fit_models.SusceptibilityModel], file_name: str, verbose: bool = True
 ) -> None:
     """Writes fitted model parameters for multiple temperatures to a text file.
 

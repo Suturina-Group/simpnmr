@@ -12,7 +12,7 @@ from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.factories.susc import get_g_corr_iso_susc
-from simpnmr.core.fitting import fit_vt, models
+from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.io.csv import fitting, susceptibility
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
@@ -160,18 +160,18 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         if value[0] == "fix"
     }
 
-    name_to_susc_fit: dict[str, models.SusceptibilityModel] = {
-        "full": models.FullSuscFitter,
-        "split": models.SplitFitter,
-        "isoaxrho": models.IsoAxRhoFitter,
-        "eigen": models.EigenFitter,
-        "isoeigen": models.IsoEigenFitter,
+    name_to_susc_fit: dict[str, fit_models.SusceptibilityModel] = {
+        "full": fit_models.FullSuscFitter,
+        "split": fit_models.SplitFitter,
+        "isoaxrho": fit_models.IsoAxRhoFitter,
+        "eigen": fit_models.EigenFitter,
+        "isoeigen": fit_models.IsoEigenFitter,
     }
 
     model_to_use = name_to_susc_fit[config.susc_fit_type]
 
     # Create one susceptibility model per molecule/experiment pair
-    susc_models: list[models.SusceptibilityModel] = [
+    susc_models: list[fit_models.SusceptibilityModel] = [
         copy.deepcopy(model_to_use(fit_vars, fix_vars)) for _ in molecules
     ]
 
@@ -559,7 +559,7 @@ def _fit_isoaxrho_vt(
     chi_errors = {comp: np.zeros(len(temps_fit)) for comp in fit_component}
 
     # If chi errors are available, take them from the fitted model standard deviations
-    if susc_models and isinstance(susc_models[0], models.IsoAxRhoFitter):
+    if susc_models and isinstance(susc_models[0], fit_models.IsoAxRhoFitter):
         fix = susc_models[0].fix_vars
 
         if "iso" not in fix:
@@ -657,7 +657,7 @@ def _fit_isoaxrho_vt(
 def _obtain_r2a(
     molecule: Molecule,
     assignment: list[str],
-    model: models.SusceptibilityModel,
+    model: fit_models.SusceptibilityModel,
     experiment: Experiment,
     average_labels: list[list[str]],
     echo_r2: bool,
