@@ -1,9 +1,21 @@
+"""
+TODO
+"""
+
+import logging
 import os
+
+import numpy as np
 
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import CalcPcsIsoRunOptions
+from simpnmr.core.domain.tensors import Hyperfine
+from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
+from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
+
+logger = logging.getLogger(__name__)
 
 
 def run_calc_pcs_iso(
@@ -64,14 +76,40 @@ def run_calc_pcs_iso(
             f"Available: {[s.temperature for s in suscs]}"
         )
 
+    labels_arr = np.asarray(labels)
+    coords_arr = np.asarray(coords, dtype=float)
+
+    center_idx = np.where(labels_arr == central_atom)[0]
+    if center_idx.size == 0:
+        raise ValueError(f"Center atom {central_atom} not found in labels")
+
+    coords_bohr = coords_arr * 1.88973
+    coords_bohr = coords_bohr - coords_bohr[center_idx[0]]
+
     for s in matched:
         s.calc_irred()
-        s.save_pcs_isosurface(
-            labels,
-            coords,
-            central_atom,
-            comment=f"PCS Isosurface from {susc_file} at {s.temperature:.2f} K",
-            file_name=f"pcs_isosurface_{s.temperature:.2f}_K.cube",
+
+        values, origin_bohr, step_bohr, grid_shape = compute_pcs_isosurface(
+            chi_dtensor=s.dtensor,
+            labels=labels_arr,
+            center_atom=central_atom,
+            pdip_fn=Hyperfine.calc_pdip,
         )
+
+        file_name = f"pcs_isosurface_{s.temperature:.2f}_K.cube"
+        comment = f"PCS Isosurface from {susc_file} at {s.temperature:.2f} K"
+
+        write_pcs_cube(
+            file_name=file_name,
+            comment=comment,
+            labels=labels_arr,
+            coords_bohr=coords_bohr,
+            origin_bohr=origin_bohr,
+            step_bohr=step_bohr,
+            grid_shape=grid_shape,
+            values=values,
+        )
+
+        logger.info("PCS Isosurface written to %s", file_name)
 
     return 0

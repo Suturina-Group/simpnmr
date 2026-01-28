@@ -10,10 +10,12 @@ from simpnmr.application.setup import plotting as pl
 from simpnmr.application.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.domain.tensors import Susceptibility
+from simpnmr.core.domain.tensors import Hyperfine, Susceptibility
 from simpnmr.core.factories.susc import get_g_corr_iso_susc
 from simpnmr.core.fitting import fit_models, fit_vt
+from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
 from simpnmr.io.csv import fitting, susceptibility
+from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import xyz_format as xyzf
@@ -404,16 +406,43 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     if options.pcs_isosurface:
         for molecule in molecules:
             # Generate and save PCS isosurface
-            molecule.susc.save_pcs_isosurface(
-                molecule.labels,
-                molecule.coords,
-                molecule.labels[0],
-                comment="PCS Isosurface",
-                file_name=os.path.join(
-                    config.project_name,
-                    f"pcs_isosurf_{molecule.susc.temperature:.2f}_K.cube",
-                ),
+            molecule.susc.calc_irred()
+
+            labels_arr = np.asarray(molecule.labels)
+            coords_arr = np.asarray(molecule.coords, dtype=float)
+
+            center_atom = molecule.labels[0]
+            center_idx = np.where(labels_arr == center_atom)[0]
+            if center_idx.size == 0:
+                raise ValueError(f"Center atom {center_atom} not found in labels")
+
+            coords_bohr = coords_arr * 1.88973
+            coords_bohr = coords_bohr - coords_bohr[center_idx[0]]
+
+            values, origin_bohr, step_bohr, grid_shape = compute_pcs_isosurface(
+                chi_dtensor=molecule.susc.dtensor,
+                labels=labels_arr,
+                center_atom=center_atom,
+                pdip_fn=Hyperfine.calc_pdip,
             )
+
+            file_name = os.path.join(
+                config.project_name,
+                f"pcs_isosurf_{molecule.susc.temperature:.2f}_K.cube",
+            )
+
+            write_pcs_cube(
+                file_name=file_name,
+                comment=f"PCS Isosurface (T = {molecule.susc.temperature:.2f} K)",
+                labels=labels_arr,
+                coords_bohr=coords_bohr,
+                origin_bohr=origin_bohr,
+                step_bohr=step_bohr,
+                grid_shape=grid_shape,
+                values=values,
+            )
+
+            logger.info("PCS isosurface written to %s", file_name)
 
     mol = molecules[-1]
 
