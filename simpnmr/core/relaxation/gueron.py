@@ -4,7 +4,7 @@
 import numpy as np
 import scipy.constants as consts
 
-from simpnmr import utils as ut
+from simpnmr.core.factories.eff_factors import calc_g_eff, choose_S_eff
 
 # Physical constants
 MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
@@ -46,8 +46,8 @@ def calc_r1_curie(
         return tau / (1 + (omega * tau) ** 2)
 
     # Effective g-factor and angular momentum entering the Curie term
-    g_eff = ut.calc_g_eff(spin, orbit, total_momentum_J)
-    S_eff = ut.choose_S_eff(spin, total_momentum_J)
+    g_eff = calc_g_eff(spin, orbit, total_momentum_J)
+    S_eff = choose_S_eff(spin, total_momentum_J)
 
     rates = {}
 
@@ -105,8 +105,8 @@ def calc_r2_curie(
         return tau / (1 + (omega * tau) ** 2)
 
     # Effective g-factor and angular momentum entering the Curie term
-    g_eff = ut.calc_g_eff(spin, orbit, total_momentum_J)
-    S_eff = ut.choose_S_eff(spin, total_momentum_J)
+    g_eff = calc_g_eff(spin, orbit, total_momentum_J)
+    S_eff = choose_S_eff(spin, total_momentum_J)
 
     rates = {}
 

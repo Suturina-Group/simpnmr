@@ -18,6 +18,7 @@ from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io.csv import relaxation, susceptibility
 from simpnmr.io.csv.spectrum import read_spectrum
@@ -229,7 +230,7 @@ def run_predict(
 
         if use_orca_correction:
             # Compute the corrected isotropic component of the susceptibility tensor
-            susc.iso = ut.get_true_iso_susceptibility(
+            susc.iso = get_g_corr_iso_susc(
                 spin=spin,
                 orbit=config.orbit,
                 g_tensor=g_tensor,
@@ -241,7 +242,7 @@ def run_predict(
         elif spin is not None:
             # Fall back to a spin-only Curie susceptibility
             # when no ORCA susceptibility tensor is provided
-            susc.iso = ut.get_spin_only_susceptibility(
+            susc.iso = get_spin_only_susc(
                 spin=spin,
                 orbit=config.orbit,
                 total_momentum_J=config.total_momentum_J,
