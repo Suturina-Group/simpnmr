@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathos import multiprocessing as mp
 
-from simpnmr.app.setup import plotting as pl
-from simpnmr.app.setup.options import FitSuscRunOptions
+from simpnmr.application.setup import plotting as pl
+from simpnmr.application.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Susceptibility

@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 
-from simpnmr.app.setup.options import ExtractDiaRunOptions
+from simpnmr.application.setup.options import ExtractDiaRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 

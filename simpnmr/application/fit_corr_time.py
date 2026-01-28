@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
-from simpnmr.app.setup.options import FitCorrTimeRunOptions
+from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.experiment import Experiment

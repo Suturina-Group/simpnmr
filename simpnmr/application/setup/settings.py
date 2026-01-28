@@ -3,7 +3,7 @@ import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from simpnmr.app.setup.options import RuntimeSettings
+from simpnmr.application.setup.options import RuntimeSettings
 
 
 def apply_runtime_settings():

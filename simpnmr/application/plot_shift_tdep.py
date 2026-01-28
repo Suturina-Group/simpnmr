@@ -1,4 +1,4 @@
-from simpnmr.app.setup.options import PlotShiftTdepRunOptions
+from simpnmr.application.setup.options import PlotShiftTdepRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.viz import visualise as vis
 

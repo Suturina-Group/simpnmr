@@ -11,8 +11,8 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
-from simpnmr.app.loaders.susceptibility import load_susceptibilities
-from simpnmr.app.setup.options import PredictRunOptions
+from simpnmr.application.loaders.susceptibility import load_susceptibilities
+from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA

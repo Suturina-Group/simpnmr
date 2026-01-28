@@ -1,7 +1,7 @@
 import os
 
-from simpnmr.app.loaders.susceptibility import load_susceptibilities
-from simpnmr.app.setup.options import CalcPcsIsoRunOptions
+from simpnmr.application.loaders.susceptibility import load_susceptibilities
+from simpnmr.application.setup.options import CalcPcsIsoRunOptions
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
