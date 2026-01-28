@@ -13,7 +13,7 @@ import logging
 
 import numpy as np
 from scipy.constants import physical_constants
-from sympy import nsolve, symbols
+from sympy import Expr, nsolve, symbols
 
 from simpnmr.io.csv.fitting import read_chiT_regression_csv
 
@@ -60,11 +60,11 @@ def run_get_sh(options) -> int:
     spin = float(options.spin)
 
     if spin != 0.5:
-        D, E = solve_D_E(params, spin, g_nominal)
-        D = 0.0 if abs(D) < 1e-10 else D
-        E = 0.0 if abs(E) < 1e-10 else E
-        logger.info("D = %.3f cm^-1", D)
-        logger.info("E = %.3f cm^-1", E)
+        D, E, D_err, E_err = solve_D_E(params, spin, g_nominal, g_err)
+
+        logger.info("D = %.3f ± %.3f cm^-1", D, D_err)
+        logger.info("E = %.3f ± %.3f cm^-1", E, E_err)
+
     else:
         logger.info(
             "ZFS parameters (D, E) are not defined for S = 1/2 "
@@ -122,8 +122,7 @@ def compute_g_tensor(
     # Nominal solution
     g0 = np.asarray(solver(params), dtype=float)
 
-    # Proper 1σ uncertainty via delta-method: finite-difference Jacobian + quadrature.
-    # Only intercepts affect g in the current model.
+    # Delta-method: finite-difference Jacobian + quadrature
     keys = (
         ("iso_intercept", "ax_intercept")
         if is_zero_rhombicity
@@ -154,18 +153,13 @@ def compute_g_tensor(
             g_plus = np.asarray(solver(p_plus), dtype=float)
             g_minus = np.asarray(solver(p_minus), dtype=float)
 
-        except (ValueError, ArithmeticError):
-            # If the nonlinear solve fails, fall back to a smaller step.
-            step = max(abs(val) * 1e-6, 1e-12)
-            p_plus[key] = val + step
-            p_minus[key] = val - step
-            g_plus = np.asarray(solver(p_plus), dtype=float)
-            g_minus = np.asarray(solver(p_minus), dtype=float)
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError):
+            logger.warning("Delta-method: failed for parameter %d", i)
+            continue
 
         jac[:, i] = (g_plus - g_minus) / (2.0 * step)
 
-    var = (jac**2) @ (sig**2)
-    g_err = np.sqrt(var)
+    g_err = _delta_method_sigma(jac, sig)
 
     return method_used, tuple(g0.tolist()), tuple(g_err.tolist())
 
@@ -173,47 +167,78 @@ def compute_g_tensor(
 def solve_D_E(
     params: dict[str, float],
     spin: float,
-    g_nominal,
-) -> tuple[float | None, float | None]:
+    g_nominal: tuple[float, float, float],
+    g_err: tuple[float, float, float] | None = None,
+) -> tuple[float, float, float, float]:
+    """Solve for axial (D) and rhombic (E) ZFS parameters with 1σ uncertainties.
+
+    D and E are solved from the fitted Curie-normalised slopes (`ax_slope`,
+    `rho_slope`) and the principal g-values.
+
+    Uncertainties are propagated using the delta method (finite-difference
+    Jacobian) assuming independent 1σ uncertainties in:
+      - gx, gy, gz (typically from intercept uncertainty propagation)
+      - ax_slope, rho_slope (from regression slope uncertainties)
+
+    Args:
+        params: Flattened regression parameters.
+        spin: Total spin S.
+        g_nominal: Nominal (gx, gy, gz).
+        g_err: Optional 1σ uncertainties for (gx, gy, gz). If not provided,
+            g uncertainties are treated as zero.
+
+    Returns:
+        (D, E, D_err, E_err) where D/E are in cm^-1 and errors are 1σ.
     """
-    Solve for axial (D) and rhombic (E) ZFS parameters from the ax_slope and rho_slope
 
-    D and E are returned in cm^-1
-    """
+    ax_slope = float(params["ax_slope"])
+    rho_slope = float(params["rho_slope"])
 
-    ax_slope = params["ax_slope"]
-    rho_slope = params["rho_slope"]
+    gx0, gy0, gz0 = (float(g_nominal[0]), float(g_nominal[1]), float(g_nominal[2]))
+    D0, E0 = _solve_zfs_from_g_slopes(spin, gx0, gy0, gz0, ax_slope, rho_slope)
 
-    gx_val, gy_val, gz_val = g_nominal
+    ax_slope_err = float(params.get("ax_slope_err", 0.0))
+    rho_slope_err = float(params.get("rho_slope_err", 0.0))
 
-    g2_iso = (gx_val**2 + gy_val**2 + gz_val**2) / 3.0
-    g2_ax = 1.5 * (gz_val**2 - g2_iso)
-    g2_rh = 0.5 * (gx_val**2 - gy_val**2)
+    if g_err is None:
+        gx_err = gy_err = gz_err = 0.0
+    else:
+        gx_err, gy_err, gz_err = (float(g_err[0]), float(g_err[1]), float(g_err[2]))
 
-    f_S = (2.0 * spin - 1.0) * (2.0 * spin + 3.0)
+    sig = np.array([gx_err, gy_err, gz_err, ax_slope_err, rho_slope_err], dtype=float)
+    jac = np.zeros((2, 5), dtype=float)
+    x0 = np.array([gx0, gy0, gz0, ax_slope, rho_slope], dtype=float)
 
-    coeff = f_S / (30.0 * K)
+    # Finite-difference Jacobian for delta-method uncertainty propagation
+    for i in range(5):
+        if sig[i] <= 0.0:
+            continue
 
-    rhs1 = -ax_slope / coeff
-    rhs2 = rho_slope / coeff
+        step = sig[i]
+        x_plus = x0.copy()
+        x_minus = x0.copy()
+        x_plus[i] += step
+        x_minus[i] -= step
 
-    A = np.array(
-        [
-            [g2_ax + 3.0 * g2_iso, -3.0 * g2_rh],
-            [g2_rh, g2_ax - 3.0 * g2_iso],
-        ],
-        dtype=float,
-    )
+        try:
+            D_plus, E_plus = _solve_zfs_from_g_slopes(
+                spin, x_plus[0], x_plus[1], x_plus[2], x_plus[3], x_plus[4]
+            )
+            D_minus, E_minus = _solve_zfs_from_g_slopes(
+                spin, x_minus[0], x_minus[1], x_minus[2], x_minus[3], x_minus[4]
+            )
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError):
+            logger.warning("Delta-method: failed for parameter %d", i)
+            continue
 
-    rhs = np.array([rhs1, rhs2], dtype=float)
+        jac[0, i] = (D_plus - D_minus) / (2.0 * step)
+        jac[1, i] = (E_plus - E_minus) / (2.0 * step)
 
-    D_J, E_J = np.linalg.solve(A, rhs)
+    zfs_err = _delta_method_sigma(jac, sig)
+    D_err = float(zfs_err[0])
+    E_err = float(zfs_err[1])
 
-    # Convert to cm^-1
-    D = D_J / (H * C * 100)
-    E = E_J / (H * C * 100)
-
-    return D, E
+    return float(D0), float(E0), D_err, E_err
 
 
 def _solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, float]:
@@ -238,9 +263,7 @@ def _solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, fl
 
     g_iso_fit = iso_intercept / G_E
 
-    g2_iso = (gx**2 + gy**2 + gz**2) / 3.0
-    g2_ax = 1.5 * (gz**2 - g2_iso)
-    g2_rh = 0.5 * (gx**2 - gy**2)
+    g2_iso, g2_ax, g2_rh = _compute_g2_invariants(gx, gy, gz)
 
     eqs = [
         (gx + gy + gz) / 3.0 - g_iso_fit,
@@ -293,3 +316,66 @@ def _solve_g_principals_axial_only(
     g_vals = [float(gx_val), float(gy_val), float(gz_val)]
     g_vals.sort()
     return g_vals[0], g_vals[1], g_vals[2]
+
+
+def _compute_g2_invariants(
+    gx: float | Expr,
+    gy: float | Expr,
+    gz: float | Expr,
+) -> tuple[float | Expr, float | Expr, float | Expr]:
+    """Compute g^2 invariants used across g-tensor and ZFS formulas.
+
+    Returns:
+        (g2_iso, g2_ax, g2_rh)
+
+    Notes:
+        This helper is intentionally compatible with both numeric inputs (floats)
+        and SymPy symbols, since `_solve_g_principals_full` uses symbolic equations.
+    """
+
+    g2_iso = (gx**2 + gy**2 + gz**2) / 3.0
+    g2_ax = 1.5 * (gz**2 - g2_iso)
+    g2_rh = 0.5 * (gx**2 - gy**2)
+
+    return g2_iso, g2_ax, g2_rh
+
+
+def _solve_zfs_from_g_slopes(
+    spin: float,
+    gx_val: float,
+    gy_val: float,
+    gz_val: float,
+    ax_slope: float,
+    rho_slope: float,
+) -> tuple[float, float]:
+    """Internal: solve D,E in cm^-1 from explicit inputs."""
+
+    g2_iso, g2_ax, g2_rh = _compute_g2_invariants(gx_val, gy_val, gz_val)
+
+    f_S = (2.0 * spin - 1.0) * (2.0 * spin + 3.0)
+    coeff = f_S / (30.0 * K)
+
+    rhs1 = -ax_slope / coeff
+    rhs2 = rho_slope / coeff
+
+    A = np.array(
+        [
+            [g2_ax + 3.0 * g2_iso, -3.0 * g2_rh],
+            [g2_rh, g2_ax - 3.0 * g2_iso],
+        ],
+        dtype=float,
+    )
+    rhs = np.array([rhs1, rhs2], dtype=float)
+
+    D_J, E_J = np.linalg.solve(A, rhs)
+
+    # Convert J -> cm^-1
+    D = D_J / (H * C * 100)
+    E = E_J / (H * C * 100)
+
+    return float(D), float(E)
+
+
+def _delta_method_sigma(jac: np.ndarray, sig: np.ndarray) -> np.ndarray:
+    """Return 1σ output uncertainties via delta method."""
+    return np.sqrt((jac**2) @ (sig**2))
