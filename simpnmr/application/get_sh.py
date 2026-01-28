@@ -49,13 +49,13 @@ def run_get_sh(options) -> int:
         atol=1e-6,
     )
 
-    _ = method_used  # reserved for future reporting
+    logger.info("g-tensor solver method: %s", method_used)
 
     g_parts = [f"{v:.3f} ± {e:.3f}" for v, e in zip(g_nominal, g_err, strict=True)]
 
-    logger.info("gx = %s", g_parts[0])
-    logger.info("gy = %s", g_parts[1])
-    logger.info("gz = %s", g_parts[2])
+    logger.info("g_x = %s", g_parts[0])
+    logger.info("g_y = %s", g_parts[1])
+    logger.info("g_z = %s", g_parts[2])
 
     spin = float(options.spin)
 
@@ -104,11 +104,18 @@ def compute_g_tensor(
     """
 
     rho_intercept = float(params.get("rho_intercept", 0.0))
-    method_used = "axial" if np.isclose(rho_intercept, 0.0, atol=atol) else "full"
+
+    is_zero_rhombicity = np.isclose(rho_intercept, 0.0, atol=atol)
+
+    method_used = (
+        "Analytic (zero rhombicity)"
+        if is_zero_rhombicity
+        else "Nonlinear solve (non-zero rhombicity)"
+    )
 
     solver = (
         _solve_g_principals_axial_only
-        if method_used == "axial"
+        if is_zero_rhombicity
         else _solve_g_principals_full
     )
 
@@ -117,10 +124,11 @@ def compute_g_tensor(
 
     # Proper 1σ uncertainty via delta-method: finite-difference Jacobian + quadrature.
     # Only intercepts affect g in the current model.
-    if method_used == "axial":
-        keys = ("iso_intercept", "ax_intercept")
-    else:
-        keys = ("iso_intercept", "ax_intercept", "rho_intercept")
+    keys = (
+        ("iso_intercept", "ax_intercept")
+        if is_zero_rhombicity
+        else ("iso_intercept", "ax_intercept", "rho_intercept")
+    )
 
     jac = np.zeros((3, len(keys)), dtype=float)
     sig = np.zeros((len(keys),), dtype=float)
@@ -145,8 +153,9 @@ def compute_g_tensor(
         try:
             g_plus = np.asarray(solver(p_plus), dtype=float)
             g_minus = np.asarray(solver(p_minus), dtype=float)
+
         except (ValueError, ArithmeticError):
-            # If full nsolve fails for perturbed points, fall back to a smaller step.
+            # If the nonlinear solve fails, fall back to a smaller step.
             step = max(abs(val) * 1e-6, 1e-12)
             p_plus[key] = val + step
             p_minus[key] = val - step
