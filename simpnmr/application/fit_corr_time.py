@@ -8,10 +8,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
+from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
-from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io.csv import relaxation
@@ -90,7 +90,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
         getattr(config, "fit_corr_time_tau_R", None) is not None
         and getattr(config, "relaxation_model", None) is not None
     ):
-        experiments = Experiment.from_file(config.experiment_files)
+        experiments = load_experiments(config.experiment_files)
 
         # Filter signals to only those with valid R1 values
         # Only include signals for specified elements (e.g., 'C')

@@ -4,13 +4,10 @@
 """TODO"""
 
 import copy
-import logging
 
 import numpy as np
 import numpy.linalg as la
 from numpy.typing import ArrayLike, NDArray
-
-logger = logging.getLogger(__name__)
 
 
 class Hyperfine:

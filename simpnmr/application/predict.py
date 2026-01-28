@@ -11,12 +11,12 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
-from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
@@ -172,7 +172,7 @@ def run_predict(
 
     # Load experimental data from file into list of experiment objects
     if len(config.experiment_files):
-        experiments = Experiment.from_file(config.experiment_files)
+        experiments = load_experiments(config.experiment_files)
         for susc, exp in zip(suscs, experiments):
             if susc.temperature != exp.temperature:
                 logger.warning(

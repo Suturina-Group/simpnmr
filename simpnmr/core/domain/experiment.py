@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 Suturina Group
 
-"""TODO"""
+"""TODO
+Domain models for paramagnetic NMR experiments."""
 
-import logging
 from itertools import chain, permutations, product
 
 import numpy as np
 from numpy.typing import ArrayLike
-
-logger = logging.getLogger(__name__)
 
 
 class Signal:
@@ -162,31 +160,6 @@ class Experiment:
                 signal.assignment.ljust(width), signal.shift, signal.width, signal.area
             )
         return out
-
-    @classmethod
-    def from_file(cls, file_names: str | list[str]) -> list["Experiment"]:
-        """Backward-compatible wrapper for CSV IO."""
-        from simpnmr.io.csv.experiment import load_experiments_from_csv
-
-        return load_experiments_from_csv(file_names)
-
-    def to_csv(
-        self,
-        file_name: str,
-        delimiter: str = ",",
-        comment: str = "",
-        verbose: bool = True,
-    ) -> None:
-        """Backward-compatible wrapper for CSV IO."""
-        from simpnmr.io.csv.experiment import write_experiment_to_csv
-
-        write_experiment_to_csv(
-            self,
-            file_name,
-            delimiter=delimiter,
-            comment=comment,
-            verbose=verbose,
-        )
 
     @classmethod
     def generate_permutations(

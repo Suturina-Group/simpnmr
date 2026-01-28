@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathos import multiprocessing as mp
 
+from simpnmr.application.loaders.experiment import load_experiments, save_experiment
+from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup import plotting as pl
 from simpnmr.application.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.domain.tensors import Hyperfine, Susceptibility
+from simpnmr.core.domain.tensors import Hyperfine
 from simpnmr.core.factories.susc import get_g_corr_iso_susc
 from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
@@ -139,7 +141,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         base_molecule.average_hyperfine(config.hyperfine_average)
 
     # Create experiments
-    experiments = Experiment.from_file(config.experiment_files)
+    experiments = load_experiments(config.experiment_files)
 
     # Check the number of experiments is consistent across the files
     # and issue warning if not
@@ -268,10 +270,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 experiment.signals[it].assignment = new
 
             # Save assigned experiment to file
-            experiment.to_csv(
-                os.path.join(
+            save_experiment(
+                experiment,
+                file_name=os.path.join(
                     config.project_name,
-                    "assigned_experiment_{:.2f}_K.csv".format(experiment.temperature),
+                    f"assigned_experiment_{experiment.temperature:.2f}_K.csv",
                 ),
                 delimiter=delimiter,
                 comment=(
@@ -527,9 +530,9 @@ def _fit_isoaxrho_vt(
 
         section = config.susc_vt_ab_initio_format.split("orca_", 1)[1]
 
-        suscs_ab_initio = Susceptibility.from_orca(
+        suscs_ab_initio = load_susceptibilities(
             config.susc_vt_ab_initio_file,
-            section=section,
+            config.susc_vt_ab_initio_format,
         )
         g_tensor = rdrs.read_orca_g_tensor(
             config.susc_vt_ab_initio_file,
