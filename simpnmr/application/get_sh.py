@@ -9,13 +9,15 @@ and solves for principal g-values either using a full (rhombic) numerical solve
 or an axial-only analytic approximation.
 """
 
-import argparse
+import logging
 
 import numpy as np
 from scipy.constants import physical_constants
 from sympy import nsolve, symbols
 
 from simpnmr.io.csv.fitting import read_chiT_regression_csv
+
+logger = logging.getLogger(__name__)
 
 # Imports
 G_E = abs(physical_constants["electron g factor"][0])
@@ -25,9 +27,57 @@ H = physical_constants["Planck constant"][0]
 C = physical_constants["speed of light in vacuum"][0]
 
 
+def run_get_sh(options) -> int:
+    """Run the get_sh workflow (application-layer entrypoint).
+
+    This function is intentionally CLI-agnostic: it receives an options object and
+    emits user-facing information via logging. Argument parsing and logging setup
+    are handled by the CLI layer.
+
+    Args:
+        options: Run options (typically `GetSHRunOptions`).
+
+    Returns:
+        Process exit code (0 on success).
+    """
+
+    params = read_chiT_regression_csv(options.chiT_regression_csv)
+
+    method_used, g_nominal, g_err = compute_g_tensor(
+        options.chiT_regression_csv,
+        params=params,
+        atol=1e-6,
+    )
+
+    _ = method_used  # reserved for future reporting
+
+    g_parts = [f"{v:.3f} ± {e:.3f}" for v, e in zip(g_nominal, g_err, strict=True)]
+
+    logger.info("gx = %s", g_parts[0])
+    logger.info("gy = %s", g_parts[1])
+    logger.info("gz = %s", g_parts[2])
+
+    spin = float(options.spin)
+
+    if spin != 0.5:
+        D, E = solve_D_E(params, spin, g_nominal)
+        D = 0.0 if abs(D) < 1e-10 else D
+        E = 0.0 if abs(E) < 1e-10 else E
+        logger.info("D = %.3f cm^-1", D)
+        logger.info("E = %.3f cm^-1", E)
+    else:
+        logger.info(
+            "ZFS parameters (D, E) are not defined for S = 1/2 "
+            "and are therefore not reported."
+        )
+
+    return 0
+
+
 def compute_g_tensor(
     filename: str,
     *,
+    params: dict[str, float] | None = None,
     atol: float = 1e-6,
 ) -> tuple[
     str,
@@ -44,14 +94,14 @@ def compute_g_tensor(
 
     Args:
         filename (str): Path to the regression CSV file.
+        params (dict[str, float] | None): Optional pre-parsed regression parameters.
+            If provided, the CSV will not be re-read.
         atol (float): Absolute tolerance used to decide whether rhombicity is ~0.
 
     Returns:
         tuple[str, tuple[float, float, float], tuple[float, float, float]]:
             (method_used, g_nominal, g_err)
     """
-
-    params = read_chiT_regression_csv(filename)
 
     rho_intercept = float(params.get("rho_intercept", 0.0))
     method_used = "axial" if np.isclose(rho_intercept, 0.0, atol=atol) else "full"
@@ -109,6 +159,52 @@ def compute_g_tensor(
     g_err = np.sqrt(var)
 
     return method_used, tuple(g0.tolist()), tuple(g_err.tolist())
+
+
+def solve_D_E(
+    params: dict[str, float],
+    spin: float,
+    g_nominal,
+) -> tuple[float | None, float | None]:
+    """
+    Solve for axial (D) and rhombic (E) ZFS parameters from the ax_slope and rho_slope
+
+    D and E are returned in cm^-1
+    """
+
+    ax_slope = params["ax_slope"]
+    rho_slope = params["rho_slope"]
+
+    gx_val, gy_val, gz_val = g_nominal
+
+    g2_iso = (gx_val**2 + gy_val**2 + gz_val**2) / 3.0
+    g2_ax = 1.5 * (gz_val**2 - g2_iso)
+    g2_rh = 0.5 * (gx_val**2 - gy_val**2)
+
+    f_S = (2.0 * spin - 1.0) * (2.0 * spin + 3.0)
+
+    coeff = f_S / (30.0 * K)
+
+    rhs1 = -ax_slope / coeff
+    rhs2 = rho_slope / coeff
+
+    A = np.array(
+        [
+            [g2_ax + 3.0 * g2_iso, -3.0 * g2_rh],
+            [g2_rh, g2_ax - 3.0 * g2_iso],
+        ],
+        dtype=float,
+    )
+
+    rhs = np.array([rhs1, rhs2], dtype=float)
+
+    D_J, E_J = np.linalg.solve(A, rhs)
+
+    # Convert to cm^-1
+    D = D_J / (H * C * 100)
+    E = E_J / (H * C * 100)
+
+    return D, E
 
 
 def _solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, float]:
@@ -188,113 +284,3 @@ def _solve_g_principals_axial_only(
     g_vals = [float(gx_val), float(gy_val), float(gz_val)]
     g_vals.sort()
     return g_vals[0], g_vals[1], g_vals[2]
-
-
-def solve_D_E(
-    params: dict[str, float],
-    spin: float,
-    g_nominal,
-) -> tuple[float | None, float | None]:
-    """
-    Solve for axial (D) and rhombic (E) ZFS parameters from the ax_slope and rho_slope
-
-    D and E are returned in cm^-1
-    """
-
-    ax_slope = params["ax_slope"]
-    rho_slope = params["rho_slope"]
-
-    gx_val, gy_val, gz_val = g_nominal
-
-    g2_iso = (gx_val**2 + gy_val**2 + gz_val**2) / 3.0
-    g2_ax = 1.5 * (gz_val**2 - g2_iso)
-    g2_rh = 0.5 * (gx_val**2 - gy_val**2)
-
-    f_S = (2.0 * spin - 1.0) * (2.0 * spin + 3.0)
-
-    coeff = f_S / (30.0 * K)
-
-    rhs1 = -ax_slope / coeff
-    rhs2 = rho_slope / coeff
-
-    A = np.array(
-        [
-            [g2_ax + 3.0 * g2_iso, -3.0 * g2_rh],
-            [g2_rh, g2_ax - 3.0 * g2_iso],
-        ],
-        dtype=float,
-    )
-
-    rhs = np.array([rhs1, rhs2], dtype=float)
-
-    D_J, E_J = np.linalg.solve(A, rhs)
-
-    # Convert to cm^-1
-    D = D_J / (H * C * 100)
-    E = E_J / (H * C * 100)
-
-    return D, E
-
-
-def main():
-    """
-    Parse CLI arguments, select the solve branch, and print the g principal values.
-
-    Returns:
-        None
-    """
-
-    # Define command-line interface for input file and section choice
-    parser = argparse.ArgumentParser(
-        description=(
-            "Compute principal g-tensor values and zero-field "
-            "splitting parameters (D, E)\n"
-            "from Curie-normalised chiT regression fits (iso/ax/rh components).\n\n"
-            "The script reads a regression CSV file containing "
-            "intercepts and slopes for\n"
-            "isotropic, axial and rhombic terms, solves for the principal "
-            "g-values using\n"
-            "either an axial analytic approximation or a full rhombic "
-            "numerical solver,\n"
-            "and propagates 1σ uncertainties by finite-difference error analysis."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage="get_sh csv_file --spin SPIN",
-    )
-
-    parser.add_argument("csv_file", help="CSV file containing slope and intercepts")
-
-    parser.add_argument(
-        "--spin",
-        type=float,
-        required=True,
-        help="Total spin quantum number (e.g. 2.0)",
-    )
-
-    args = parser.parse_args()
-
-    params = read_chiT_regression_csv(args.csv_file)
-
-    method_used, g_nominal, g_err = compute_g_tensor(
-        args.csv_file,
-        atol=1e-6,
-    )
-
-    g_parts = [f"{v:.3f} ± {e:.3f}" for v, e in zip(g_nominal, g_err, strict=True)]
-
-    print(f"gx = {g_parts[0]}")
-    print(f"gy = {g_parts[1]}")
-    print(f"gz = {g_parts[2]}")
-
-    spin = float(args.spin)
-
-    if spin != 0.5:
-        D, E = solve_D_E(params, spin, g_nominal)
-        D = 0.0 if abs(D) < 1e-10 else D
-        E = 0.0 if abs(E) < 1e-10 else E
-        print(f"D = {D:.3f} cm^-1")
-        print(f"E = {E:.3f} cm^-1")
-
-
-if __name__ == "__main__":
-    main()

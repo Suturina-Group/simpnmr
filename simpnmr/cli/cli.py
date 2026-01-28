@@ -158,6 +158,17 @@ def extract_dia_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     )
 
 
+def get_sh_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Thin CLI wrapper for get_sh workflow."""
+
+    from simpnmr.application.get_sh import run_get_sh
+    from simpnmr.application.setup.options import GetSHRunOptions
+
+    options = GetSHRunOptions.from_namespace(uargs)
+
+    return run_get_sh(options)
+
+
 def read_args(arg_list=None):
     """
     Parse CLI arguments and dispatch to the selected subcommand handler.
@@ -225,6 +236,25 @@ def read_args(arg_list=None):
             "Quantum Chemistry output file containing reference "
             "chemical shift information"
         ),
+    )
+
+    get_sh = subparsers.add_parser(
+        "get_sh",
+        description="Derive g-tensor and optional ZFS parameters from chiT regression",
+    )
+    get_sh.set_defaults(func=get_sh_cli)
+
+    get_sh.add_argument(
+        "--spin",
+        type=float,
+        required=True,
+        help="Total spin quantum number (e.g. 2.0)",
+    )
+
+    get_sh.add_argument(
+        "chiT_regression_csv",
+        type=str,
+        help="CSV file produced by chiT regression (slope/intercept and uncertainties)",
     )
 
     fit_susc = subparsers.add_parser(

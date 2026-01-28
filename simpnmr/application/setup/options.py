@@ -167,3 +167,20 @@ class ExtractDiaRunOptions:
     @classmethod
     def from_namespace(cls, ns) -> "ExtractDiaRunOptions":
         return cls(runtime=ns.runtime)
+
+
+@dataclass(frozen=True)
+class GetSHRunOptions:
+    """Run options for the get_sh CLI-driven workflow."""
+
+    runtime: RuntimeSettings
+    chiT_regression_csv: str
+    spin: float
+
+    @classmethod
+    def from_namespace(cls, ns) -> "GetSHRunOptions":
+        return cls(
+            runtime=ns.runtime,
+            chiT_regression_csv=ns.chiT_regression_csv,
+            spin=float(ns.spin),
+        )

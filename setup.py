@@ -41,7 +41,6 @@ setuptools.setup(
             "simpnmr = simpnmr.cli.cli:interface",
             "plot_A_funcs = simpnmr.tools.batch_hf_plot:main",
             "plot_chi_funcs = simpnmr.tools.batch_susc_plot:main",
-            "get_sh = simpnmr.tools.get_sh:main",
             "xyz_to_chemlabel = simpnmr.tools.coords_tools.chemcraft_xyz:main",
         ]
     },
