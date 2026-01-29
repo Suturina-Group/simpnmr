@@ -661,107 +661,6 @@ class Molecule:
         self._susc = new_susc
         return
 
-    # [MOVE] Reads from CSV/DFT files; move to application loader and pass data into domain.
-    def load_diamagnetic_shifts(
-        self,
-        file_name: str,
-        file_type: str = "csv",
-        ref_file_name: str = "",
-        ref_file_type: str = "csv",
-    ) -> None:
-        """Load diamagnetic shifts from a file and assign them to nuclei.
-
-        Args:
-            file_name: Input file containing diamagnetic shifts.
-            file_type: Input type. Supported values are ``"csv"`` and ``"dft"``.
-            ref_file_name: Optional reference file used to subtract reference
-                shifts.
-            ref_file_type: Reference file type. Supported values are ``"csv"`` and
-                ``"dft"``.
-
-        Raises:
-            KeyError: If required columns are missing.
-            ValueError: If `file_type` or `ref_file_type` is unsupported.
-        """
-
-        if file_type == "csv":
-            dia = read_csv_safe(file_name)
-            if "atom_label" in dia.keys():
-                dia.set_index("atom_label", inplace=True)
-                for nuc in self.nuclei:
-                    nuc.shift.dia = dia["shift"][nuc.label]
-            elif "chem_label" in dia.keys():
-                dia.set_index("chem_label", inplace=True)
-                for nuc in self.nuclei:
-                    nuc.shift.dia = dia["shift"][nuc.chem_label]
-            else:
-                raise KeyError(
-                    "atom_label or chem_label not present in diamagnetic shift file"
-                )
-        elif file_type == "dft":
-            data = rdrs.QCCS.guess_from_file(file_name)
-
-            _relabel = {
-                new: old
-                for old, new in zip(
-                    data.cs_iso.keys(), xyzf.add_label_indices(data.cs_iso.keys())
-                )
-            }
-
-            for nuc in self.nuclei:
-                try:
-                    nuc.shift.dia = data.cs_iso[_relabel[nuc.label]]
-                except KeyError:
-                    raise KeyError(
-                        f"Cannot find {nuc.label} in reference diamagnetic shift file"
-                    )
-        else:
-            raise ValueError("Unknown file_type")
-
-        if len(ref_file_name):
-            if ref_file_type == "csv":
-                ref = read_csv_safe(ref_file_name)
-
-                # Average by nucleus
-                ref["atom_label"] = xyzf.remove_label_indices(ref["atom_label"])
-
-                ref = ref.groupby("atom_label").mean().reset_index()
-
-                for nuc in self.nuclei:
-                    try:
-                        nuc.shift.dia = ref["shift"][nuc.label_nn] - nuc.shift.dia
-                    except KeyError:
-                        raise KeyError(
-                            f"Cannot find {nuc.label_nn} in reference diamagnetic "
-                            "shift file"
-                        )
-
-            elif ref_file_type == "dft":
-                ref_data = rdrs.QCCS.guess_from_file(ref_file_name)
-
-                ref_labels = list(ref_data.cs_iso.keys())
-                ref_labels_nn = xyzf.remove_label_indices(ref_labels)
-
-                avg_ref_iso = dict.fromkeys(ref_labels_nn, 0)
-
-                for lab, lab_nn in zip(ref_labels, ref_labels_nn):
-                    avg_ref_iso[lab_nn] += ref_data.cs_iso[lab]
-
-                for lab_nn in np.unique(ref_labels_nn):
-                    avg_ref_iso[lab_nn] /= ref_labels_nn.count(lab_nn)
-
-                for nuc in self.nuclei:
-                    try:
-                        nuc.shift.dia = avg_ref_iso[nuc.label_nn] - nuc.shift.dia
-                    except KeyError:
-                        raise KeyError(
-                            f"Cannot find {nuc.label_nn} in reference diamagnetic "
-                            "shift file"
-                        )
-            else:
-                raise ValueError("Unknown file_type")
-        return
-
     def average_shifts(self):
         """Average total shifts over nuclei sharing the same chemical label.
 
@@ -923,6 +822,52 @@ class Molecule:
 
         if "fc" not in shift_terms and "pc" not in shift_terms:
             raise ValueError("Unknown shift specified")
+
+        return
+
+    def apply_diamagnetic_shifts(
+        self,
+        dia_by_key: dict[str, float],
+        key_kind: str,
+        ref_avg_by_label_nn: dict[str, float] | None = None,
+    ) -> None:
+        """Apply diamagnetic shifts to nuclei.
+
+        Args:
+            dia_by_key: Mapping from label key -> dia shift.
+            key_kind: 'atom_label' (uses nuc.label) or 'chem_label'
+            (uses nuc.chem_label).
+            ref_avg_by_label_nn: Optional mapping nuc.label_nn -> averaged
+            reference shift.
+                If provided, applies: dia := ref - dia.
+
+        Raises:
+            KeyError: If a required key is missing in the provided mapping(s).
+            ValueError: If key_kind is unsupported.
+        """
+        if key_kind not in ("atom_label", "chem_label"):
+            raise ValueError("key_kind must be 'atom_label' or 'chem_label'")
+
+        for nuc in self.nuclei:
+            key = nuc.label if key_kind == "atom_label" else nuc.chem_label
+            try:
+                nuc.shift.dia = float(dia_by_key[key])
+            except KeyError as exc:
+                raise KeyError(
+                    f"Cannot find {key} in diamagnetic shift mapping"
+                ) from exc
+
+        if ref_avg_by_label_nn is not None:
+            for nuc in self.nuclei:
+                try:
+                    nuc.shift.dia = (
+                        float(ref_avg_by_label_nn[nuc.label_nn]) - nuc.shift.dia
+                    )
+                except KeyError as exc:
+                    raise KeyError(
+                        f"Cannot find {nuc.label_nn} in reference diamagnetic "
+                        "shift mapping"
+                    ) from exc
 
         return
 

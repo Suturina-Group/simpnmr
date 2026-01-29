@@ -8,6 +8,7 @@ from pathos import multiprocessing as mp
 
 from simpnmr.application.assignment import generate_assignment_permutations
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
+from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
@@ -143,11 +144,16 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
     # Load diamagnetic shift file
     if len(config.diamagnetic_file):
-        base_molecule.load_diamagnetic_shifts(
-            config.diamagnetic_file,
-            config.diamagnetic_method,
-            config.diamagnetic_ref_file,
-            config.diamagnetic_ref_method,
+        dia_by_key, key_kind, ref_avg_by_label_nn = load_diamagnetic_shifts(
+            file_name=config.diamagnetic_file,
+            file_type=config.diamagnetic_method,
+            ref_file_name=config.diamagnetic_ref_file,
+            ref_file_type=config.diamagnetic_ref_method,
+        )
+        base_molecule.apply_diamagnetic_shifts(
+            dia_by_key=dia_by_key,
+            key_kind=key_kind,
+            ref_avg_by_label_nn=ref_avg_by_label_nn,
         )
 
     # Rotationally average hyperfines
