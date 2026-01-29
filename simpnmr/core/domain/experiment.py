@@ -4,6 +4,8 @@
 """TODO
 Domain models for paramagnetic NMR experiments."""
 
+from typing import Optional
+
 import numpy as np
 from numpy.typing import ArrayLike
 
@@ -28,13 +30,58 @@ class Signal:
         r1: Longitudinal relaxation rate in s^-1.
     """
 
-    def __init__(self, shift, width, area, assignment="UNK", l_to_g=1, r1=None):
-        self.shift = shift
-        self.width = width
-        self.area = area
+    def __init__(
+        self,
+        shift: float,
+        width: float,
+        area: float,
+        assignment: str = "UNK",
+        l_to_g: float = 1.0,
+        r1: Optional[float] = None,
+    ) -> None:
+        try:
+            self.shift = float(shift)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("shift must be floatable") from exc
+
+        try:
+            self.width = float(width)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("width must be floatable") from exc
+
+        try:
+            self.area = float(area)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("area must be floatable") from exc
+
+        if self.width < 0.0:
+            raise ValueError("width must be non-negative")
+        if self.area < 0.0:
+            raise ValueError("area must be non-negative")
+
+        if not isinstance(assignment, str):
+            raise TypeError("assignment must be str")
+        assignment = assignment.strip()
+        if not assignment:
+            raise ValueError("assignment must be non-empty")
         self.assignment = assignment
-        self.l_to_g = l_to_g
-        self.r1 = r1
+
+        try:
+            self.l_to_g = float(l_to_g)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("l_to_g must be floatable") from exc
+        if self.l_to_g < 0.0:
+            raise ValueError("l_to_g must be non-negative")
+
+        if r1 is None:
+            self.r1 = None
+        else:
+            try:
+                self.r1 = float(r1)
+            except (TypeError, ValueError) as exc:
+                raise TypeError("r1 must be floatable") from exc
+            if self.r1 < 0.0:
+                raise ValueError("r1 must be non-negative")
 
         return
 
