@@ -11,6 +11,7 @@ from numpy.typing import ArrayLike
 
 from simpnmr.__version__ import __version__
 from simpnmr.tools.coords_tools import xyz_format
+from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +92,32 @@ def save_xyz(
         logger.info("New XYZ file written to %s", file_name)
 
     return
+
+
+def save_chemcraft_xyz(
+    file_name: str,
+    labels: ArrayLike,
+    coords: ArrayLike,
+    chem_labels: dict[str, str] | None = None,
+    verbose: bool = True,
+) -> None:
+    """Save an XYZ file with ChemCraft-compatible chemical labels.
+
+    ChemCraft can display per-atom labels if an extra quoted string is appended to
+    each coordinate line. This writer appends per-atom chemical labels when provided.
+    """
+    coords = np.asarray(coords)
+    chem_labels = chem_labels or {}
+
+    with open(file_name, "w") as f:
+        for lab, trio in zip(labels, coords):
+            f.write(
+                "{:5} {:15.7f} {:15.7f} {:15.7f}".format(xyzf.lab_to_num(lab), *trio)
+            )
+            if lab in chem_labels:
+                f.write(f'      "{chem_labels[lab]}"\n')
+            else:
+                f.write("\n")
+
+    if verbose:
+        logger.info("ChemCraft XYZ file written to %s", file_name)

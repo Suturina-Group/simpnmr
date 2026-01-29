@@ -117,8 +117,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             raise ValueError(str(err))
 
         # Save xyz file with chemical labels for chemcraft
-        base_molecule.save_chemcraft_xyz(
-            file_name=os.path.join(config.project_name, "chemcraft_structure.xyz")
+        xyz.save_chemcraft_xyz(
+            file_name=os.path.join(config.project_name, "chemcraft_structure.xyz"),
+            labels=base_molecule.labels,
+            coords=base_molecule.coords,
+            chem_labels={nuc.label: nuc.chem_label for nuc in base_molecule.nuclei},
         )
 
     # Save xyz file with chemical labels for chemcraft

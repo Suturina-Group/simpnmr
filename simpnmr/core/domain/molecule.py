@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 Suturina Group
 
-"""TODO"""
+"""Domain entities for molecular structure and NMR-active nuclei."""
 
 import copy
 import datetime
@@ -16,17 +16,23 @@ from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
 from simpnmr.core.utils.arrays import flatten
+
+# [MOVE] Domain must not depend on IO;
 from simpnmr.io.csv.utils import read_csv_safe
+
+# [MOVE] QC file parsing is IO;
 from simpnmr.io.qc import qc_readers as rdrs
+
+# [MOVE] DataFrame serialization belongs to IO/mappers;
 from simpnmr.mappers import dataframes as ser
 from simpnmr.mappers import label_format as lf
+
+# [MOVE] XYZ parsing/writing is IO;
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
 
-# RETURN TO: Create a Relaxation class and use it in Nucleus
-# This will allow us to use something like nuc.r1 and nuc.r2 to access relaxation rates
 class Relaxation:
     """Holds calculated relaxation rates for a nucleus.
 
@@ -91,7 +97,7 @@ class Nucleus:
         label: str,
         coord: list[float],
         A: Hyperfine,
-        shift: Shift = Shift(),
+        shift: Shift = Shift(),  # TODO: switch to Shift | None = None once deepcopy removed #noqa
         chem_label: str = None,
         chem_math_label: str = None,
         isotope: str = None,
@@ -100,10 +106,10 @@ class Nucleus:
         self.label = label
         self.label_nn = xyzf.remove_label_indices(self.label)
 
-        # Hyperfine coupling tensor for current nucleus
+        # [REDUCE] Avoid deepcopy in domain unless ownership/mutability requires it.
         self.A = copy.deepcopy(A)
 
-        # Chemical shift
+        # [REDUCE] Avoid deepcopy in domain; construct copies in factories if needed.
         self.shift = copy.deepcopy(shift)
 
         # Coordinates of nucleus
@@ -309,8 +315,6 @@ class Molecule:
         # List of quantum number objects
         self.electronic = ElectronicState()
 
-    pass
-
     @property
     def n_atoms(self):
         return len(self.labels)
@@ -348,6 +352,7 @@ class Molecule:
 
         return string
 
+    # [MOVE] Constructor that reads XYZ is IO-facing; prefer a loader/factory in application/IO.
     @classmethod
     def from_xyz(cls, xyz_file: str, elements: list[str] | str = "all") -> "Molecule":
         """Create a `Molecule` from an XYZ file.
@@ -422,6 +427,7 @@ class Molecule:
 
         return base
 
+    # [MOVE] CSV parsing is IO-facing; keep domain construction pure (labels/coords/tensors in, objects out).
     @classmethod
     def from_csv(cls, file_name: str, elements: list[str] | str = "all") -> "Molecule":
         """Create a `Molecule` from a CSV file containing structure and tensors.
@@ -582,6 +588,7 @@ class Molecule:
 
         return base
 
+    # [MOVE] Depends on QC readers; move to a loader/factory that returns a domain `Molecule`.
     @classmethod
     def from_QCA(
         cls,
@@ -657,6 +664,7 @@ class Molecule:
         self._susc = new_susc
         return
 
+    # [MOVE] Reads from CSV/DFT files; move to application loader and pass data into domain.
     def load_diamagnetic_shifts(
         self,
         file_name: str,
@@ -921,6 +929,7 @@ class Molecule:
 
         return
 
+    # [MOVE] Reads CSV and mutates domain; move file IO to loaders, keep a pure `apply_chem_labels(...)` in domain.
     def add_chem_labels_from_file(self, file_name: str) -> None:
         """Assign chemical labels to nuclei using a CSV file.
 
@@ -1006,6 +1015,7 @@ class Molecule:
 
         return
 
+    # [MOVE] Serialization belongs to IO layer (writers). Domain should expose data, not write files.
     def save_hyperfines_to_csv(
         self,
         file_name: str = "dft_hyperfines.csv",
@@ -1043,6 +1053,7 @@ class Molecule:
 
         return
 
+    # [MOVE] Serialization belongs to IO layer (writers). Keep domain free of file formats.
     def to_csv(
         self,
         file_name: str = "molecule.csv",
@@ -1077,36 +1088,4 @@ class Molecule:
         if verbose:
             logger.info("Molecule data written to %s", file_name)
 
-        return
-
-    def save_chemcraft_xyz(self, file_name: str, verbose: bool = True):
-        """Save an XYZ file with Chemcraft-compatible chemical labels.
-
-        Chemcraft can display per-atom labels if an extra quoted string is appended to
-        each coordinate line. This writer appends `Nucleus.chem_label` for nuclei where
-        it is available.
-
-        Args:
-            file_name: Output XYZ file path.
-            verbose: If True, prints the output file path.
-
-        Returns:
-            None.
-        """
-
-        _clabs = {nuc.label: nuc.chem_label for nuc in self.nuclei}
-        with open(file_name, "w") as f:
-            for lab, trio in zip(self.labels, self.coords):
-                f.write(
-                    "{:5} {:15.7f} {:15.7f} {:15.7f}".format(
-                        xyzf.lab_to_num(lab), *trio
-                    )
-                )
-                if lab in _clabs.keys():
-                    f.write('      "{}"\n'.format(_clabs[lab]))
-                else:
-                    f.write("\n")
-
-        if verbose:
-            logger.info("Molecule CHEMCRAFT.xyz file written to %s", file_name)
         return
