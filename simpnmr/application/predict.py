@@ -22,6 +22,7 @@ from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.io.csv import relaxation, susceptibility
+from simpnmr.io.csv.molecule import save_molecule_to_csv
 from simpnmr.io.csv.spectrum import read_spectrum
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
@@ -359,13 +360,15 @@ def run_predict(
 
     # Write shift data to file
     for molecule in molecules:
-        molecule.to_csv(
-            os.path.join(
+        save_molecule_to_csv(
+            molecule=molecule,
+            file_name=os.path.join(
                 config.project_name,
                 f"hyperfines_and_shifts_{molecule.susc.temperature:.2f}_K.csv",
             ),
             delimiter=delimiter,
             comment=f"# T = {molecule.susc.temperature:.2f} K",
+            verbose=True,
         )
 
     return 0

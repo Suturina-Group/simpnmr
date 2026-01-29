@@ -4,14 +4,12 @@
 """Domain entities for molecular structure and NMR-active nuclei."""
 
 import copy
-import datetime
 import logging
 import re
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from simpnmr.__version__ import __version__
 from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
@@ -24,7 +22,6 @@ from simpnmr.io.csv.utils import read_csv_safe
 from simpnmr.io.qc import qc_readers as rdrs
 
 # [MOVE] DataFrame serialization belongs to IO/mappers;
-from simpnmr.mappers import dataframes as ser
 from simpnmr.mappers import label_format as lf
 
 # [MOVE] XYZ parsing/writing is IO;
@@ -1012,80 +1009,5 @@ class Molecule:
                         f"Coordinates of {nuc.label} in chem_labels file "
                         "do not match those of molecule."
                     )
-
-        return
-
-    # [MOVE] Serialization belongs to IO layer (writers). Domain should expose data, not write files.
-    def save_hyperfines_to_csv(
-        self,
-        file_name: str = "dft_hyperfines.csv",
-        verbose: bool = True,
-        comment: str = "",
-        delimiter: str = ",",
-    ) -> None:
-        """Save hyperfine data for all nuclei to a CSV file.
-
-        Args:
-            file_name: Output CSV file name.
-            verbose: If True, prints the output file path.
-            comment: Optional additional comment line (including comment marker).
-            delimiter: CSV delimiter.
-        """
-
-        df = ser.build_hyperfines_df(self)
-
-        _comment = (
-            f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
-                datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")
-            )
-        )
-
-        _comment += comment + "\n"
-
-        with open(file_name, "w") as _f:
-            _f.write(_comment)
-
-            df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
-
-        if verbose:
-            logger.info("Molecule data written to %s", file_name)
-            logger.info("Converted hyperfine data written to %s", file_name)
-
-        return
-
-    # [MOVE] Serialization belongs to IO layer (writers). Keep domain free of file formats.
-    def to_csv(
-        self,
-        file_name: str = "molecule.csv",
-        verbose: bool = True,
-        comment: str = "",
-        delimiter: str = ",",
-    ) -> None:
-        """Save molecule structure, hyperfine data, and shifts to a CSV file.
-
-        Args:
-            file_name: Output CSV file name.
-            verbose: If True, prints the output file path.
-            comment: Optional additional comment line (including comment marker).
-            delimiter: CSV delimiter.
-        """
-
-        df = ser.build_molecule_df(self)
-
-        _comment = (
-            f"# This file was generated with SimpNMR v{__version__} at {{}}\n".format(
-                datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")
-            )
-        )
-
-        _comment += comment + "\n"
-
-        with open(file_name, "w") as _f:
-            _f.write(_comment)
-
-            df.to_csv(_f, sep=delimiter, header=True, float_format="%.5f", index=None)
-
-        if verbose:
-            logger.info("Molecule data written to %s", file_name)
 
         return

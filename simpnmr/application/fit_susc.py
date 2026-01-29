@@ -19,6 +19,7 @@ from simpnmr.core.factories.susc import get_g_corr_iso_susc
 from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
 from simpnmr.io.csv import fitting, susceptibility
+from simpnmr.io.csv.molecule import save_molecule_to_csv
 from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
@@ -400,13 +401,15 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
     for molecule in molecules:
         comment = _comment_base + f"# T = {molecule.susc.temperature:.2f} K"
-        molecule.to_csv(
-            os.path.join(
+        save_molecule_to_csv(
+            molecule=molecule,
+            file_name=os.path.join(
                 config.project_name,
                 f"hyperfines_and_fitted_shifts_{molecule.susc.temperature:.2f}_K.csv",
             ),
             delimiter=delimiter,
             comment=comment,
+            verbose=True,
         )
 
     # Write susceptibility tensor with model terms
