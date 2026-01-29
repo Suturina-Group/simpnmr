@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathos import multiprocessing as mp
 
+from simpnmr.application.assignment import generate_assignment_permutations
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup import plotting as pl
@@ -215,7 +216,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ]
             # For the current experiment, generate a new set in which
             # the assignment is permuted according to user defined groups
-            permed_assignments = Experiment.generate_permutations(
+            permed_assignments = generate_assignment_permutations(
                 experiment=experiment, groups=config.assignment_groups
             )
 

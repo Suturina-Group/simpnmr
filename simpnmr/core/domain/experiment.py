@@ -4,8 +4,6 @@
 """TODO
 Domain models for paramagnetic NMR experiments."""
 
-from itertools import chain, permutations, product
-
 import numpy as np
 from numpy.typing import ArrayLike
 
@@ -160,58 +158,3 @@ class Experiment:
                 signal.assignment.ljust(width), signal.shift, signal.width, signal.area
             )
         return out
-
-    @classmethod
-    def generate_permutations(
-        cls, experiment: "Experiment", groups: list[list[str]] = []
-    ) -> list["Experiment"]:
-        """Generates all assignment permutations consistent with grouping.
-
-        Args:
-            experiment: The reference experiment whose assignments are permuted.
-            groups: Groups of assignment labels that may be permuted within each
-                group. Assignments not present in any group are treated as fixed.
-
-        Returns:
-            A list of permuted assignment lists.
-        """
-
-        # Add on fixed assignments by treating each as it were a group
-        # of its own
-        fixed = [
-            [label]
-            for label in experiment.keys()
-            if label not in np.concatenate(groups)
-        ]
-        groups += fixed
-
-        # Find all permutations subject to grouping constraints
-        _tmp = [permutations(group) for group in groups]
-        perms = [list(chain.from_iterable(e)) for e in product(*_tmp, repeat=1)]
-
-        # Convert label groups into indices of experimental signals
-        l2i = {label: it for it, label in enumerate(experiment.keys())}
-        group_to_exp = [l2i[lab] for lab in np.concatenate(groups)]
-
-        # Order which returns signals listed in groups
-        # back to that of original experiment
-        order = np.argsort(group_to_exp)
-
-        # Reorder to match original experiment
-        all_new_assgn = [[new_assgns[o] for o in order] for new_assgns in perms]
-
-        return all_new_assgn
-
-    @property
-    def r1_by_assignment(self):
-        """Returns a mapping from assignment to R1 value.
-
-        Returns:
-            Dictionary mapping signal assignments to R1 values.
-        """
-        r1_dict = {
-            signal.assignment: signal.r1
-            for signal in self.signals
-            if signal.r1 is not None
-        }
-        return r1_dict
