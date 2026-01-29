@@ -8,6 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
+from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
@@ -40,10 +41,6 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
 
     if options is None:
         raise ValueError("FitCorrTimeRunOptions is required")
-
-    orbit = config.orbit
-
-    total_momentum_J = config.total_momentum_J
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
@@ -191,9 +188,17 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             for label in nuclei_coords
         }
 
-        # Load Spin
-        base_molecule.electronic.load_from_config(config)
+        # Load electronic state
+        base_molecule.electronic = load_electronic_state(
+            spin_S=config.spin_S,
+            orbit_L=config.orbit,
+            total_J=config.total_momentum_J,
+            hyperfine_file=config.hyperfine_file,
+            hyperfine_method=config.hyperfine_method,
+        )
         spin = base_molecule.electronic.spin_S
+        orbit = base_molecule.electronic.orbit_L
+        total_momentum_J = base_molecule.electronic.total_J
 
         # --- Model function for curve_fit ---
         if fix_param == "tau_r":

@@ -19,8 +19,12 @@ def read_csv_safe(
             skipinitialspace=True,
             comment="#",
             engine="python",
+            encoding="utf-8-sig",
             **kwargs,
         )
+
+        # Normalize column names (strip BOM and surrounding whitespace)
+        df.columns = [str(c).replace("\ufeff", "").strip() for c in df.columns]
 
         return df
     except FileNotFoundError:

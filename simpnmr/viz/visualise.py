@@ -1154,7 +1154,7 @@ def plot_isoaxrho(
             capsize=1.5,
             marker="o",
             ms=5,
-            label="SimpNMR Fit",
+            label="Exp",
         )
 
         # Optional: precomputed fit curve + precomputed uncertainty band
@@ -1197,17 +1197,17 @@ def plot_isoaxrho(
                     rf"$Intercept = {p['intercept']:.1f} \pm {p['intercept_err']:.1f}$"
                 )
             elif "intercept" in p:
-                caption_lines.append(rf"$Intercept = {p['intercept']:.1f}$")
+                caption_lines.append(rf"$Intercept = {p['intercept']:.1f}$")  # integer
 
             if "slope" in p and "slope_err" in p:
                 caption_lines.append(
-                    rf"$Slope = {p['slope']:.1f} \pm {p['slope_err']:.1f}$"
+                    rf"$Slope = {p['slope']:.1f} \pm {p['slope_err']:.1f}$"  # integer
                 )
             elif "slope" in p:
-                caption_lines.append(rf"$Slope = {p['slope']:.1f}$")
+                caption_lines.append(rf"$Slope = {p['slope']:.1f}$")  # integer
 
             if "tip" in p:
-                caption_lines.append(rf"$TIP = {p['tip']:.3g}$")
+                caption_lines.append(rf"$TIP = {p['tip']:.3g}$")  # move to e
 
         y_min, y_max = ax.get_ylim()
         y_range = y_max - y_min
@@ -1237,7 +1237,7 @@ def plot_isoaxrho(
             )
 
         # Axis labels/styling
-        ax.set_xlabel(r"$1/T$ K$^{-1}$", fontsize=14)
+        ax.set_xlabel(r"$1/T$ (K$^{-1})$", fontsize=14)
         ax.set_ylabel(f"{y_label} {component}", fontsize=14)
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
@@ -1256,7 +1256,7 @@ def plot_isoaxrho(
             return out
 
         top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
-        top_ax.set_xlabel(r"$T$ K", fontsize=14)
+        top_ax.set_xlabel(r"$T$ (K)", fontsize=14)
         top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
         # Legend styling (white background + black border)

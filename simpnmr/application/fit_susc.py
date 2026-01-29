@@ -7,6 +7,7 @@ import numpy as np
 from pathos import multiprocessing as mp
 
 from simpnmr.application.assignment import generate_assignment_permutations
+from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup import plotting as pl
@@ -95,8 +96,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             config.hyperfine_file, elements=config.nuclei_include
         )
 
-    # Load Spin
-    base_molecule.electronic.load_from_config(config)
+    # Load electronic state
+    base_molecule.electronic = load_electronic_state(
+        spin_S=config.spin_S,
+        orbit_L=config.orbit,
+        total_J=config.total_momentum_J,
+        hyperfine_file=config.hyperfine_file,
+        hyperfine_method=config.hyperfine_method,
+    )
     spin = base_molecule.electronic.spin_S
 
     # Add chemical labels
@@ -566,10 +573,10 @@ def _fit_isoaxrho_vt(
         # Compute the corrected isotropic component of the susceptibility tensor
         susc_ab_initio.iso = get_g_corr_iso_susc(
             spin=spin,
-            orbit=config.orbit,
+            orbit=molecules[0].electronic.orbit_L,
             g_tensor=g_tensor,
             chi_tensors=susc_ab_initio.tensor,
-            total_momentum_J=config.total_momentum_J,
+            total_momentum_J=molecules[0].electronic.total_J,
         )
 
         # Map VT component identifiers to Susceptibility attribute names

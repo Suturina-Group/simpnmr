@@ -25,10 +25,10 @@ def validate_csv_delimiters(file_name: str) -> None:
 
     header_commas: int | None = None
 
-    with open(file_name, "r", encoding="utf-8", errors="replace") as f:
+    with open(file_name, "r", encoding="utf-8-sig", newline=None) as f:
         for i, line in enumerate(f, start=1):
-            raw = line.rstrip("\n")
-            text = raw.strip()
+            raw = line.rstrip("\r\n")
+            text = raw.strip().lstrip("\ufeff")
 
             # Skip empty lines and comments
             if not text or text.startswith("#"):
@@ -56,12 +56,20 @@ def validate_csv_delimiters(file_name: str) -> None:
 
             # If we have a header with commas, enforce delimiter consistency
             if header_commas > 0:
-                actual_commas = text.count(",")
-                if actual_commas != header_commas:
-                    expected_cols = header_commas + 1
-                    actual_cols = actual_commas + 1
+                # Count commas outside of quotes only (very light heuristic)
+                in_quotes = False
+                comma_count = 0
+                for ch in text:
+                    if ch == '"':
+                        in_quotes = not in_quotes
+                    elif ch == "," and not in_quotes:
+                        comma_count += 1
 
-                    if actual_commas < header_commas:
+                if comma_count != header_commas:
+                    expected_cols = header_commas + 1
+                    actual_cols = comma_count + 1
+
+                    if comma_count < header_commas:
                         reason = "possible missing comma"
                     else:
                         reason = "possible extra comma"

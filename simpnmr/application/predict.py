@@ -11,6 +11,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
@@ -99,8 +100,14 @@ def run_predict(
             config.hyperfine_file, elements=config.nuclei_include
         )
 
-    # Load Spin
-    base_molecule.electronic.load_from_config(config)
+    # Load electronic state
+    base_molecule.electronic = load_electronic_state(
+        spin_S=config.spin_S,
+        orbit_L=config.orbit,
+        total_J=config.total_momentum_J,
+        hyperfine_file=config.hyperfine_file if config.spin_S is None else None,
+        hyperfine_method=config.hyperfine_method if config.spin_S is None else None,
+    )
     spin = base_molecule.electronic.spin_S
 
     # Add chemical labels

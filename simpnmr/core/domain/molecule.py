@@ -6,7 +6,6 @@
 import copy
 import datetime
 import logging
-import os
 import re
 
 import numpy as np
@@ -253,91 +252,29 @@ class ElectronicState:
     Stores global quantum numbers and magnetic-model metadata.
     """
 
-    def __init__(self):
-        self.spin_S = None
-        self.orbit_L = None
-        self.total_J = None
-        self.model = None
-
-    def load_from_config(self, config) -> None:
-        """Load all supported electronic-state fields from a config object."""
-        self.load_spin(config)
-        self.load_orbit(config)
-        self.load_total_J(config)
-
-    def load_spin(self, config):
-        """Initializes spin quantum number from a config object.
-
-        Priority:
-            1) Explicit ``spin_S`` value in the config.
-            2) Inference from the QC hyperfine file when possible.
-
-        Args:
-            config: A configuration object (typically `FitSuscConfig`).
-
-        Returns:
-            The resolved spin quantum number ``S`` or ``None``.
-        """
-
-        # 1) Explicit spin from config
-        spin = getattr(config, "spin_S", None)
-
-        # 2) Infer from QC file
-        if spin is None:
-            hf_file = getattr(config, "hyperfine_file", None)
-            hf_method = getattr(config, "hyperfine_method", None)
-
-            if hf_file is not None:
-                ext = os.path.splitext(hf_file)[1].lower()
-                try:
-                    if hf_method == "dft" or ext in (".log", ".out"):
-                        spin_obj = rdrs.QCSpin.guess_from_file(hf_file)
-                        spin = spin_obj.S
-                except SystemExit:
-                    spin = None
-
-        self.spin_S = spin
-
-        if spin is not None:
-            self.model = "spin_only"
-
-        return spin
-
-    def load_orbit(self, config):
-        """Initializes orbital angular momentum quantum number from a config.
-
-        Args:
-            config: A configuration object.
-
-        Returns:
-            The resolved orbital angular momentum ``L`` or ``None``.
-        """
-        orbit = getattr(config, "orbit", None)
-
-        self.orbit_L = orbit
-
-        if orbit is not None and self.model is None:
-            self.model = "orbital"
-
-        return orbit
-
-    def load_total_J(self, config):
-        """Initializes total angular momentum quantum number from a config.
-
-        Args:
-            config: A configuration object.
-
-        Returns:
-            The resolved total angular momentum ``J`` or ``None``.
-        """
-        total_J = getattr(config, "total_momentum_J", None)
-
+    def __init__(
+        self,
+        spin_S: float | None = None,
+        orbit_L: float | None = None,
+        total_J: float | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.spin_S = spin_S
+        self.orbit_L = orbit_L
         self.total_J = total_J
+        self.model = model
 
-        if total_J is not None and self.model is None:
-            self.model = "total_J"
+        if self.model is not None and self.model not in {
+            "spin_only",
+            "orbital",
+            "total_J",
+        }:
+            raise ValueError(
+                "ElectronicState.model must be one of 'spin_only', "
+                "'orbital', or 'total_J'"
+            )
 
-        return total_J
+        return
 
 
 class Molecule:
