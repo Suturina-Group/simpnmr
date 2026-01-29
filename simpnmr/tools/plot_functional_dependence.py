@@ -18,6 +18,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.io.qc import qc_readers as rdrs
 
@@ -55,7 +56,8 @@ def load_hyperfine_data(
             calc_data, converter="MHz_to_Ang-3", elements="all_H"
         )
 
-        molecule.add_chem_labels_from_file(chem_labels)
+        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         all_molecules[source_name] = molecule
 

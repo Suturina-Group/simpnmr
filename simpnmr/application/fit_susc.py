@@ -7,6 +7,7 @@ import numpy as np
 from pathos import multiprocessing as mp
 
 from simpnmr.application.assignment import generate_assignment_permutations
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
@@ -110,7 +111,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     # Add chemical labels
     if len(config.chem_labels_file):
         try:
-            base_molecule.add_chem_labels_from_file(config.chem_labels_file)
+            al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+            base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
         except ValueError as err:
             raise ValueError(f"{err}\nCheck chem_labels and hyperfine files.")
         except KeyError as err:

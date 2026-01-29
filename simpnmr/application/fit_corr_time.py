@@ -8,6 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
@@ -159,7 +160,9 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
 
         # Add chemical labels if provided
         if len(config.chem_labels_file):
-            base_molecule.add_chem_labels_from_file(config.chem_labels_file)
+            al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+            base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
+
             xyz.save_chemcraft_xyz(
                 file_name=os.path.join(config.project_name, "chemcraft_structure.xyz"),
                 labels=base_molecule.labels,

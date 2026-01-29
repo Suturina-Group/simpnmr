@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.domain.molecule import Molecule
@@ -62,7 +63,8 @@ def run_plot_hfc_iso_ax(
             base_molecule.average_hyperfine(av)
 
         if config.chem_labels_file:
-            base_molecule.add_chem_labels_from_file(config.chem_labels_file)
+            al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+            base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         iso_div_ax = {
             nuc.chem_math_label: nuc.A.iso / (nuc.A.dip[0, 0] + nuc.A.dip[1, 1])

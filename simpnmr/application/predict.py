@@ -11,6 +11,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
@@ -113,7 +114,8 @@ def run_predict(
 
     # Add chemical labels
     if len(config.chem_labels_file):
-        base_molecule.add_chem_labels_from_file(config.chem_labels_file)
+        al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+        base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         # Save xyz file with chemical labels for chemcraft
         xyz.save_chemcraft_xyz(

@@ -20,8 +20,9 @@ import yaml
 import yaml_include
 from matplotlib.lines import Line2D
 
-import simpnmr.core.main as pnmr
 import simpnmr.viz.visualise as vis
+from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
+from simpnmr.core.domain.molecule import Molecule
 from simpnmr.io.qc import qc_readers as rdrs
 
 mpl.rc("xtick", labelsize=12)
@@ -34,12 +35,12 @@ yaml.add_constructor("!inc", yaml_include.Constructor(base_dir="."))
 
 def load_hyperfine_data(
     sources: dict[str, str], chem_labels: str, elements="H"
-) -> list[pnmr.Molecule]:
+) -> dict[str, Molecule]:
     """
     Load hyperfine coupling data from multiple sources and build Molecule objects.
 
     For each entry in `sources`, the function reads a quantum-chemistry output file,
-    constructs a `pnmr.Molecule`, applies unit conversion (via the Molecule factory),
+    constructs a `Molecule`, applies unit conversion (via the Molecule factory),
     and attaches chemical labels from `chem_labels`.
 
     Args:
@@ -51,7 +52,7 @@ def load_hyperfine_data(
             elements.
 
     Returns:
-        dict[str, pnmr.Molecule]: Mapping from source name to a populated Molecule
+        dict[str, Molecule]: Mapping from source name to a populated Molecule
         instance for that source.
     """
 
@@ -63,11 +64,10 @@ def load_hyperfine_data(
 
         # Create molecule object from quantum chemical hyperfine data
         # to convert units
-        molecule = pnmr.Molecule.from_QCA(
-            calc_data, converter="null", elements=elements
-        )
+        molecule = Molecule.from_QCA(calc_data, converter="null", elements=elements)
 
-        molecule.add_chem_labels_from_file(chem_labels)
+        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         all_molecules[source_name] = molecule
 

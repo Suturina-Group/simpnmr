@@ -926,88 +926,40 @@ class Molecule:
 
         return
 
-    # [MOVE] Reads CSV and mutates domain; move file IO to loaders, keep a pure `apply_chem_labels(...)` in domain.
-    def add_chem_labels_from_file(self, file_name: str) -> None:
-        """Assign chemical labels to nuclei using a CSV file.
+    def apply_chem_labels(
+        self,
+        al_to_cl: dict[str, str],
+        al_to_cml: dict[str, str] | None = None,
+    ) -> None:
+        """Apply chemical label mappings to nuclei.
 
-        The CSV must include columns ``atom_label`` and ``chem_label``. If a
-        ``chem_math_label`` column is present, it is also loaded.
+        This is a pure domain operation: callers must provide pre-parsed
+        mappings (e.g. from an application loader).
 
         Args:
-            file_name: Path to the CSV file.
+            al_to_cl: Mapping atom_label -> chem_label.
+            al_to_cml: Optional mapping atom_label -> chem_math_label.
 
-        Raises:
-            KeyError: If duplicate atom labels exist or required label entries
-                are missing.
-            ValueError: If coordinates are provided and do not match the current
-                structure.
+        Returns:
+            None.
         """
 
-        _tmp = read_csv_safe(file_name)
-
-        # Check for duplicate atom labels
-        if any([val > 1 for val in _tmp["atom_label"].value_counts()]):
-            _dupes = _tmp["atom_label"].value_counts().gt(1)
-            raise KeyError(f"Duplicate Atom label(s) {_dupes} in chemlabels file")
-
-        # Check for missing/empty entries in chem_label
-        if any(_tmp["chem_label"].isnull()):
-            raise KeyError(
-                "Missing chem_label for {}".format(
-                    _tmp[_tmp["chem_label"].isnull()]["atom_label"][0]
-                )
-            )
-
-        # Check for missing/empty entries in chem_math_label
-        if "chem_math_label" in _tmp.keys():
-            if any(_tmp["chem_math_label"].isnull()):
-                raise KeyError(
-                    "Missing chem_math_label for {}".format(
-                        _tmp[_tmp["chem_math_label"].isnull()]["atom_label"][0]
-                    )
-                )
-
-        al_to_cl = {
-            al: cl
-            for al, cl in zip(_tmp["atom_label"], _tmp["chem_label"])
-            if al in [nuc.label for nuc in self.nuclei]
-        }
-
-        # Add chem label to each atom
+        # Apply chem_label
         for nuc in self.nuclei:
-            if nuc.label in al_to_cl.keys():
-                nuc.chem_label = al_to_cl[nuc.label]
+            cl = al_to_cl.get(nuc.label)
+            if cl is not None:
+                nuc.chem_label = cl
 
-        # Add math label to each atom
-        # from supplied math labels
-        if "chem_math_label" in _tmp.keys():
-            al_to_cml = {
-                al: cl for al, cl in zip(_tmp["atom_label"], _tmp["chem_math_label"])
-            }
+        # Apply chem_math_label (if provided)
+        if al_to_cml is not None:
             for nuc in self.nuclei:
-                if nuc.label in al_to_cl.keys():
-                    nuc.chem_math_label = al_to_cml[nuc.label].lstrip().rstrip()
-        # or if math labels are not provided, set to the same as math labels
+                cml = al_to_cml.get(nuc.label)
+                if cml is not None:
+                    nuc.chem_math_label = str(cml).strip()
         else:
+            # If math labels are not provided, ensure a sensible fallback.
             for nuc in self.nuclei:
                 if not len(nuc.chem_math_label):
-                    nuc.chem_math_label = copy.deepcopy(nuc.chem_label)
-
-        # If coordinates are provided in chem_labels file, then check these
-        # against the current molecular coordinates
-        if all(clab in _tmp.keys() for clab in ["x", "y", "z"]):
-            _tmp.set_index("atom_label")
-            for nuc in self.nuclei:
-                _coord = [
-                    _tmp.loc[nuc.label]["x"],
-                    _tmp.loc[nuc.label]["y"],
-                    _tmp.loc[nuc.label]["z"],
-                ]
-                diff = np.sum(_coord - nuc.coord)
-                if diff > 1e-8:
-                    raise ValueError(
-                        f"Coordinates of {nuc.label} in chem_labels file "
-                        "do not match those of molecule."
-                    )
+                    nuc.chem_math_label = nuc.chem_label
 
         return
