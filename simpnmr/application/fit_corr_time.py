@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
+
+"""TODO"""
+
 from __future__ import annotations
 
 import logging
@@ -20,10 +25,10 @@ from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.relaxation import gueron, sbm
+from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
-from simpnmr.mappers import label_format as lf
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
@@ -195,7 +200,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             nuc.label: A_iso_dict_MHz[nuc.label] * 1e6 for nuc in base_molecule.nuclei
         }
         gamma_I_dict = {
-            label: NUCLEAR_GAMMAS[lf.remove_numbers(label)] * 2 * np.pi * 1e6
+            label: NUCLEAR_GAMMAS[remove_numbers(label)] * 2 * np.pi * 1e6
             for label in nuclei_coords
         }
 

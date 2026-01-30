@@ -11,7 +11,7 @@ import scipy.constants as consts
 from numpy.typing import NDArray
 
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
-from simpnmr.mappers import label_format as lf
+from simpnmr.core.utils.strings import remove_numbers
 
 # Physical constants
 MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
@@ -38,10 +38,10 @@ def a_tensor_mhz_to_angst(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
     """
 
     a_tensors_ang = {
-        key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[lf.remove_numbers(key)])
+        key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[remove_numbers(key)])
         for key, val in a_tensors.items()
-        if lf.remove_numbers(key) in NUCLEAR_GAMMAS.keys()
-        and NUCLEAR_GAMMAS[lf.remove_numbers(key)]
+        if remove_numbers(key) in NUCLEAR_GAMMAS.keys()
+        and NUCLEAR_GAMMAS[remove_numbers(key)]
     }
 
     return a_tensors_ang
@@ -63,7 +63,7 @@ def a_iso_mhz_to_angst(a_iso: dict[str, float]) -> dict[str, float]:
     a_iso_ang: dict[str, float] = {}
 
     for key, val in a_iso.items():
-        elem = lf.remove_numbers(key)
+        elem = remove_numbers(key)
 
         if elem not in NUCLEAR_GAMMAS:
             continue

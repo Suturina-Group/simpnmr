@@ -27,12 +27,12 @@ from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
+from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation, susceptibility
 from simpnmr.io.csv.molecule import save_molecule_to_csv
 from simpnmr.io.csv.spectrum import read_spectrum
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
-from simpnmr.mappers import label_format as lf
 from simpnmr.tools.coords_tools import transform as tfm
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis
@@ -419,7 +419,7 @@ def _apply_relaxation_linewidths(config: cfg.PredictConfig, base_molecule: Molec
     nuclei_coords = {
         nuc.label: nuc.coord
         for nuc in base_molecule.nuclei
-        if lf.remove_numbers(nuc.label) in nuclei_labels
+        if remove_numbers(nuc.label) in nuclei_labels
     }
     electron_coords = config.relaxation_electron_coords
     B0 = config.relaxation_magnetic_field_tesla
@@ -441,7 +441,7 @@ def _apply_relaxation_linewidths(config: cfg.PredictConfig, base_molecule: Molec
         }
 
     gamma_I_dict = {
-        label: NUCLEAR_GAMMAS[lf.remove_numbers(label)] * 2 * np.pi * 1e6
+        label: NUCLEAR_GAMMAS[remove_numbers(label)] * 2 * np.pi * 1e6
         for label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}

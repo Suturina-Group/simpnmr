@@ -21,8 +21,8 @@ from simpnmr.core.domain.molecule import Molecule, Nucleus
 from simpnmr.core.fitting import fit_models
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.utils.arrays import find_index_of_nearest
-from simpnmr.mappers import label_format as lf
-from simpnmr.viz.utils import comp2ind
+from simpnmr.core.utils.strings import remove_numbers
+from simpnmr.viz.utils import comp2ind, isotope_format
 
 logger = logging.getLogger(__name__)
 
@@ -496,9 +496,7 @@ def plot_pred_spectrum(
             alpha=0.6,
         )
 
-    ax.set_xlabel(
-        r"{} $\delta$ (ppm)".format(lf.isotope_format(isotope)), fontsize="18"
-    )
+    ax.set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)), fontsize="18")
 
     # Deactivate borders, y axis and y ticks
     ax.set_yticks([])
@@ -712,7 +710,7 @@ def plot_shift_spread(
     # Shift label, specify isotope/nucleus if only one type plotted
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(lf.isotope_format(molecule.nuclei[0].isotope)),
+            r"{} $\delta$ (ppm)".format(isotope_format(molecule.nuclei[0].isotope)),
             fontsize="18",
         )
     else:
@@ -948,7 +946,7 @@ def plot_shift_contrib(
 
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(lf.isotope_format(molecule.nuclei[0].isotope)),
+            r"{} $\delta$ (ppm)".format(isotope_format(molecule.nuclei[0].isotope)),
             fontsize="18",
         )
     else:
@@ -1516,7 +1514,7 @@ def plot_raw_deconv_pred(
     for signal in experiment.signals:
         # Convert experimental linewidth from Hz to ppm
         exp_width_ppm = signal.width / (
-            NUCLEAR_GAMMAS[lf.remove_numbers(isotope)] * experiment.magnetic_field
+            NUCLEAR_GAMMAS[remove_numbers(isotope)] * experiment.magnetic_field
         )
         # Add Lorentzian contribution
         y_deconv_intensity += signal.l_to_g * lorentzian(
@@ -1630,7 +1628,7 @@ def plot_raw_deconv_pred(
 
     # Set x-axis at the bottom of the plot
     ax[-1].xaxis.set_minor_locator(ticker.AutoMinorLocator())
-    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(lf.isotope_format(isotope)))
+    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)))
 
     # Remove y-axis ticks, labels, and spines for a cleaner stacked-spectra layout
     for axis in ax:

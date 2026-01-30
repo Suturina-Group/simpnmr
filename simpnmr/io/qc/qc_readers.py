@@ -17,10 +17,11 @@ import numpy as np
 import numpy.linalg as la
 import numpy.typing as npt
 
+from simpnmr.core.utils.strings import remove_letters, remove_numbers
+from simpnmr.core.utils.text import subtitle, title
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 from ...__version__ import __version__
-from ...mappers import label_format as lf
 
 logger = logging.getLogger(__name__)
 
@@ -249,25 +250,23 @@ class QCCS(ABC):
 
         string = ""
 
-        string += lf.title("Quantum Chemistry Chemical Shielding Data")
+        string += title("Quantum Chemistry Chemical Shielding Data")
 
         string += "Data was read from: {}\n".format(self.file_name)
 
         string += "As filetype: {}\n".format(self.FILETYPE)
 
-        string += lf.subtitle("Coordinates (Å)")
+        string += subtitle("Coordinates (Å)")
 
         for label, coord in zip(self.labels, self.coords):
             string += "{:5}  {: 10.6f}  {: 10.6f}  {: 10.6f}\n".format(label, *coord)
 
-        string += lf.subtitle("Isotropic Chemical Shielding ({})".format(self.cs_units))
+        string += subtitle("Isotropic Chemical Shielding ({})".format(self.cs_units))
 
         for label, val in self.cs_iso.items():
             string += "{:5} {: .6f}\n".format(label, val)
 
-        string += lf.subtitle(
-            "Anisotropic Chemical Shielding ({})".format(self.cs_units)
-        )
+        string += subtitle("Anisotropic Chemical Shielding ({})".format(self.cs_units))
 
         for label, val in self.cs_aniso.items():
             string += "{:5} {: .6f}\n".format(label, val)
@@ -659,25 +658,23 @@ class QCA(ABC):
 
         string = ""
 
-        string += lf.title("Quantum Chemistry Hyperfine Data")
+        string += title("Quantum Chemistry Hyperfine Data")
 
         string += "Data was read from: {}\n".format(self.file_name)
 
         string += "As filetype: {}\n".format(self.FILETYPE)
 
-        string += lf.subtitle("Coordinates (Å)")
+        string += subtitle("Coordinates (Å)")
 
         for label, coord in zip(self.labels, self.coords):
             string += "{:5}  {: 10.6f}  {: 10.6f}  {: 10.6f}\n".format(label, *coord)
 
-        string += lf.subtitle("Isotropic A values ({})".format(self.a_units))
+        string += subtitle("Isotropic A values ({})".format(self.a_units))
 
         for label, val in self.a_iso.items():
             string += "{:5} {: .6f}\n".format(label, val)
 
-        string += lf.subtitle(
-            "Anisotropic (dipolar) A Tensor ({})".format(self.a_units)
-        )
+        string += subtitle("Anisotropic (dipolar) A Tensor ({})".format(self.a_units))
 
         for label, tensor in self.a_dip.items():
             string += "\n      {: .6f} {: .6f} {: .6f}\n".format(*tensor[0])
@@ -1068,9 +1065,7 @@ def read_orca6_output_a_tensors(
                     while "Nucleus" not in line:
                         line = next(f)
                     tmp = line.split()[1]
-                    label = "{}{}".format(
-                        lf.remove_numbers(tmp), lf.remove_letters(tmp)
-                    )
+                    label = "{}{}".format(remove_numbers(tmp), remove_letters(tmp))
                     for _ in range(8):
                         line = next(f)
 
@@ -1122,9 +1117,7 @@ def read_orca5_output_a_tensors(
                 for it in range(n_calcd):
                     line = next(f)
                     tmp = line.split()[1]
-                    label = "{}{}".format(
-                        lf.remove_numbers(tmp), lf.remove_letters(tmp)
-                    )
+                    label = "{}{}".format(remove_numbers(tmp), remove_letters(tmp))
                     for _ in range(5):
                         line = next(f)
 

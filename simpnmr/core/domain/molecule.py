@@ -13,7 +13,7 @@ from numpy.typing import ArrayLike, NDArray
 from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
 from simpnmr.core.utils.arrays import flatten
-from simpnmr.mappers import label_format as lf
+from simpnmr.core.utils.text import subtitle, title
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
@@ -307,9 +307,9 @@ class Molecule:
     def __str__(self):
         string = ""
 
-        string += lf.title("Molecule Hyperfine Data")
+        string += title("Molecule Hyperfine Data")
 
-        string += lf.subtitle("Isotropic A values (ppm Å^-3)")
+        string += subtitle("Isotropic A values (ppm Å^-3)")
 
         for nuc in self.nuclei:
             if not len(nuc.chem_label):
@@ -319,7 +319,7 @@ class Molecule:
 
             string += f"{label} {nuc.A.iso: .6f}\n"
 
-        string += lf.subtitle("Anisotropic (dipolar) A Tensor (ppm Å^-3)")
+        string += subtitle("Anisotropic (dipolar) A Tensor (ppm Å^-3)")
 
         for nuc in self.nuclei:
             if not len(nuc.chem_label):
