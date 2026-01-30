@@ -11,16 +11,14 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
-from simpnmr.application.loaders.molecule import (
-    build_molecule_from_qca,
-    load_molecule_from_csv,
-)
+from simpnmr.application.loaders.molecule import load_molecule_from_csv
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup import plotting as pl
 from simpnmr.application.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Hyperfine
+from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.factories.susc import get_g_corr_iso_susc
 from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.core.pcs.isosurface import compute_pcs_isosurface

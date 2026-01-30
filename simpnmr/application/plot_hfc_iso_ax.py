@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
-from simpnmr.application.loaders.molecule import build_molecule_from_qca
 from simpnmr.application.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz import visualise as vis

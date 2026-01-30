@@ -16,14 +16,12 @@ from scipy.optimize import curve_fit
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import (
-    build_molecule_from_qca,
-    load_molecule_from_csv,
-)
+from simpnmr.application.loaders.molecule import load_molecule_from_csv
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation

@@ -15,16 +15,14 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import (
-    build_molecule_from_qca,
-    load_molecule_from_csv,
-)
+from simpnmr.application.loaders.molecule import load_molecule_from_csv
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.utils.strings import remove_numbers
