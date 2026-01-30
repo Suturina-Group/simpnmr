@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 Suturina Group
+
+"""TODO"""
+
 DEFAULT_ISOTOPES = {
     "H": "1H",
     "C": "13C",

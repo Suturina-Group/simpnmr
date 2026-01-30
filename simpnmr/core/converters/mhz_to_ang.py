@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 Suturina Group
 
-"""HFC Convertors for SimpNMR.
+"""HFC Converters for SimpNMR.
 TODO
 This module ...
 """
@@ -14,7 +14,7 @@ from simpnmr.core.constants.physics import EGAMMA, MU0, H
 from simpnmr.core.utils.strings import remove_numbers
 
 
-def a_tensor_mhz_to_angst(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
+def a_tensor_mhz_to_ang(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
     """Converts hyperfine A tensors from MHz to ``ppm Å^-3``.
 
     Uses the gyromagnetic ratio of each nucleus (looked up from `NUCLEAR_GAMMAS`)
@@ -38,7 +38,7 @@ def a_tensor_mhz_to_angst(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
     return a_tensors_ang
 
 
-def a_iso_mhz_to_angst(a_iso: dict[str, float]) -> dict[str, float]:
+def a_iso_mhz_to_ang(a_iso: dict[str, float]) -> dict[str, float]:
     """Convert isotropic hyperfine A values from MHz to ppm Å^-3.
 
     Uses the nuclear gyromagnetic ratio for each nucleus (from NUCLEAR_GAMMAS).

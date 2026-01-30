@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 Suturina Group
 
+"""TODO"""
+
 # # Values from easyspin, most abundant isotope taken
 # unless otherwise stated
 NUCLEAR_GAMMAS = {  # MHz / T

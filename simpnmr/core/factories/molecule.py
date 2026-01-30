@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from simpnmr.core.convertors.hyperfine import a_iso_mhz_to_angst, a_tensor_mhz_to_angst
+from simpnmr.core.converters.mhz_to_ang import a_iso_mhz_to_ang, a_tensor_mhz_to_ang
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
@@ -62,9 +62,9 @@ def build_molecule_from_qca(
         pass
     elif converter == "MHz_to_Ang-3":
         # Convert isotropic hyperfine values
-        a_iso = a_iso_mhz_to_angst(a_iso)
+        a_iso = a_iso_mhz_to_ang(a_iso)
         # Convert dipolar hyperfine tensors
-        a_dip = a_tensor_mhz_to_angst(a_dip)
+        a_dip = a_tensor_mhz_to_ang(a_dip)
 
     else:
         raise ValueError(f"Unknown converter: {converter}")
