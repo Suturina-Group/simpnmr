@@ -9,10 +9,10 @@ import datetime
 import logging
 
 import numpy as np
+import pandas as pd
 
 from simpnmr.__version__ import __version__
 from simpnmr.io.csv.utils import read_csv_safe
-from simpnmr.mappers import dataframes as ser
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ def save_molecule_to_csv(
         delimiter: CSV delimiter.
     """
 
-    df = ser.build_molecule_df(molecule)
+    df = _build_molecule_df(molecule)
 
     _comment = (
         f"# This file was generated with SimpNMR v{__version__} at {{}}\n".format(
@@ -197,3 +197,58 @@ def save_molecule_to_csv(
         logger.info("Molecule data written to %s", file_name)
 
     return
+
+
+def _build_molecule_df(molecule):
+    """Build a full molecule table for CSV export."""
+
+    columns = [
+        "atom_label ()",
+        "chem_label ()",
+        "x (Å)",
+        "y (Å)",
+        "z (Å)",
+        "Aiso (ppm Å^-3)",
+        "Adip_xx (ppm Å^-3)",
+        "Adip_xy (ppm Å^-3)",
+        "Adip_xz (ppm Å^-3)",
+        "Adip_yy (ppm Å^-3)",
+        "Adip_yz (ppm Å^-3)",
+        "Adip_zz (ppm Å^-3)",
+        "δ_total_avg (ppm)",
+        "δ_total (ppm)",
+        "δ_dia (ppm)",
+        "δ_fc (ppm)",
+        "δ_pc (ppm)",
+        "linewidth (Hz)",
+    ]
+
+    nuclei = molecule.nuclei
+
+    data = {
+        "atom_label ()": [nuc.label for nuc in nuclei],
+        "chem_label ()": [nuc.chem_label for nuc in nuclei],
+        "x (Å)": [nuc.coord[0] for nuc in nuclei],
+        "y (Å)": [nuc.coord[1] for nuc in nuclei],
+        "z (Å)": [nuc.coord[2] for nuc in nuclei],
+        "Aiso (ppm Å^-3)": [nuc.A.iso for nuc in nuclei],
+        "Adip_xx (ppm Å^-3)": [nuc.A.dip[0, 0] for nuc in nuclei],
+        "Adip_xy (ppm Å^-3)": [nuc.A.dip[0, 1] for nuc in nuclei],
+        "Adip_xz (ppm Å^-3)": [nuc.A.dip[0, 2] for nuc in nuclei],
+        "Adip_yy (ppm Å^-3)": [nuc.A.dip[1, 1] for nuc in nuclei],
+        "Adip_yz (ppm Å^-3)": [nuc.A.dip[1, 2] for nuc in nuclei],
+        "Adip_zz (ppm Å^-3)": [nuc.A.dip[2, 2] for nuc in nuclei],
+        "δ_total_avg (ppm)": [nuc.shift.avg for nuc in nuclei],
+        "δ_total (ppm)": [nuc.shift.total for nuc in nuclei],
+        "δ_dia (ppm)": [nuc.shift.dia for nuc in nuclei],
+        "δ_fc (ppm)": [nuc.shift.fc for nuc in nuclei],
+        "δ_pc (ppm)": [nuc.shift.pc for nuc in nuclei],
+        "linewidth (Hz)": [1 for _ in nuclei],
+    }
+
+    df = pd.DataFrame(data, columns=columns)
+
+    if df.empty:
+        return df
+
+    return df.reset_index(drop=True)

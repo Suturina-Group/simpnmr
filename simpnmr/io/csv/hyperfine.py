@@ -6,8 +6,9 @@
 import datetime
 import logging
 
+import pandas as pd
+
 from simpnmr.__version__ import __version__
-from simpnmr.mappers import dataframes as ser
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def save_hyperfines_to_csv(
         delimiter: CSV delimiter.
     """
 
-    df = ser.build_hyperfines_df(hyperfines)
+    df = _build_hyperfines_df(hyperfines)
 
     _comment = f"#This file was generated with SimpNMR v{__version__} at {{}}\n".format(
         datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")
@@ -46,3 +47,40 @@ def save_hyperfines_to_csv(
         logger.info("Hyperfine data written to %s", file_name)
 
     return
+
+
+def _build_hyperfines_df(molecule):
+    """Build a hyperfine-couplings table for CSV export."""
+
+    columns = [
+        "atom_label ()",
+        "chem_label ()",
+        "Aiso (ppm Å^-3)",
+        "Adip_xx (ppm Å^-3)",
+        "Adip_xy (ppm Å^-3)",
+        "Adip_xz (ppm Å^-3)",
+        "Adip_yy (ppm Å^-3)",
+        "Adip_yz (ppm Å^-3)",
+        "Adip_zz (ppm Å^-3)",
+    ]
+
+    nuclei = molecule.nuclei
+
+    data = {
+        "atom_label ()": [nuc.label for nuc in nuclei],
+        "chem_label ()": [nuc.chem_label for nuc in nuclei],
+        "Aiso (ppm Å^-3)": [nuc.A.iso for nuc in nuclei],
+        "Adip_xx (ppm Å^-3)": [nuc.A.dip[0, 0] for nuc in nuclei],
+        "Adip_xy (ppm Å^-3)": [nuc.A.dip[0, 1] for nuc in nuclei],
+        "Adip_xz (ppm Å^-3)": [nuc.A.dip[0, 2] for nuc in nuclei],
+        "Adip_yy (ppm Å^-3)": [nuc.A.dip[1, 1] for nuc in nuclei],
+        "Adip_yz (ppm Å^-3)": [nuc.A.dip[1, 2] for nuc in nuclei],
+        "Adip_zz (ppm Å^-3)": [nuc.A.dip[2, 2] for nuc in nuclei],
+    }
+
+    df = pd.DataFrame(data, columns=columns)
+
+    if df.empty:
+        return df
+
+    return df.reset_index(drop=True)

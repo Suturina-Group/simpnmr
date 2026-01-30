@@ -17,7 +17,6 @@ import pandas as pd
 from simpnmr.core.domain.experiment import Experiment, Signal
 from simpnmr.io.csv.utils import read_csv_safe
 from simpnmr.io.text.parsing import find_first_group
-from simpnmr.mappers import dataframes as ser
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +187,7 @@ def write_experiment_to_csv(
         comment: Optional comment to prepend to the file.
         verbose: Whether to print status messages.
     """
-    df = ser.build_experiment_signals_df(experiment)
+    df = _build_experiment_signals_df(experiment)
 
     with open(file_name, "w", encoding="utf-8") as fh:
         if comment:
@@ -198,3 +197,22 @@ def write_experiment_to_csv(
 
     if verbose:
         logger.info("Experiment written to %s", file_name)
+
+
+def _build_experiment_signals_df(experiment: "Experiment") -> pd.DataFrame:
+    columns = ["assignment ()", "shift (ppm)", "width (Hz)", "area ()", "L/G ()"]
+
+    data = {
+        "assignment ()": [s.assignment for s in experiment.signals],
+        "shift (ppm)": [s.shift for s in experiment.signals],
+        "width (Hz)": [s.width for s in experiment.signals],
+        "area ()": [s.area for s in experiment.signals],
+        "L/G ()": [s.l_to_g for s in experiment.signals],
+    }
+
+    df = pd.DataFrame(data, columns=columns)
+
+    if df.empty:
+        return df
+
+    return df.sort_values("shift (ppm)").reset_index(drop=True)
