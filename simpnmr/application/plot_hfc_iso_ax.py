@@ -10,7 +10,7 @@ from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
-from simpnmr.viz import visualise as vis
+from simpnmr.viz.plots.hyperfine import plot_hyperfine_iso_vs_ax
 
 
 def run_plot_hfc_iso_ax(
@@ -80,7 +80,7 @@ def run_plot_hfc_iso_ax(
 
         file_head = os.path.splitext(os.path.basename(hf_file))[0]
 
-        vis.plot_hyperfine_iso_vs_ax(
+        plot_hyperfine_iso_vs_ax(
             iso_div_ax,
             order,
             fig=fig,

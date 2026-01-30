@@ -1,6 +1,6 @@
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.setup.options import PlotShiftTdepRunOptions
-from simpnmr.viz import visualise as vis
+from simpnmr.viz.plots.shifts import plot_shift_tdep
 
 
 def run_plot_shift_tdep(
@@ -9,7 +9,7 @@ def run_plot_shift_tdep(
 ) -> int:
     experiments = load_experiments(experiment_files)
 
-    vis.plot_shift_tdep(
+    plot_shift_tdep(
         experiments,
         "ShiftT_vs_T",
         show=options.show,
@@ -17,7 +17,7 @@ def run_plot_shift_tdep(
         save_name=f"shift_x_T_vs_T{options.runtime.plot_format}",
     )
 
-    vis.plot_shift_tdep(
+    plot_shift_tdep(
         experiments,
         "Shift_vs_1/T",
         show=options.show,

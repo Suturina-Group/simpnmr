@@ -9,7 +9,7 @@ from simpnmr.application.setup.options import CalcPdipRunOptions
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
-from simpnmr.viz import visualise
+from simpnmr.viz.plots.hyperfine import plot_hyperfine, plot_hyperfine_spread
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def run_calc_pdip(
     logger.info("Point dipole dipolar tensors saved to %s", file_name)
 
     if plot_components:
-        visualise.plot_hyperfine(
+        plot_hyperfine(
             molecule.nuclei,
             plot_components,
             save=options.save,
@@ -97,7 +97,7 @@ def run_calc_pdip(
         )
 
         if chem_labels is not None:
-            visualise.plot_hyperfine_spread(
+            plot_hyperfine_spread(
                 molecule.nuclei,
                 plot_components,
                 save=options.save,

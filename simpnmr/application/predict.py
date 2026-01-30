@@ -33,7 +33,8 @@ from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import transform as tfm
 from simpnmr.tools.coords_tools import xyz_format as xyzf
-from simpnmr.viz import visualise as vis
+from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
+from simpnmr.viz.plots.spectrum_1d import plot_pred_spectrum, plot_raw_deconv_pred
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +290,7 @@ def run_predict(
 
         # Plot theoretical shifts
         # Spread
-        vis.plot_shift_spread(
+        plot_shift_spread(
             molecule,
             experiment=experiment,
             save=True,
@@ -305,7 +306,7 @@ def run_predict(
         )
 
         # Bar chart for means
-        vis.plot_shift_contrib(
+        plot_shift_contrib(
             molecule,
             experiment=experiment,
             save=True,
@@ -334,7 +335,7 @@ def run_predict(
         ]
 
         if len(config.experiment_files):
-            vis.plot_raw_deconv_pred(
+            plot_raw_deconv_pred(
                 molecule=molecule,
                 isotope=molecule.nuclei[0].isotope,
                 shift_range=shift_range,
@@ -346,7 +347,7 @@ def run_predict(
                     f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K{plot_format}",
                 ),
             )
-        vis.plot_pred_spectrum(
+        plot_pred_spectrum(
             molecule,
             isotope=molecule.nuclei[0].isotope,
             shift_range=shift_range,

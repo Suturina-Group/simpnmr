@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.molecule import load_molecule_from_qca
 from simpnmr.application.setup.options import PlotHFCRunOptions
-from simpnmr.viz import visualise as vis
+from simpnmr.viz.plots.hyperfine import plot_hyperfine, plot_hyperfine_spread
 
 
 def run_plot_hfc(
@@ -31,7 +31,7 @@ def run_plot_hfc(
 
     if not (not options.show and not options.save):
         if chem_labels is not None:
-            vis.plot_hyperfine_spread(
+            plot_hyperfine_spread(
                 molecule.nuclei,
                 components=components,
                 save=options.save,
@@ -41,7 +41,7 @@ def run_plot_hfc(
                 verbose=True,
             )
 
-        vis.plot_hyperfine(
+        plot_hyperfine(
             molecule.nuclei,
             components=components,
             save=options.save,

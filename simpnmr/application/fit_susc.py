@@ -28,7 +28,13 @@ from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import xyz_format as xyzf
-from simpnmr.viz import visualise as vis
+from simpnmr.viz.plots.shifts import (
+    plot_fitted_shifts,
+    plot_shift_contrib,
+    plot_shift_spread,
+)
+from simpnmr.viz.plots.spectrum_1d import plot_pred_spectrum
+from simpnmr.viz.plots.susceptibility import plot_isoaxrho
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +346,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 show = False
             else:
                 show = pl.SHOW_CONV[options.shift_plots]
-            vis.plot_fitted_shifts(
+            plot_fitted_shifts(
                 molecule,
                 experiment,
                 susc_model,
@@ -365,7 +371,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 plt.close("all")
 
             if options.spread_plots in pl.PLOT_ACTIVE:
-                vis.plot_shift_spread(
+                plot_shift_spread(
                     molecule,
                     experiment,
                     terms=_terms,
@@ -384,7 +390,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 )
 
             if options.contrib_plots in pl.PLOT_ACTIVE:
-                vis.plot_shift_contrib(
+                plot_shift_contrib(
                     molecule,
                     experiment,
                     terms=_terms,
@@ -499,7 +505,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             susc_units=options.susc_units,
         )
 
-    vis.plot_pred_spectrum(
+    plot_pred_spectrum(
         molecule,
         isotope=mol.nuclei[0].isotope,
         shift_range=shift_range,
@@ -679,7 +685,7 @@ def _fit_isoaxrho_vt(
     fitting.save_slope_intercept(fits_list, out_file)
 
     # Plot chiT temperature dependence
-    vis.plot_isoaxrho(
+    plot_isoaxrho(
         vals=chiT_reduced,
         errs=chiT_err_reduced,
         params=chiT_fit_params,
@@ -695,7 +701,7 @@ def _fit_isoaxrho_vt(
     )
 
     # Plot chi temperature dependence
-    vis.plot_isoaxrho(
+    plot_isoaxrho(
         vals=chi_vals,
         errs=chi_errors,
         params=None,
