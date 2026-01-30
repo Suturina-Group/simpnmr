@@ -15,6 +15,7 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
+from simpnmr.application.loaders.molecule import build_molecule_from_qca
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
@@ -71,8 +72,10 @@ def run_predict(
 
         # Create molecule object from quantum chemical hyperfine data
         # Retain only the atoms that are given in the labels file
-        base_molecule = Molecule.from_QCA(
-            qc_hyperfine_data, converter="MHz_to_Ang-3", elements=config.nuclei_include
+        base_molecule = build_molecule_from_qca(
+            qc_hyperfine_data,
+            converter="MHz_to_Ang-3",
+            elements=config.nuclei_include,
         )
 
     # generate using point dipole approximation

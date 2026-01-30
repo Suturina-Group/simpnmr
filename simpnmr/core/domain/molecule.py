@@ -11,7 +11,6 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from simpnmr.core.constants import isotopes, periodic_table
-from simpnmr.core.convertors import hyperfine as hfc
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
 from simpnmr.core.utils.arrays import flatten
 
@@ -19,8 +18,6 @@ from simpnmr.core.utils.arrays import flatten
 from simpnmr.io.csv.utils import read_csv_safe
 
 # [MOVE] QC file parsing is IO;
-from simpnmr.io.qc import qc_readers as rdrs
-
 # [MOVE] DataFrame serialization belongs to IO/mappers;
 from simpnmr.mappers import label_format as lf
 
@@ -585,70 +582,73 @@ class Molecule:
 
         return base
 
-    # [MOVE] Depends on QC readers; move to a loader/factory that returns a domain `Molecule`.
     @classmethod
-    def from_QCA(
+    def from_hyperfine_data(
         cls,
-        ab_initio: rdrs.QCA,
-        converter: str = "Null",
+        *,
+        labels: list[str],
+        coords: ArrayLike,
+        a_iso: dict[str, float],
+        a_dip: dict[str, NDArray],
         elements: list[str] | str = "all",
     ) -> "Molecule":
-        """Create a `Molecule` from ab initio hyperfine data.
+        """Create a `Molecule` from already-parsed hyperfine data.
+
+        This is a pure domain constructor: no file I/O, no QC parsing, no unit
+        conversion. Callers must provide labels/coords and hyperfine tensors in
+        consistent units.
 
         Args:
-            ab_initio: Parsed hyperfine container from `simpnmr.readers`.
-            converter: Unit converter identifier. Use ``"Null"`` to apply no
-                conversion.
-            elements: Elements/labels to include. Use ``"all"`` to include all.
+            labels: Atomic labels (with indices) in the same ordering as `coords`,
+                e.g. ["H1", "C2", ...].
+            coords: Atomic coordinates as an (n_atoms, 3) array-like in Å.
+            a_iso: Mapping atom_label -> isotropic hyperfine coupling.
+            a_dip: Mapping atom_label -> dipolar hyperfine tensor (3x3).
+            elements: Elements/labels to include. Use "all" to include all atoms,
+                "all_H" to include all H, etc., or explicit labels like "H7".
 
         Returns:
             A `Molecule` instance.
-        """
 
+        Raises:
+            ValueError: If no nuclei were selected.
+        """
         if isinstance(elements, str):
             elements = [elements]
 
-        elements_to_include = []
+        labels_list = [str(lab) for lab in labels]
+        coords_arr = np.asarray(coords)
+
+        elements_to_include: list[str] = []
         for ele in elements:
             if ele == "all":
-                elements_to_include = copy.copy(ab_initio.labels)
+                elements_to_include = labels_list
                 break
-            elif "all_" in ele or ele in periodic_table.elements:
-                if "all_" in ele:
-                    _e = ele[4:]
-                else:
-                    _e = ele
-                tmp = [
-                    la for la in ab_initio.labels if _e == xyzf.remove_label_indices(la)
+            if "all_" in ele or ele in periodic_table.elements:
+                elem = ele[4:] if "all_" in ele else ele
+                elements_to_include += [
+                    lab for lab in labels_list if elem == xyzf.remove_label_indices(lab)
                 ]
-                elements_to_include += tmp
             else:
                 elements_to_include.append(ele)
 
-        # Convert units
-        if converter.lower() != "null":
-            a_isos = hfc.a_tensor_mhz_to_angstrom(ab_initio.a_iso)
-            a_dips = hfc.a_tensor_mhz_to_angstrom(ab_initio.a_dip)
-        else:
-            a_isos = ab_initio.a_iso
-            a_dips = ab_initio.a_dip
+        # Filter hyperfine dicts by selection.
+        a_iso_sel = {k: v for k, v in a_iso.items() if k in elements_to_include}
+        a_dip_sel = {k: v for k, v in a_dip.items() if k in elements_to_include}
 
-        a_isos = {key: val for key, val in a_isos.items() if key in elements_to_include}
-        a_dips = {key: val for key, val in a_dips.items() if key in elements_to_include}
-
-        coords = [
+        # Filter coords by selection, preserving the original label ordering.
+        coords_sel = [
             coord
-            for label, coord in zip(ab_initio.labels, ab_initio.coords)
-            if label in elements_to_include
+            for lab, coord in zip(labels_list, coords_arr)
+            if lab in elements_to_include
         ]
 
-        # Generate list of Nuclei, one for each atom
-        nuclei = Nucleus.from_a_values(a_isos, a_dips, coords)
+        nuclei = Nucleus.from_a_values(a_iso_sel, a_dip_sel, coords_sel)
+        if not nuclei:
+            raise ValueError("No Nuclei selected!")
 
-        # Create molecule - uses all atoms, regardless of user labels
-        base = cls(ab_initio.labels, ab_initio.coords, nuclei)
-
-        return base
+        # Molecule keeps the full structure labels/coords.
+        return cls(labels_list, coords_arr, nuclei)
 
     @property
     def susc(self) -> Susceptibility:

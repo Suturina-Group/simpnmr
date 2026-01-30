@@ -11,6 +11,7 @@ from scipy.optimize import curve_fit
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
+from simpnmr.application.loaders.molecule import build_molecule_from_qca
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
@@ -132,7 +133,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                 delimiter=CSV_DELIMITER,
                 comment=f"# Data taken from file {config.hyperfine_file}",
             )
-            base_molecule = Molecule.from_QCA(
+            base_molecule = build_molecule_from_qca(
                 qc_hyperfine_data,
                 converter="MHz_to_Ang-3",
                 elements=config.nuclei_include,

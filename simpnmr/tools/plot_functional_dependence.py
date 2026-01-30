@@ -19,13 +19,10 @@ import numpy as np
 import pandas as pd
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
-from simpnmr.core.domain.molecule import Molecule
-from simpnmr.io.qc import qc_readers as rdrs
+from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
 
 
-def load_hyperfine_data(
-    sources: dict[str, str], chem_labels: str
-) -> dict[str, Molecule]:
+def load_hyperfine_data(sources: dict[str, str], chem_labels: str) -> dict[str, object]:
     """
     Load hyperfine data from multiple sources and return Molecule objects.
 
@@ -47,13 +44,10 @@ def load_hyperfine_data(
     all_molecules = dict.fromkeys(sources, None)
 
     for source_name, source_file in sources.items():
-        # Load quantum chemical hyperfine data
-        calc_data = rdrs.QCA.guess_from_file(source_file)
-
-        # Create molecule object from quantum chemical hyperfine data
-        # to convert units
-        molecule = Molecule.from_QCA(
-            calc_data, converter="MHz_to_Ang-3", elements="all_H"
+        molecule = load_molecule_from_hfc_file(
+            source_file,
+            elements="all_H",
+            converter="MHz_to_Ang-3",
         )
 
         al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)

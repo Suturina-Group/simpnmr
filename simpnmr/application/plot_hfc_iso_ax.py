@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
+from simpnmr.application.loaders.molecule import build_molecule_from_qca
 from simpnmr.application.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.domain.molecule import Molecule
@@ -36,7 +37,7 @@ def run_plot_hfc_iso_ax(
                 delimiter=options.runtime.csv_delimiter,
                 comment=f"# Data taken from file {hf_file}",
             )
-            base_molecule = Molecule.from_QCA(
+            base_molecule = build_molecule_from_qca(
                 qc_hyperfine_data,
                 converter="MHz_to_Ang-3",
                 elements=config.nuclei_include,

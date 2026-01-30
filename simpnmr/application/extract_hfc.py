@@ -1,9 +1,8 @@
 import os
 
+from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
 from simpnmr.application.setup.options import ExtractHFCRunOptions
-from simpnmr.core.domain.molecule import Molecule
 from simpnmr.io.csv.molecule import save_molecule_to_csv
-from simpnmr.io.qc import qc_readers as rdrs
 
 
 def run_extract_hfc(
@@ -20,12 +19,10 @@ def run_extract_hfc(
     Returns:
         Exit code.
     """
-    # Load quantum chemical hyperfine data
-    calc_data = rdrs.QCA.guess_from_file(calculation_data)
 
     # Create molecule object and convert units
-    molecule = Molecule.from_QCA(
-        calc_data,
+    molecule = load_molecule_from_hfc_file(
+        calculation_data,
         converter="MHz_to_Ang-3",
     )
 
