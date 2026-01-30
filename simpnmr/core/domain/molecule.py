@@ -14,8 +14,6 @@ from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
 from simpnmr.core.utils.arrays import flatten
 
-# [MOVE] Domain must not depend on IO;
-# [MOVE] QC file parsing is IO;
 # [MOVE] DataFrame serialization belongs to IO/mappers;
 from simpnmr.mappers import label_format as lf
 
@@ -343,27 +341,6 @@ class Molecule:
             )
 
         return string
-
-    # [MOVE] Constructor that reads XYZ is IO-facing; prefer a loader/factory in application/IO.
-    @classmethod
-    def from_xyz(cls, xyz_file: str, elements: list[str] | str = "all") -> "Molecule":
-        """Create a `Molecule` from an XYZ file.
-
-        Args:
-            xyz_file: Path to an XYZ file containing the full structure.
-            elements: Elements/labels to include. Use ``"all"`` for all atoms.
-
-        Returns:
-            A `Molecule` instance.
-        """
-
-        # Load xyz file
-        labels, coords = xyzf.load_xyz(xyz_file)
-
-        # Generate Molecule using ALL labels and coords
-        base = cls.from_labels_coords(labels, coords, elements)
-
-        return base
 
     @classmethod
     def from_labels_coords(

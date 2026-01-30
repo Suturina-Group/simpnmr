@@ -18,15 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 def read_molecule_csv(file_name: str) -> dict:
-    """Read a molecule CSV file and return raw structure + (optional) hyperfine + labels.
+    """Read a molecule CSV file and return raw structure + (optional) hyperfine + labels
 
     This function preserves the legacy parsing behaviour previously implemented
     in `Molecule.from_csv` (domain), but keeps IO in the IO layer.
 
     Returns dict with keys:
-      - labels: list[str]                      # atom_label with indices if present
-      - coords: np.ndarray shape (n, 3)        # Å
-      - tensors: list[np.ndarray] | None       # per-atom 3x3 hyperfine tensor (ppm Å^-3)
+      - labels: list[str]
+      - coords: np.ndarray shape (n, 3)
+      - tensors: list[np.ndarray] | None
       - chem_labels: list[str] | None
       - chem_math_labels: list[str] | None
     """
