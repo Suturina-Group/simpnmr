@@ -13,11 +13,7 @@ from numpy.typing import ArrayLike, NDArray
 from simpnmr.core.constants import isotopes, periodic_table
 from simpnmr.core.domain.tensors import Hyperfine, Shift, Susceptibility
 from simpnmr.core.utils.arrays import flatten
-
-# [MOVE] DataFrame serialization belongs to IO/mappers;
 from simpnmr.mappers import label_format as lf
-
-# [MOVE] XYZ parsing/writing is IO;
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
@@ -33,15 +29,15 @@ class Relaxation:
 
     def __init__(
         self,
-        r1=None,
-        r2=None,
-        dipolar_r1=None,
-        contact_r1=None,
-        curie_r1=None,
-        dipolar_r2=None,
-        contact_r2=None,
-        curie_r2=None,
-    ):
+        r1: float | None = None,
+        r2: float | None = None,
+        dipolar_r1: float | None = None,
+        contact_r1: float | None = None,
+        curie_r1: float | None = None,
+        dipolar_r2: float | None = None,
+        contact_r2: float | None = None,
+        curie_r2: float | None = None,
+    ) -> None:
         self.r1 = r1
         self.r2 = r2
         self.dipolar_r1 = dipolar_r1
@@ -50,7 +46,6 @@ class Relaxation:
         self.dipolar_r2 = dipolar_r2
         self.contact_r2 = contact_r2
         self.curie_r2 = curie_r2
-        pass
 
 
 # Add setters and properties as needed
