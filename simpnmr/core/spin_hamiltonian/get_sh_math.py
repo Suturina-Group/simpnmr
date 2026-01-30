@@ -8,17 +8,11 @@ TODO
 import logging
 
 import numpy as np
-from scipy.constants import physical_constants
 from sympy import Expr, nsolve, symbols
 
-logger = logging.getLogger(__name__)
+from simpnmr.core.constants.physics import GE, KB, C, H
 
-# Imports
-G_E = abs(physical_constants["electron g factor"][0])
-MU_B = physical_constants["Bohr magneton"][0]
-K = physical_constants["Boltzmann constant"][0]
-H = physical_constants["Planck constant"][0]
-C = physical_constants["speed of light in vacuum"][0]
+logger = logging.getLogger(__name__)
 
 
 def compute_g_tensor_from_params(
@@ -184,7 +178,7 @@ def solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, flo
 
     gx, gy, gz = symbols("gx gy gz", real=True)
 
-    g_iso_fit = iso_intercept / G_E
+    g_iso_fit = iso_intercept / GE
 
     g2_iso, g2_ax, g2_rh = compute_g2_invariants(gx, gy, gz)
 
@@ -225,7 +219,7 @@ def solve_g_principals_axial_only(
     iso_intercept = params["iso_intercept"]
     ax_intercept = params["ax_intercept"]
 
-    g_iso = iso_intercept / G_E
+    g_iso = iso_intercept / GE
     g_sq_ax_val = ax_intercept
 
     try:
@@ -276,7 +270,7 @@ def solve_zfs_from_g_slopes(
     g2_iso, g2_ax, g2_rh = compute_g2_invariants(gx_val, gy_val, gz_val)
 
     f_S = (2.0 * spin - 1.0) * (2.0 * spin + 3.0)
-    coeff = f_S / (30.0 * K)
+    coeff = f_S / (30.0 * KB)
 
     rhs1 = -ax_slope / coeff
     rhs2 = rho_slope / coeff

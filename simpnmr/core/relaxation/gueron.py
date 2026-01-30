@@ -2,13 +2,9 @@
 # Copyright (C) 2025 Suturina Group
 
 import numpy as np
-import scipy.constants as consts
 
+from simpnmr.core.constants.physics import KB, MU0, MUB
 from simpnmr.core.factories.eff_factors import calc_g_eff, choose_S_eff
-
-# Physical constants
-MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
-MUB = consts.physical_constants["Bohr magneton"][0]
 
 
 def calc_r1_curie(
@@ -59,7 +55,7 @@ def calc_r1_curie(
             (2 / 5)
             * (1 / r**6)
             * (MU0 / (4 * np.pi)) ** 2
-            * (omega_I / (3 * consts.k * T)) ** 2
+            * (omega_I / (3 * KB * T)) ** 2
             * (g_eff * MUB) ** 4
             * (S_eff * (S_eff + 1)) ** 2
         )
@@ -118,7 +114,7 @@ def calc_r2_curie(
             (1 / 5)
             * (1 / r**6)
             * (MU0 / (4 * np.pi)) ** 2
-            * (omega_I / (3 * consts.k * T)) ** 2
+            * (omega_I / (3 * KB * T)) ** 2
             * (g_eff * MUB) ** 4
             * (S_eff * (S_eff + 1)) ** 2
         )

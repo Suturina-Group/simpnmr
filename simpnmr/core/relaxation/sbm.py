@@ -2,13 +2,9 @@
 # Copyright (C) 2025 Suturina Group
 
 import numpy as np
-import scipy.constants as consts
 
+from simpnmr.core.constants.physics import MU0, MUB
 from simpnmr.core.factories.eff_factors import calc_g_eff, choose_S_eff
-
-# Physical constants
-MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
-MUB = consts.physical_constants["Bohr magneton"][0]
 
 
 def calc_r1_dipolar(

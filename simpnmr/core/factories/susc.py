@@ -10,19 +10,10 @@ in the core layer.
 """
 
 import numpy as np
-import scipy.constants as consts
 from numpy.typing import NDArray
 
+from simpnmr.core.constants.physics import KB, MU0, MUB, NA
 from simpnmr.core.factories.eff_factors import calc_g_eff, choose_S_eff
-
-# Physical constants
-MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
-MUB = consts.physical_constants["Bohr magneton"][0]
-HBAR = consts.hbar  # [J s radian-1]
-H = consts.h  # [J s radian-1]
-KB = consts.physical_constants["Boltzmann constant"][0]  # Boltzmann constant k [J·K⁻¹]
-GE = abs(consts.physical_constants["electron g factor"][0])  # g value of free electron
-EGAMMA = consts.physical_constants["electron gyromag. ratio in MHz/T"][0]
 
 
 def susc_from_orca_xt(
@@ -46,7 +37,7 @@ def susc_from_orca_xt(
     # Conversion factor:
     # 1 cm^3 mol^-1 = 1e-6 m^3 / N_A
     # then convert m^3 -> Å^3 (1 m^3 = 1e30 Å^3)
-    conv = 1e-24 * consts.Avogadro / (4.0 * np.pi)
+    conv = 1e-24 * NA / (4.0 * np.pi)
     conv = 1.0 / conv
 
     chi_tensor = tensor_xt / temperature * conv

@@ -7,20 +7,11 @@ This module ...
 """
 
 import numpy as np
-import scipy.constants as consts
 from numpy.typing import NDArray
 
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.constants.physics import EGAMMA, MU0, H
 from simpnmr.core.utils.strings import remove_numbers
-
-# Physical constants
-MU0 = consts.physical_constants["vacuum mag. permeability"][0]  # [N A^-2]
-MUB = consts.physical_constants["Bohr magneton"][0]
-HBAR = consts.hbar  # [J s radian-1]
-H = consts.h  # [J s radian-1]
-KB = consts.physical_constants["Boltzmann constant"][0]  # Boltzmann constant k [J·K⁻¹]
-GE = abs(consts.physical_constants["electron g factor"][0])  # g value of free electron
-EGAMMA = consts.physical_constants["electron gyromag. ratio in MHz/T"][0]
 
 
 def a_tensor_mhz_to_angst(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:

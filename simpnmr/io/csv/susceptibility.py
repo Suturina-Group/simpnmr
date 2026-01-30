@@ -15,9 +15,9 @@ from typing import Any, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
-import scipy.constants as constants
 
 from simpnmr.__version__ import __version__
+from simpnmr.core.constants.physics import NA
 from simpnmr.io.csv.utils import read_csv_safe
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,10 @@ def read_susceptibilities_csv(file_name: str) -> List[Tuple[np.ndarray, float]]:
     # Forward conversion, A^3 --> Key (same mapping as old domain code)
     convs = {
         "(A^3)": 1.0,
-        "(Å^3 mol^-1)": constants.Avogadro,
-        "(A^3 mol^-1)": constants.Avogadro,
+        "(Å^3 mol^-1)": NA,
+        "(A^3 mol^-1)": NA,
         "(cm^3)": 1e-24,
-        "(cm^3 mol^-1)": 1e-24 * constants.Avogadro / (4 * np.pi),
+        "(cm^3 mol^-1)": 1e-24 * NA / (4 * np.pi),
     }
 
     renamer = {}
@@ -94,13 +94,13 @@ def save_susc(
         conv = 1.0
         unit_label = r"Å^3"
     elif susc_units == "A3 mol-1":
-        conv = constants.Avogadro
+        conv = NA
         unit_label = r"Å^3 mol^-1"
     elif susc_units == "cm3 ":
         conv = 1e-24
         unit_label = r"cm^3"
     elif susc_units == "cm3 mol-1":
-        conv = 1e-24 * constants.Avogadro / (4 * np.pi)
+        conv = 1e-24 * NA / (4 * np.pi)
         unit_label = r"cm^3 mol^-1"
 
     # Write susceptibility tensor to CSV

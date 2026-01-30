@@ -26,12 +26,9 @@ The fit_results dict may also include precomputed plotting arrays:
 """
 
 import numpy as np
-from scipy.constants import c, h, k, mu_0, physical_constants
 from scipy.optimize import curve_fit
 
-# Physical constants (SI units)
-G_E = abs(physical_constants["electron g factor"][0])
-MU_B = physical_constants["Bohr magneton"][0]
+from simpnmr.core.constants.physics import KB, MU0, MUB, C, H
 
 
 def fit_chit_linear_model(
@@ -366,19 +363,19 @@ def compute_analytic_component(
     # Calculate chi component in reduced (Curie) units (if I am not mistaken)
     if chi_component == "iso":
         analytic = (
-            g_sq_iso - (f_S / (45 * k * t_max)) * (D_J * g_sq_ax + 3 * E_J * g_sq_rh)
+            g_sq_iso - (f_S / (45 * KB * t_max)) * (D_J * g_sq_ax + 3 * E_J * g_sq_rh)
         ) / t_max
     elif chi_component == "ax":
         analytic = (
             g_sq_ax
-            - (f_S / (30 * k * t_max))
+            - (f_S / (30 * KB * t_max))
             * (D_J * (g_sq_ax + 3 * g_sq_iso) - 3 * E_J * g_sq_rh)
         ) / t_max
 
     elif chi_component == "rho":
         analytic = (
             g_sq_rh
-            + (f_S / (30 * k * t_max))
+            + (f_S / (30 * KB * t_max))
             * (E_J * (g_sq_ax - 3 * g_sq_iso) + D_J * g_sq_rh)
         ) / t_max
     else:
@@ -414,8 +411,8 @@ def calculate_E_D_components(
     E = (eff_H_diag[0, 0] - eff_H_diag[1, 1]) / 2
 
     # Convert values to Joules
-    D_J = D * h * c * 100
-    E_J = E * h * c * 100
+    D_J = D * H * C * 100
+    E_J = E * H * C * 100
 
     return D_J, E_J
 
@@ -448,4 +445,4 @@ def compute_curie_prefactor(spin: float) -> float:
     Returns:
         float: Curie prefactor in Å^3·K.
     """
-    return (mu_0 * MU_B**2 * spin * (spin + 1)) / (3 * k) * 1e30  # [Å^3·K]
+    return (MU0 * MUB**2 * spin * (spin + 1)) / (3 * KB) * 1e30  # [Å^3·K]
