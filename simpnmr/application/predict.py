@@ -15,7 +15,10 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import build_molecule_from_qca
+from simpnmr.application.loaders.molecule import (
+    build_molecule_from_qca,
+    load_molecule_from_csv,
+)
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
@@ -102,8 +105,9 @@ def run_predict(
 
     # or load from CSV
     elif config.hyperfine_method == "csv":
-        base_molecule = Molecule.from_csv(
-            config.hyperfine_file, elements=config.nuclei_include
+        base_molecule = load_molecule_from_csv(
+            config.hyperfine_file,
+            elements=config.nuclei_include,
         )
 
     # Load electronic state
@@ -157,11 +161,14 @@ def run_predict(
 
     # Rotate hyperfine tensors from DFT frame into chi eigenframe (if provided)
     if "orca" in config.susceptibility_format:
-        rot_mat, trans_mat = tfm.get_rotation_and_transformation(config)
-        base_molecule.rotate_hyperfines(rot_mat)
+        if (
+            "dft" in config.hyperfine_method
+        ):  # TODO: remove condition and remove config from tf.
+            rot_mat, trans_mat = tfm.get_rotation_and_transformation(config)
+            base_molecule.rotate_hyperfines(rot_mat)
 
-        # Rotate HFC coords frame into chi eigenframe and save the transformed coords
-        tfm.rotate_coords_to_chi_frame(config.project_name, config)
+            # Rotate HFC coords frame into chi eigenframe and save the transformed coords
+            tfm.rotate_coords_to_chi_frame(config.project_name, config)
 
     # Load susceptibility information
     suscs = load_susceptibilities(

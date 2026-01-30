@@ -11,7 +11,10 @@ from scipy.optimize import curve_fit
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import build_molecule_from_qca
+from simpnmr.application.loaders.molecule import (
+    build_molecule_from_qca,
+    load_molecule_from_csv,
+)
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
@@ -155,8 +158,9 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             )
             base_molecule.calc_pdip(config.hyperfine_pdip_centres)
         elif config.hyperfine_method == "csv":
-            base_molecule = Molecule.from_csv(
-                config.hyperfine_file, elements=config.nuclei_include
+            base_molecule = load_molecule_from_csv(
+                config.hyperfine_file,
+                elements=config.nuclei_include,
             )
 
         # Add chemical labels if provided

@@ -1,6 +1,6 @@
 import os
 
-from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
+from simpnmr.application.loaders.molecule import load_molecule_from_qca
 from simpnmr.application.setup.options import ExtractHFCRunOptions
 from simpnmr.io.csv.molecule import save_molecule_to_csv
 
@@ -21,7 +21,7 @@ def run_extract_hfc(
     """
 
     # Create molecule object and convert units
-    molecule = load_molecule_from_hfc_file(
+    molecule = load_molecule_from_qca(
         calculation_data,
         converter="MHz_to_Ang-3",
     )

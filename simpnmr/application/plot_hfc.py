@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
-from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
+from simpnmr.application.loaders.molecule import load_molecule_from_qca
 from simpnmr.application.setup.options import PlotHFCRunOptions
 from simpnmr.viz import visualise as vis
 
@@ -17,7 +17,7 @@ def run_plot_hfc(
 ) -> int:
     """Plot hyperfine data from a single QC output file."""
 
-    molecule = load_molecule_from_hfc_file(
+    molecule = load_molecule_from_qca(
         calculation_data,
         elements=elements,
         converter="MHz_to_Ang-3",

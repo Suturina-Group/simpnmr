@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
-from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
+from simpnmr.application.loaders.molecule import load_molecule_from_qca
 
 
 def load_hyperfine_data(sources: dict[str, str], chem_labels: str) -> dict[str, object]:
@@ -44,7 +44,7 @@ def load_hyperfine_data(sources: dict[str, str], chem_labels: str) -> dict[str, 
     all_molecules = dict.fromkeys(sources, None)
 
     for source_name, source_file in sources.items():
-        molecule = load_molecule_from_hfc_file(
+        molecule = load_molecule_from_qca(
             source_file,
             elements="all_H",
             converter="MHz_to_Ang-3",

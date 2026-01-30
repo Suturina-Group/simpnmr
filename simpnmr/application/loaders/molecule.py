@@ -12,11 +12,12 @@ import numpy as np
 
 from simpnmr.core.convertors.hyperfine import a_iso_mhz_to_angst, a_tensor_mhz_to_angst
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.io.csv.molecule import read_molecule_csv
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 
-def load_molecule_from_hfc_file(
+def load_molecule_from_qca(
     file_name: str,
     *,
     elements: list[str] | str = "all",
@@ -38,7 +39,7 @@ def load_molecule_from_hfc_file(
     return build_molecule_from_qca(qca, elements=elements, converter=converter)
 
 
-def build_molecule_from_qca(
+def build_molecule_from_qca(  # TODO: consider moving to factories
     qca: Any,
     *,
     elements: list[str] | str = "all",
@@ -103,3 +104,97 @@ def build_molecule_from_qca(
         a_dip=a_dip,
         elements=elements,
     )
+
+
+def load_molecule_from_csv(
+    file_name: str,
+    *,
+    elements: list[str] | str = "all",
+) -> Molecule:
+    """Load a Molecule from a CSV file (IO -> domain).
+
+    Reads CSV via IO layer and builds a Molecule via pure domain constructors.
+    """
+    payload = read_molecule_csv(file_name)
+    return build_molecule_from_csv(payload, elements=elements)
+
+
+def build_molecule_from_csv(  # TODO: consider moving to factories
+    payload: dict,
+    *,
+    elements: list[str] | str = "all",
+) -> Molecule:
+    """Build a `Molecule` from an IO CSV payload."""
+
+    labels: list[str] = payload["labels"]
+    coords = payload["coords"]
+
+    tensors = payload.get("tensors")  # dict[label, (3,3)] | None
+    chem_labels = payload.get("chem_labels")  # list[str] | None
+    chem_math_labels = payload.get("chem_math_labels")  # list[str] | None
+
+    # --- Hyperfine: tensors -> (a_iso, a_dip) ---
+    a_iso = None
+    a_dip = None
+    if tensors is not None:
+        if isinstance(tensors, dict):
+            tensor_by_label = {k: np.asarray(v, float) for k, v in tensors.items()}
+        else:
+            tensor_by_label = {
+                lab: np.asarray(t, float) for lab, t in zip(labels, tensors)
+            }
+
+        a_iso = {}
+        a_dip = {}
+        for lab in labels:
+            if lab not in tensor_by_label:
+                raise KeyError(f"Missing hyperfine tensor for label: {lab}")
+
+            A = np.asarray(tensor_by_label[lab], float)
+            if A.shape != (3, 3):
+                raise ValueError(
+                    f"Hyperfine tensor for {lab} must be (3,3), got {A.shape}"
+                )
+
+            iso = float(np.trace(A) / 3.0)
+            a_iso[lab] = iso
+            a_dip[lab] = A - np.eye(3) * iso
+
+    # --- Chem labels ---
+    al_to_cl = None
+    al_to_cml = None
+    if chem_labels is not None:
+        if len(chem_labels) != len(labels):
+            raise ValueError(
+                f"chem_labels length mismatch: {len(chem_labels)} vs {len(labels)}"
+            )
+        al_to_cl = {lab: str(cl) for lab, cl in zip(labels, chem_labels)}
+
+        if chem_math_labels is not None:
+            if len(chem_math_labels) != len(labels):
+                raise ValueError(
+                    f"chem_math_labels length mismatch: "
+                    f"{len(chem_math_labels)} vs {len(labels)}"
+                )
+            al_to_cml = {lab: str(cml) for lab, cml in zip(labels, chem_math_labels)}
+
+    # --- Build molecule ---
+    if a_iso is not None and a_dip is not None:
+        molecule = Molecule.from_hyperfine_data(
+            labels=labels,
+            coords=coords,
+            a_iso=a_iso,
+            a_dip=a_dip,
+            elements=elements,
+        )
+    else:
+        molecule = Molecule.from_labels_coords(
+            labels=labels,
+            coords=coords,
+            elements=elements,
+        )
+
+    if al_to_cl is not None:
+        molecule.apply_chem_labels(al_to_cl, al_to_cml)
+
+    return molecule

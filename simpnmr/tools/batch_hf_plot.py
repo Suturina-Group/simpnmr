@@ -22,7 +22,7 @@ from matplotlib.lines import Line2D
 
 import simpnmr.viz.visualise as vis
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
-from simpnmr.application.loaders.molecule import load_molecule_from_hfc_file
+from simpnmr.application.loaders.molecule import load_molecule_from_qca
 from simpnmr.core.domain.molecule import Molecule
 
 mpl.rc("xtick", labelsize=12)
@@ -59,7 +59,7 @@ def load_hyperfine_data(
     all_molecules = dict.fromkeys(sources, None)
 
     for source_name, source_file in sources.items():
-        molecule = load_molecule_from_hfc_file(
+        molecule = load_molecule_from_qca(
             source_file,
             elements=elements,
             converter=None,
