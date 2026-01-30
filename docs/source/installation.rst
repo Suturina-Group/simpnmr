@@ -1,6 +1,6 @@
-.. _Installation:
+.. _installation:
 
-Installation and Configuration
+Installation
 ==============================
 
 Setting up python
@@ -36,8 +36,8 @@ To test your installation was successful, run the following command
 
     simpnmr -h
 
-You should see the help text for ``simpnmr``. You are now ready to start using ``SimpNMR``, head to the :ref:`guide` pages for more information, 
-or over to :ref:`configuration` to customise your installation.
+You should see the help text for ``simpnmr``. You are now ready to start using ``SimpNMR``, head to the :ref:`usage` pages for more information, 
+details.
 
 .. _updating:
 

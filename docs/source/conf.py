@@ -92,7 +92,7 @@ latex_elements = {
     'printindex': r'\footnotesize\raggedright\printindex',
 }
 latex_show_urls = 'footnote'
-root_doc = 'index'
+root_doc = 'home'
 latex_documents = [
     (root_doc, 'simpnmr.tex', 'simpnmr Documentation',
      '', 'manual'),

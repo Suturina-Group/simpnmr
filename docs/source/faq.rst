@@ -46,13 +46,3 @@ Errors:
     Make sure you have write access to the output directory and read access to all input files,
     or choose a different location for the simulation outputs.
 
-I want to:
-^^^^^^^^^^^^
-
-1. Change the plot font family/size or plot file extension
-
-    Read the instructions :ref:`here <env_var>`. 
-
-2. Use an alternative delimiter in csv output files
-
-    Read the instructions :ref:`here <csv_files>`. 
