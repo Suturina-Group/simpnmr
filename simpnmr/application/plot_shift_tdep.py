@@ -14,7 +14,7 @@ def run_plot_shift_tdep(
         "ShiftT_vs_T",
         show=options.show,
         save=options.save,
-        save_name=f"shift_x_T_vs_T{options.runtime.plot_format}",
+        save_name="shift_x_T_vs_T",
     )
 
     plot_shift_tdep(
@@ -22,7 +22,7 @@ def run_plot_shift_tdep(
         "Shift_vs_1/T",
         show=options.show,
         save=options.save,
-        save_name=f"shift_vs_T-1{options.runtime.plot_format}",
+        save_name="shift_vs_T-1",
     )
 
     return 0

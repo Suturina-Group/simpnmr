@@ -90,7 +90,7 @@ def run_plot_hfc_iso_ax(
             show=False,
             save_name=os.path.join(
                 config.project_name,
-                f"hyperfine_iso_ax_{file_head}{options.runtime.plot_format}",
+                f"hyperfine_iso_ax_{file_head}",
             ),
             verbose=True,
             window_title=f"Hyperfine data from {hf_file}",

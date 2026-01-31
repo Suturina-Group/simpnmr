@@ -15,7 +15,6 @@ def apply_runtime_settings():
 
     # defaults
     echo_r2 = False
-    plot_format = ".png"
     csv_delimiter = ","
 
     if os.getenv("pnmr_echo_r2", "").lower() == "true":
@@ -24,16 +23,10 @@ def apply_runtime_settings():
     if os.getenv("pnmr_fontname"):
         plt.rcParams["font.family"] = os.getenv("pnmr_fontname")
 
-    if os.getenv("pnmr_plot_format"):
-        plot_format = os.getenv("pnmr_plot_format")
-        if not plot_format.startswith("."):
-            plot_format = "." + plot_format
-
     if os.getenv("pnmr_csvdelimiter"):
         csv_delimiter = os.getenv("pnmr_csvdelimiter")
 
     return RuntimeSettings(
         echo_r2=echo_r2,
-        plot_format=plot_format,
         csv_delimiter=csv_delimiter,
     )

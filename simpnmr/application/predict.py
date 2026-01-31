@@ -59,7 +59,6 @@ def run_predict(
         raise ValueError("PredictRunOptions is required")
 
     delimiter = options.runtime.csv_delimiter
-    plot_format = options.runtime.plot_format
 
     # Either load hyperfines from DFT output file
     if config.hyperfine_method == "dft":
@@ -298,7 +297,7 @@ def run_predict(
             terms=_terms,
             save_name=os.path.join(
                 config.project_name,
-                f"pred_shift_spread_{molecule.susc.temperature:.2f}_K{plot_format}",
+                f"pred_shift_spread_{molecule.susc.temperature:.2f}_K",
             ),
             verbose=True,
             window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
@@ -313,7 +312,7 @@ def run_predict(
             show=False,
             save_name=os.path.join(
                 config.project_name,
-                f"pred_mean_components_{molecule.susc.temperature:.2f}_K{plot_format}",
+                f"pred_mean_components_{molecule.susc.temperature:.2f}_K",
             ),
             verbose=True,
             window_title=(
@@ -344,7 +343,7 @@ def run_predict(
                 show=False,
                 save_name=os.path.join(
                     config.project_name,
-                    f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K{plot_format}",
+                    f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K",
                 ),
             )
         plot_pred_spectrum(
@@ -355,7 +354,7 @@ def run_predict(
             show=False,
             save_name=os.path.join(
                 config.project_name,
-                f"pred_spectrum_{molecule.susc.temperature:.2f}_K{plot_format}",
+                f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
             ),
         )
 

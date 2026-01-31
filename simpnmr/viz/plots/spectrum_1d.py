@@ -17,6 +17,7 @@ from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.utils.arrays import find_index_of_nearest
 from simpnmr.core.utils.strings import remove_numbers
+from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.utils.format import isotope_format
 
 logger = logging.getLogger(__name__)
@@ -157,13 +158,15 @@ def plot_pred_spectrum(
 
     fig.tight_layout()
 
-    if save:
-        fig.savefig(save_name, dpi=400)
-        if verbose:
-            logger.info("Predicted spectrum saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Predicted spectrum saved to %s", f"{save_name}.pdf")
 
     # Write spectrum (ppm and normalized intensity) to CSV for external visualization
     df = pd.DataFrame({"shift (ppm)": x_grid, "intensity (a.u.)": y_intensity})
@@ -366,12 +369,14 @@ def plot_raw_deconv_pred(
 
     fig.tight_layout()
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("Spectra saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Spectra saved to %s", f"{save_name}.pdf")
 
     return fig, ax

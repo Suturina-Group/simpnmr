@@ -25,7 +25,6 @@ class RuntimeSettings:
     """Global runtime settings applied/selected by the CLI."""
 
     csv_delimiter: str = ","
-    plot_format: str = ".png"
     echo_r2: bool = False
 
 

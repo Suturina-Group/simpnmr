@@ -57,7 +57,6 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         raise ValueError("FitSuscRunOptions is required")
 
     delimiter = options.runtime.csv_delimiter
-    plot_format = options.runtime.plot_format
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
@@ -356,7 +355,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 save=pl.SAVE_CONV[options.shift_plots],
                 save_name=os.path.join(
                     config.project_name,
-                    f"shifts_{experiment.temperature:.2f}_K{plot_format}",
+                    f"shifts_{experiment.temperature:.2f}_K",
                 ),
                 verbose=True,
                 window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
@@ -379,7 +378,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     save=pl.SAVE_CONV[options.spread_plots],
                     save_name=os.path.join(
                         config.project_name,
-                        f"shift_spread_{molecule.susc.temperature:.2f}_K{plot_format}",
+                        f"shift_spread_{molecule.susc.temperature:.2f}_K",
                     ),
                     verbose=True,
                     window_title=(
@@ -398,7 +397,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     save=pl.SAVE_CONV[options.contrib_plots],
                     save_name=os.path.join(
                         config.project_name,
-                        f"mean_components_{experiment.temperature:.2f}_K{plot_format}",
+                        f"mean_components_{experiment.temperature:.2f}_K",
                     ),
                     verbose=True,
                     window_title=(
@@ -495,13 +494,12 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     ]
 
     if config.susc_fit_type == "isoaxrho" and spin is not None:
-        _fit_isoaxrho_vt(
+        fit_isoaxrho_vt(
             config=config,
             molecules=molecules,
             spin=spin,
             susc_models=susc_models,
             plot_mode=options.isoaxrho_plots,
-            plot_format=plot_format,
             susc_units=options.susc_units,
         )
 
@@ -513,20 +511,19 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         show=False,
         save_name=os.path.join(
             config.project_name,
-            f"pred_spectrum_{molecule.susc.temperature:.2f}_K{plot_format}",
+            f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
         ),
     )
 
     return 0
 
 
-def _fit_isoaxrho_vt(
+def fit_isoaxrho_vt(
     config,
     molecules,
     spin,
     susc_models,
     plot_mode: pl.PlotMode,
-    plot_format: str,
     susc_units: str,
 ) -> None:
     # Define the components to fit
@@ -693,9 +690,7 @@ def _fit_isoaxrho_vt(
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
         y_label=r"$\chi T^{\mathrm{red}}$",
-        save_name=os.path.join(
-            config.project_name, f"susceptibility_components_chiT{plot_format}"
-        ),
+        save_name=os.path.join(config.project_name, "susceptibility_components_chiT"),
         window_title="ChiT Susceptibility components",
         verbose=True,
     )
@@ -709,9 +704,7 @@ def _fit_isoaxrho_vt(
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
         y_label=rf"$\chi\;\mathrm{{{susc_units}}}$",
-        save_name=os.path.join(
-            config.project_name, f"susceptibility_components_chi{plot_format}"
-        ),
+        save_name=os.path.join(config.project_name, "susceptibility_components_chi"),
         window_title="Susceptibility components",
         verbose=True,
     )

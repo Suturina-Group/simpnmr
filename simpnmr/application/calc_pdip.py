@@ -91,7 +91,7 @@ def run_calc_pdip(
             plot_components,
             save=options.save,
             show=options.show,
-            save_name=f"point_dipole_A_dip_{file_head}{options.runtime.plot_format}",
+            save_name=f"point_dipole_A_dip_{file_head}",
             verbose=True,
             window_title="Point-Dipole Hyperfines",
         )
@@ -102,10 +102,7 @@ def run_calc_pdip(
                 plot_components,
                 save=options.save,
                 show=options.show,
-                save_name=(
-                    f"spread_point_dipole_A_dip_{file_head}"
-                    f"{options.runtime.plot_format}"
-                ),
+                save_name=(f"spread_point_dipole_A_dip_{file_head}"),
                 verbose=True,
                 window_title="Point-Dipole Hyperfines Spread",
             )

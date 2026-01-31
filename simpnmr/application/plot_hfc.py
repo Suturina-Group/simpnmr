@@ -36,7 +36,7 @@ def run_plot_hfc(
                 components=components,
                 save=options.save,
                 show=False,
-                save_name=f"hyperfine_spread_{file_head}{options.runtime.plot_format}",
+                save_name=f"hyperfine_spread_{file_head}",
                 window_title=f"Spread of hyperfine data from {calculation_data}",
                 verbose=True,
             )
@@ -46,7 +46,7 @@ def run_plot_hfc(
             components=components,
             save=options.save,
             show=False,
-            save_name=f"hyperfine_{file_head}{options.runtime.plot_format}",
+            save_name=f"hyperfine_{file_head}",
             window_title=f"Hyperfine data from {calculation_data}",
             verbose=True,
         )

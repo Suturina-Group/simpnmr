@@ -2,11 +2,12 @@
 # Copyright (C) 2025 Suturina Group
 
 import logging
-import os
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
+
+from simpnmr.viz.layout.export import render_figure
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def plot_isoaxrho(
     show: bool = True,
     save: bool = True,
     y_label: str = "ChiT",
-    save_name: str = "susceptibility_components.pdf",
+    save_name: str = "susceptibility_components",
     window_title: str = "Isotropic, Axial, and Rhombic susceptibilities",
     verbose: bool = True,
 ) -> None:
@@ -187,12 +188,17 @@ def plot_isoaxrho(
 
         fig.tight_layout()
 
-        if save:
-            root, _ = os.path.splitext(save_name)
-            comp_save_name = f"{root}_{component}{'.pdf'}"
-            fig.savefig(comp_save_name)
-            if verbose:
-                logger.info("Temperature dependence plot saved to %s", comp_save_name)
+        comp_save_name = f"{save_name}_{component}"
 
-        if show:
-            plt.show()
+        render_figure(
+            fig,
+            save=save,
+            show=show,
+            save_name=comp_save_name,
+        )
+
+        if save and verbose:
+            logger.info(
+                "Temperature dependence plot saved to %s",
+                f"{comp_save_name}.pdf",
+            )

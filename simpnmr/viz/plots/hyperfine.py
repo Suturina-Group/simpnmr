@@ -9,6 +9,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 
 from simpnmr.core.domain.molecule import Nucleus
+from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.utils.tensor_components import comp2ind
 
 logger = logging.getLogger(__name__)
@@ -119,13 +120,15 @@ def plot_hyperfine(
     ax.set_ylabel(r"Hyperfine Coupling (ppm Å$^\mathregular{-3}$)")
     fig.tight_layout()
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("Hyperfine plot saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Hyperfine plot saved to %s", f"{save_name}.pdf")
 
     return fig, ax
 
@@ -157,13 +160,15 @@ def plot_hyperfine_iso_vs_ax(
         r"$A_\mathregular{iso} / (A_\mathregular{dip_{xx}} + A_\mathregular{dip_{yy}})$"
     )
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("Hyperfine plot saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Hyperfine plot saved to %s", f"{save_name}.pdf")
 
     return
 
@@ -278,12 +283,14 @@ def plot_hyperfine_spread(
     ax.set_ylabel(r"Hyperfine Coupling (ppm Å$^\mathregular{-3}$)")
     fig.tight_layout()
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("Hyperfine spread plot saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Hyperfine spread plot saved to %s", f"{save_name}.pdf")
 
     return fig, ax

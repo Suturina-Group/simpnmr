@@ -2,7 +2,6 @@
 # Copyright (C) 2025 Suturina Group
 
 import logging
-import os
 
 import matplotlib.lines as lines
 import matplotlib.patches as mpatches
@@ -15,6 +14,7 @@ from simpnmr.core.constants import periodic_table
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.fitting import fit_models
+from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.layout.violin import set_violin_colours
 from simpnmr.viz.style.palette import SAFE_COLOURS
 from simpnmr.viz.utils.format import isotope_format
@@ -194,13 +194,15 @@ def plot_fitted_shifts(
         ax.invert_xaxis()
         ax.invert_yaxis()
 
-    if save:
-        fig.savefig(save_name, dpi=400)
-        if verbose:
-            logger.info("Chemical shift plot saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Chemical shift plot saved to %s", f"{save_name}.pdf")
 
     return fig, ax
 
@@ -425,17 +427,14 @@ def plot_shift_spread(
     fig.tight_layout()
     fig.subplots_adjust(right=0.950)
 
-    if save:
-        out_dir = os.path.dirname(save_name)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-
-        fig.savefig(save_name, dpi=400)
-        if verbose:
-            logger.info("Shift spread plot saved to %s", save_name)
-
-    if show:
-        plt.show()
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
+    if save and verbose:
+        logger.info("Shift spread plot saved to %s", f"{save_name}.pdf")
 
     return fig, ax
 
@@ -656,13 +655,15 @@ def plot_shift_contrib(
     fig.tight_layout()
     fig.subplots_adjust(right=0.950)
 
-    if save:
-        fig.savefig(save_name, dpi=400)
-        if verbose:
-            logger.info("Shift component plot saved to %s", save_name)
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
 
-    if show:
-        plt.show()
+    if save and verbose:
+        logger.info("Shift component plot saved to %s", f"{save_name}.pdf")
 
     return fig, ax
 
@@ -726,11 +727,14 @@ def plot_shift_tdep(
 
     fig.tight_layout()
 
-    if save:
-        plt.savefig(save_name, dpi=500)
-        if verbose:
-            logger.info("Shift vs Temperature plots saved to %s", save_name)
-    if show:
-        plt.show()
+    render_figure(
+        fig,
+        save=save,
+        show=show,
+        save_name=save_name,
+    )
+
+    if save and verbose:
+        logger.info("Shift vs Temperature plots saved to %s", f"{save_name}.pdf")
 
     return
