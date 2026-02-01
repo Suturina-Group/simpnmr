@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Experiment loaders.
+"""Load and save Experiment objects via CSV.
 
-Application-level loaders that bridge IO formats to domain Experiment objects.
+Reads external data and constructs domain Experiment instances, or serializes
+them back to CSV.
 """
 
 from __future__ import annotations

@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Violin plot styling helpers.
+
+Provides utilities to apply consistent coloring to Matplotlib violin plots.
+"""
 
 
 def set_violin_colours(violin: dict, color: str) -> None:

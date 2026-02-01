@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Define nuclear gyromagnetic ratios.
+
+Provides gyromagnetic ratios (MHz/T) for common elements and isotopes.
+"""
 
 # # Values from easyspin, most abundant isotope taken
 # unless otherwise stated

@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Write relaxation analysis outputs as CSV.
+
+Provides helpers to export relaxation decompositions and correlation-time fit data.
+"""
 
 import datetime
 import logging

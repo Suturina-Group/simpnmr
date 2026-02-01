@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Read and write chiT regression fit results as CSV.
+
+Provides helpers to serialize fitted slope/intercept parameters and to parse
+flattened regression results from CSV files.
+"""
 
 import datetime
 import logging

@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Plot hyperfine coupling data from multiple quantum-chemistry sources.
+"""Plot hyperfine coupling data from multiple QC sources.
 
-This script loads hyperfine data (e.g. HFCCs) from multiple calculation outputs,
-maps atoms to chemical labels, and generates comparison plots across sources.
+Loads hyperfine data from multiple calculation outputs and generates comparison
+plots across sources.
 """
 
 import argparse
@@ -20,10 +19,10 @@ import yaml
 import yaml_include
 from matplotlib.lines import Line2D
 
-import simpnmr.viz.visualise as vis
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.molecule import load_molecule_from_qca
 from simpnmr.core.domain.molecule import Molecule
+from simpnmr.viz.style.palette import SAFE_COLOURS
 
 mpl.rc("xtick", labelsize=12)
 mpl.rc("ytick", labelsize=12)
@@ -175,7 +174,7 @@ def plot_normalisation(
 
     unilabs = set(chemlabels.values())
 
-    colours = {lab: col for col, lab in zip(vis.SAFE_COLOURS, unilabs)}
+    colours = {lab: col for col, lab in zip(SAFE_COLOURS, unilabs)}
 
     fig, ax = plt.subplots(num=figure_title)
 

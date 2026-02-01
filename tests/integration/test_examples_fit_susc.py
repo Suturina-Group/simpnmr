@@ -1,3 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Integration test for the fit_susc example workflow.
+
+Runs the CLI example and asserts successful execution and expected outputs.
+"""
+
 import subprocess
 from pathlib import Path
 

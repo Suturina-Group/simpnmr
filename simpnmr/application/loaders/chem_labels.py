@@ -1,7 +1,6 @@
-"""Loader for chemical labels CSV files.
+"""Load chemical label mappings from CSV.
 
-Reads and validates chemical label mappings and optional coordinates,
-returning plain Python data structures for application-layer orchestration.
+Reads external data and returns plain mappings for downstream use.
 """
 
 from __future__ import annotations

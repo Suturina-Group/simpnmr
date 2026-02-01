@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Output helpers for SimpNMR.
+"""Read and write susceptibility data as CSV.
 
-This module contains functions for writing susceptibility tensors, relaxation
-rate decompositions, and fit diagnostics to CSV/text files.
+Provides CSV parsing and serialization helpers for susceptibility tensors and
+optional fit diagnostics.
 """
 
 from __future__ import annotations

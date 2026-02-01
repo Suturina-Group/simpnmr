@@ -1,11 +1,9 @@
-"""Shared plotting helpers used across pipelines.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module defines the PlotMode type and utilities to map plot modes to
-show/save booleans in a consistent way.
+"""Define plot mode options and helpers.
 
-The goal is to keep *user-selected* options (e.g., shift_plots="save") in
-pipeline RunOptions dataclasses, while keeping the interpretation rules of
-those modes (e.g., show/save behaviour) in one implementation-focused place.
+Provides utilities to map plot modes to show/save flags used by pipelines.
 """
 
 from __future__ import annotations

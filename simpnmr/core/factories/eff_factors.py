@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Compute effective electronic g-factors and angular momenta.
+
+Provides helpers to evaluate effective g-values and angular momentum parameters
+from spin, orbital, and total angular momentum quantum numbers.
+"""
 
 from simpnmr.core.constants.physics import GE
 

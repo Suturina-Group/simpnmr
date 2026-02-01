@@ -1,4 +1,10 @@
-"""TODO"""
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Construct Molecule domain objects from external payloads.
+
+Provides helpers to build Molecule instances from QC-derived data or CSV payloads.
+"""
 
 from __future__ import annotations
 

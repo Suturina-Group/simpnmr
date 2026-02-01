@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Apply global runtime settings.
+
+Configures environment variables and matplotlib defaults and returns resolved
+runtime settings.
+"""
+
 import os
 
 import matplotlib as mpl

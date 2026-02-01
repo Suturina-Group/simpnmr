@@ -1,3 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Fit susceptibility tensors to experimental shift data.
+
+Loads inputs, fits a selected susceptibility model, and writes outputs and plots.
+"""
+
 import copy
 import logging
 import os

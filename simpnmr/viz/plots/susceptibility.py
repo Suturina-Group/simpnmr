@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Plot magnetic susceptibility tensor components.
+
+Provides plotting utilities for chi_iso, chi_ax, and chi_rho trends versus
+inverse temperature, with optional precomputed fit curves and uncertainty bands.
+"""
 
 import logging
 

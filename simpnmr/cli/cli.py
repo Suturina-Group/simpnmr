@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""SimpNMR command-line interface.
+"""Define SimpNMR command-line entry points.
 
-This module defines the CLI entry points used to run SimpNMR workflows such as
-pNMR prediction, susceptibility fitting, hyperfine plotting, and data extraction.
+Parses CLI arguments and dispatches subcommands to application pipelines.
 """
 
 import argparse

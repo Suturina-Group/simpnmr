@@ -1,3 +1,5 @@
+"""Package installation and distribution configuration."""
+
 import setuptools
 
 # Read version from simpnmr/__version__.py

@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Atomic/periodic-table helpers.
+"""Define element lists and basic atomic reference data.
 
-This module provides lightweight lists and lookup tables for element symbols,
-blocks (s/p/d/f), and basic atomic properties used throughout the package.
-
-Notes:
-  - Element symbols use standard IUPAC capitalization (e.g., "Fe").
-  - Numeric values are simple reference data, not uncertainties.
+Provides element symbols, periodic-block groupings, and simple lookup tables
+for atomic masses, numbers, and radii.
 """
 
 # ---- s-block (groups 1–2) ----

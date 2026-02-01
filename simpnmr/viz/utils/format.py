@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Format labels for Matplotlib rendering.
+
+Provides helpers to format isotope labels using Matplotlib mathtext.
+"""
 
 
 def isotope_format(isotope_string: str) -> str:

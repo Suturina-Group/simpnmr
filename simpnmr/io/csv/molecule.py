@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Read and write molecular structure and hyperfine data as CSV.
+
+Provides CSV parsing and serialization helpers for atom labels, coordinates,
+optional chemical labels, and hyperfine tensors.
+"""
 
 from __future__ import annotations
 

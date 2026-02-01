@@ -1,4 +1,7 @@
-"""Diamagnetic shift loader."""
+"""Load diamagnetic shifts from CSV or QC output.
+
+Reads external data and returns plain mappings for application-level workflows.
+"""
 
 from __future__ import annotations
 

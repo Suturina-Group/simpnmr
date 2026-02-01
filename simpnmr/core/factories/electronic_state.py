@@ -1,7 +1,9 @@
-"""Factories for constructing `ElectronicState` domain objects.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module contains pure construction logic with no IO and no dependency on
-application config or QC readers.
+"""Construct ElectronicState domain objects.
+
+Provides helpers to build ElectronicState instances from resolved quantum numbers.
 """
 
 from __future__ import annotations

@@ -1,5 +1,10 @@
-"""
-TODO
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Compute PCS isosurfaces using isotropic susceptibility tensors.
+
+Loads structural and susceptibility data, computes PCS grids, and writes cube
+files for selected temperatures.
 """
 
 import logging

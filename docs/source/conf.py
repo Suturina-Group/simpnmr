@@ -10,16 +10,17 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import datetime
 import os
 import sys
-import datetime
-sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('../../'))
+
+sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project information -----------------------------------------------------
 
-project = 'simpnmr'
-copyright = '{:d}'.format(datetime.date.today().year)
+project = "simpnmr"
+copyright = "{:d}".format(datetime.date.today().year)
 
 # -- General configuration ---------------------------------------------------
 
@@ -27,21 +28,21 @@ copyright = '{:d}'.format(datetime.date.today().year)
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.coverage',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.mathjax',
-    'sphinxcontrib.bibtex',
-    'sphinx_copybutton',
-    'sphinxemoji.sphinxemoji'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.coverage",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.mathjax",
+    "sphinxcontrib.bibtex",
+    "sphinx_copybutton",
+    "sphinxemoji.sphinxemoji",
 ]
-bibtex_bibfiles = ['refs.bib']
-bibtex_reference_style = 'super'
+bibtex_bibfiles = ["refs.bib"]
+bibtex_reference_style = "super"
 
 napoleon_numpy_docstring = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -54,17 +55,17 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 # html_logo = '../../images/simpnmr.png'
 # html_favicon = '../../images/simpnmr.ico'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 autodoc_default_options = {
-    'member-order': 'bysource',
+    "member-order": "bysource",
 }
 
 # Experimental latex build!
@@ -74,26 +75,25 @@ autodoc_default_options = {
 # texlive-xetex
 # latexmk
 # texlive-latex-extra
-latex_engine = 'xelatex'
+latex_engine = "xelatex"
 
 latex_elements = {
-    'fontpkg': r'''
+    "fontpkg": r"""
 \setmainfont{Arial}
-''',
-    'preamble': r'''
+""",
+    "preamble": r"""
 \usepackage[titles]{tocloft}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \newcommand{\gt}{>}
 \newcommand{\lt}{<}
 \renewcommand\AA{\text{Å}}
-''',
-    'fncychap': r'\usepackage[Bjornstrup]{fncychap}',
-    'printindex': r'\footnotesize\raggedright\printindex',
+""",
+    "fncychap": r"\usepackage[Bjornstrup]{fncychap}",
+    "printindex": r"\footnotesize\raggedright\printindex",
 }
-latex_show_urls = 'footnote'
-root_doc = 'index'
+latex_show_urls = "footnote"
+root_doc = "index"
 latex_documents = [
-    (root_doc, 'simpnmr.tex', 'simpnmr Documentation',
-     '', 'manual'),
+    (root_doc, "simpnmr.tex", "simpnmr Documentation", "", "manual"),
 ]

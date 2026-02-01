@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Read and write hyperfine coupling data as CSV.
+
+Provides helpers to serialize hyperfine tensors for all nuclei and to export
+them in tabular CSV form.
+"""
 
 import datetime
 import logging

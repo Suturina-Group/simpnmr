@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Domain entities for molecular structure and NMR-active nuclei."""
+"""Define domain models for molecular structure and NMR-active nuclei.
+
+Provides Molecule, Nucleus, and ElectronicState containers used across the library.
+"""
 
 import copy
 import logging

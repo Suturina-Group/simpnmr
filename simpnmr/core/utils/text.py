@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Define simple text formatting helpers.
+
+Provides utilities to generate titled and subtitled text blocks.
+"""
 
 
 def title(string: str) -> str:

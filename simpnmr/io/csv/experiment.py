@@ -1,9 +1,9 @@
-"""
-CSV IO adapters for the Experiment domain model.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module is responsible for translating CSV files into Experiment
-objects and serializing Experiment objects back to CSV. It intentionally
-contains IO logic and depends on low-level CSV readers.
+"""Read and write Experiment objects as CSV.
+
+Provides CSV parsing and serialization helpers for Experiment and Signal data.
 """
 
 from __future__ import annotations

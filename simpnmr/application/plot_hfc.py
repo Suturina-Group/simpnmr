@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Plot hyperfine tensor components from QC output.
+
+Loads molecular data, optionally applies chemical labels, and generates
+hyperfine plots with optional saving and display.
+"""
+
 import os
 
 import matplotlib.pyplot as plt

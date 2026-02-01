@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Factories for constructing magnetic susceptibility objects and values.
+"""Construct magnetic susceptibility values and tensors.
 
-This module contains physics-aware conversions and helpers for building
-susceptibility quantities from ab initio outputs (e.g. ORCA XT tensors),
-ensuring all unit conversions and physical conventions are centralised
-in the core layer.
+Provides helpers to build susceptibility tensors and isotropic values from
+quantum-chemical outputs and spin parameters.
 """
 
 import numpy as np

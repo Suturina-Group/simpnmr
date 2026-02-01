@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-XYZ file utilities.
+"""Read, validate, and write XYZ coordinate files.
 
-This module provides small, dependency-light helpers for reading, validating, and
-writing XYZ coordinate files, plus a few geometry helpers used by scripts.
+Provides lightweight helpers for XYZ I/O, atom label normalization, and basic
+geometry alignment utilities.
 """
 
 import logging

@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Read spectrum data from CSV files.
+
+Provides helpers to parse two-column shift–intensity spectra into numeric arrays.
+"""
 
 import csv
 

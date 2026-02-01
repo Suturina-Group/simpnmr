@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Extract hyperfine coupling data from QC output.
+
+Reads a quantum-chemistry result file, constructs a Molecule, and writes
+hyperfine data to CSV.
+"""
+
 import os
 
 from simpnmr.application.loaders.molecule import load_molecule_from_qca

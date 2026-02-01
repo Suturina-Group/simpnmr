@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Define simple string manipulation helpers.
+
+Provides utilities to remove numeric or alphabetic characters from strings.
+"""
 
 
 def remove_numbers(string: str) -> str:

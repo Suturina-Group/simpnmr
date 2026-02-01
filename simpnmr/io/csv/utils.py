@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Provide safe CSV reading utilities.
+
+Defines helpers to read CSV files with basic validation and normalization.
+"""
 
 import os
 

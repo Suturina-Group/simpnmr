@@ -1,11 +1,9 @@
-"""ElectronicState loader.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module is part of the application layer.
+"""Load an ElectronicState from explicit inputs and optional QC inference.
 
-Responsibilities:
-- Accept already-available quantum numbers (S/L/J) and an optional explicit model.
-- Optionally infer S from a QC hyperfine output file (IO) when `spin_S` is not provided.
-- Construct and return the domain `ElectronicState`.
+Constructs a domain ElectronicState and may infer spin S from a QC hyperfine file.
 """
 
 from __future__ import annotations
@@ -76,7 +74,6 @@ def _infer_spin_from_hyperfine_file(
 
     ext = os.path.splitext(hyperfine_file)[1].lower()
 
-    # Mirror the legacy behaviour: attempt only for DFT-like hyperfine sources.
     should_try = (hyperfine_method == "dft") or (ext in (".log", ".out"))
     if not should_try:
         return None

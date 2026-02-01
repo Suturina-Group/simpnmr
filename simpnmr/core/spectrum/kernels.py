@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
+"""Define spectral line-shape kernels.
+
+Provides Gaussian and Lorentzian peak functions for spectrum construction.
+"""
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray

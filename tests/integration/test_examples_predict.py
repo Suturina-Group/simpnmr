@@ -1,3 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Integration test for the predict example workflow.
+
+Runs the CLI prediction example and asserts successful execution and expected outputs.
+"""
+
 import subprocess
 from pathlib import Path
 

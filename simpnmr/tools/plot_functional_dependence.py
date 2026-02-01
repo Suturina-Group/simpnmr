@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Plot functional dependence of hyperfine coupling constants across sources.
+"""Plot hyperfine coupling trends across multiple QC sources.
 
-This script loads hyperfine coupling data for multiple quantum-chemistry sources
-(e.g. different functionals), attaches chemical labels, and generates comparison
-plots for isotropic and anisotropic hyperfine components. It also produces
-normalised isotropic plots relative to the maximum |A_iso| per source.
+Loads hyperfine data for multiple sources, applies chemical labels, and generates
+comparison plots for isotropic and anisotropic hyperfine components.
 """
 
 import argparse

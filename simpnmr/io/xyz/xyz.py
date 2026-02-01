@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Write molecular structures to XYZ files.
+
+Provides helpers to export atomic labels and Cartesian coordinates to standard
+XYZ format, with optional metadata and ChemCraft-compatible labels.
+"""
 
 import datetime
 import logging

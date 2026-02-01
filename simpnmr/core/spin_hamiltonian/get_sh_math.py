@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-TODO
+"""Solve g-tensor and ZFS parameters from fit coefficients.
+
+Provides numerical helpers to compute principal g-values and propagate
+uncertainties, with optional ZFS (D, E) estimation.
 """
 
 import logging

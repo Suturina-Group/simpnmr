@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO
-Domain models for paramagnetic NMR experiments."""
+"""Define domain models for paramagnetic NMR experiments.
+
+Provides Experiment and Signal containers used across the library.
+"""
 
 from typing import Optional
 

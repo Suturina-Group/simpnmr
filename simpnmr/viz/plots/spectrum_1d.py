@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Plot 1D NMR spectra from predicted and experimental data.
+
+Provides utilities to build 1D spectra from per-nucleus shifts and to compare
+predicted spectra with deconvoluted and raw experimental spectra.
+"""
 
 import copy
 import logging

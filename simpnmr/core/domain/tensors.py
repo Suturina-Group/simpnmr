@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+"""Define tensor-based domain containers for magnetic properties.
 
-"""TODO"""
+Provides Hyperfine, Susceptibility, and Shift classes used across the library.
+"""
 
 import copy
 

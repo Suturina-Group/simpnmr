@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO
-PCS isosurface computation utilities.
+"""Compute PCS values on 3D grids.
 
-This module contains pure numerical kernels for computing PCS values on a
-3D grid.
+Provides numerical helpers to evaluate PCS isosurfaces from susceptibility tensors.
 """
 
 from __future__ import annotations

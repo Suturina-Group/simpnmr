@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Extract g-tensor principal values from Curie-normalised chiT regression fits.
+"""Compute g-tensor parameters from chiT regression results.
 
-This script reads a chiT regression CSV (with intercept/slope terms for iso/ax/rh)
-and solves for principal g-values either using a full (rhombic) numerical solve
-or an axial-only analytic approximation.
+Reads regression parameters, solves for principal g-values, and optionally
+derives ZFS parameters for S > 1/2.
 """
 
 import logging

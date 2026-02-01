@@ -1,28 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Fit Curie-normalised susceptibility chiT(T) data and extract
-linear model parameters
+"""Fit Curie-normalised susceptibility chiT(T) data.
 
-This module provides routines to compute reduced Curie-normalised
-susceptibility values chiT_reduced and their uncertainties
-chi_errT_reduced, and to perform linear fits of the form
-
-    chiT = intercept + slope / T + tip * T
-
-where `tip` is an optional temperature-independent paramagnetic contribution
-(TIP) in chi(T) that becomes linear in T for chiT(T). The `tip` parameter can
-be fixed or fitted.
-
-The main outputs of the fitting workflow are
-    - chiT_reduced
-    - chi_errT_reduced
-    - fit_results containing intercept, slope, their uncertainties, and adj_r2
-
-The fit_results dict may also include precomputed plotting arrays:
-    `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
-    for downstream visualization.
+Computes reduced chiT values and uncertainties and fits linear chiT(T) models
+with an optional TIP term.
 """
 
 import numpy as np

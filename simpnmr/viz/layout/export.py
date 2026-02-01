@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Export and finalize Matplotlib figures.
+
+Provides helpers to save figures as PDF files and to handle show/save/close
+logic for visualization workflows.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

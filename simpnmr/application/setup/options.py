@@ -1,15 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Runtime option schemas for pipelines.
+"""Define runtime option schemas for CLI-driven workflows.
 
-This module defines lightweight dataclasses and enums that represent runtime
-options typically provided by the CLI (as opposed to options stored in YAML
-configuration files).
-
-Important:
-- This module must be importable without side effects (no env-var reads, no
-  matplotlib rcParams changes, etc.).
+Provides lightweight dataclasses representing runtime parameters passed from
+the CLI into application pipelines.
 """
 
 from __future__ import annotations

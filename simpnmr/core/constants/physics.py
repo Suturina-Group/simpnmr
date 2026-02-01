@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Define physical constants.
+
+Provides commonly used physical constants imported from SciPy.
+"""
 
 import scipy.constants as consts
 

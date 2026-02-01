@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Plot temperature-dependent chemical shifts.
+
+Loads experimental data and generates shift-vs-temperature and shift-vs-inverse-
+temperature plots.
+"""
+
 from simpnmr.application.loaders.experiment import load_experiments
 from simpnmr.application.setup.options import PlotShiftTdepRunOptions
 from simpnmr.viz.plots.shifts import plot_shift_tdep

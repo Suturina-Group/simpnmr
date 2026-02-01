@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Define supported NMR isotopes and defaults.
+
+Provides default isotope mappings and lists of supported isotopes.
+"""
 
 DEFAULT_ISOTOPES = {
     "H": "1H",

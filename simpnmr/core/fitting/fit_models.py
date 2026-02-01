@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Define susceptibility fitting models and utilities.
+
+Provides SusceptibilityModel base classes, concrete model parameterizations,
+and helpers for least-squares fitting and uncertainty estimation.
+"""
 
 import copy
 import logging

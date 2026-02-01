@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Write fitted susceptibility model parameters to text files.
+
+Provides helpers to serialize fitted model parameters and diagnostics
+in a readable tabular format.
+"""
 
 import logging
 

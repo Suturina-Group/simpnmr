@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Compute point-dipole hyperfine dipolar tensors.
+
+Loads structural data, evaluates point-dipole A_dip tensors, optionally applies
+chemical labels, and writes results to CSV with optional plots.
+"""
+
 import logging
 import os
 

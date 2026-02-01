@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Utility helpers for SimpNMR TODO."""
+"""Define small array and list utility helpers.
+
+Provides simple helpers for flattening lists and locating indices in numeric arrays.
+"""
 
 import math
 

@@ -1,3 +1,5 @@
+# GitLab CI pipeline for documentation deployment and package release.
+
 stages:
 - deploy
 

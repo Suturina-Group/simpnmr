@@ -1,20 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""High-level loaders for susceptibility data.
+"""Load magnetic susceptibility tensors from CSV or QC output.
 
-This module sits in the application layer and bridges file I/O to domain objects.
-
-Rules:
-- The domain layer (``simpnmr.core.domain``) must not import from ``simpnmr.io``.
-- This loader may import both ``simpnmr.io`` readers and domain classes.
-
-Supported formats:
-- ``csv`` / ``csv_*``: susceptibility tensors stored in CSV.
-- ``orca_<section>``: susceptibility tensors read from ORCA output, where
-  ``<section>`` is typically ``cas``, ``nev``, or ``auto``.
-
-The loader returns a list of ``Susceptibility`` domain objects.
+Reads external data and returns Susceptibility domain objects.
 """
 
 from __future__ import annotations

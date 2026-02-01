@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Module for rotation, alignment, and chi-frame transformations in PCS-related
-coordinate mapping between NEVPT2 and DFT geometries. The public API works
-from an already-parsed PredictConfig, uses it to read susceptibility and
-hyperfine data, and exposes `get_rotation_and_transformation` as its main
-entry point.
+"""Transform coordinates for PCS geometry mapping.
+
+Provides helpers to align Susceptibility and HFC geometries and to rotate coordinates
+into the susceptibility principal-axis (chi) frame.
 """
 
 import logging

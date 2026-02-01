@@ -1,7 +1,9 @@
-"""Application loaders for building `Molecule` aggregates.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module adapts external data sources (QC outputs, files) into *pure* inputs
-for domain constructors.
+"""Load Molecule objects from CSV or QC data.
+
+Reads external inputs and returns populated Molecule instances.
 """
 
 from __future__ import annotations

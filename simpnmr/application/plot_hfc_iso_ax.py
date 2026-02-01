@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Plot hyperfine isotropic-to-axial ratios.
+
+Loads hyperfine data, optionally applies chemical labels and averaging, and
+generates iso/ax plots for one or more input files.
+"""
+
 import os
 
 import matplotlib.pyplot as plt

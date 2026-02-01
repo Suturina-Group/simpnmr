@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Validate basic CSV formatting and delimiter consistency.
+
+Provides lightweight checks to detect malformed CSV rows before parsing.
+"""
 
 
 def can_float(s: str) -> bool:

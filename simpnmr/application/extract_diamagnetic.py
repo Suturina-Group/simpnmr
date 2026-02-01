@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Extract diamagnetic isotropic shifts from QC output.
+
+Reads QC results, optionally applies atom-type referencing, and writes
+diamagnetic shifts to CSV.
+"""
+
 import logging
 
 import numpy as np

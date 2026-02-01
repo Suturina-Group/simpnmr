@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Assignment utilities.
+"""Generate constrained assignment permutations.
 
-This module hosts application-level helpers for generating constrained assignment
-permutations used by fitting workflows.
+Provides helpers to enumerate assignment label permutations subject to grouping
+constraints for downstream fitting workflows.
 """
 
 from itertools import chain, permutations, product

@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Plot fitted magnetic susceptibility tensor metrics across multiple sources.
+"""Plot fitted susceptibility metrics across multiple sources.
 
-This script reads per-source susceptibility fit results (chi_iso, chi_ax, chi_rho,
-and fit quality metrics) and produces quick comparison plots across sources.
+Reads per-source susceptibility fit results and generates comparison plots for
+chi_iso, chi_ax, chi_rho, and selected fit quality metrics.
 """
 
 import argparse

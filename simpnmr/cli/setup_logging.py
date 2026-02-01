@@ -1,12 +1,9 @@
-"""CLI logging utilities for SimpNMR.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
 
-This module centralises user-facing logging configuration (formatting, colours,
-path shortening) so the CLI entrypoint stays focused on argument parsing and
-dispatch.
+"""Configure CLI logging behavior.
 
-Notes:
-    - Keep this module lightweight: stdlib-only.
-    - It must NOT import `simpnmr.cli` to avoid circular imports.
+Defines formatters, filters, and helpers for console logging.
 """
 
 from __future__ import annotations

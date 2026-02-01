@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""HFC Converters for SimpNMR.
-TODO
-This module ...
+"""Convert hyperfine couplings from MHz to ppm Å⁻³.
+
+Provides helpers to convert isotropic and tensor hyperfine values using
+nuclear gyromagnetic ratios.
 """
 
 import numpy as np

@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Compute Solomon–Bloembergen–Morgan relaxation rates.
+
+Provides helpers to evaluate dipolar and contact R1 and R2 rates for labelled nuclei.
+"""
 
 import numpy as np
 

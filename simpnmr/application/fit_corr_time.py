@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""TODO"""
+"""Fit correlation-time parameters to experimental R1 data.
+
+Loads experiments and hyperfine data, evaluates relaxation models, and fits
+correlation times using non-linear least squares.
+"""
 
 from __future__ import annotations
 

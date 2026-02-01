@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Cube (volumetric) export helpers.
+"""Write PCS volumetric grids to Gaussian CUBE files.
 
-This module is IO-only. It contains helpers for writing Gaussian CUBE files for
-volumetric PCS grids that are computed elsewhere (e.g., in the domain/pipeline layer).
+Provides helpers to export regular 3D PCS grids in CUBE format.
 """
 
 from __future__ import annotations

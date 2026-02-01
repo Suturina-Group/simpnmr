@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Parse simple patterns from text files.
+
+Provides helpers to extract regex capture groups from line-oriented text files.
+"""
 
 import re
 from os import PathLike

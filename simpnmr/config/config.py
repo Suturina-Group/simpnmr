@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Define YAML-backed configuration schemas for application workflows.
+
+Loads and validates input files and exposes typed config objects.
+"""
 
 import copy
 import csv

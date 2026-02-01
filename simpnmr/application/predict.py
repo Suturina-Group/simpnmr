@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
+"""Predict paramagnetic shifts and spectra from input data.
+
+Loads molecular, susceptibility, and experimental inputs, computes shifts, and
+writes tables and plots for selected temperatures.
+"""
 
 import copy
 import logging

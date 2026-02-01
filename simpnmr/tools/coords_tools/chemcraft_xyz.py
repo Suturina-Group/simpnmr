@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""
-Convert Chemcraft-annotated XYZ files into a chemlabels.csv file for use with
-SimpNMR.
+"""Extract ChemCraft atom labels from annotated XYZ files.
+
+Reads ChemCraft-style XYZ files and writes per-atom chemical labels to CSV format.
 """
 
 import argparse

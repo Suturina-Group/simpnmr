@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
+
+"""Plot chemical shifts and shift components.
+
+Provides plotting utilities for fitted shifts, shift component contributions,
+shift spreads, and temperature-dependent shift trends.
+"""
 
 import logging
 

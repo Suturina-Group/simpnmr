@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025 Suturina Group
+# Copyright (C) 2026 Suturina Group
 
-"""Readers and data containers for quantum-chemistry output files.
+"""Read structures and magnetic properties from quantum-chemistry outputs.
 
-This module provides classes and helper functions to extract structures and
-properties (e.g., chemical shielding, hyperfine tensors, spin, susceptibility,
-EPR g-tensors) from supported quantum-chemistry program outputs.
+Provides readers and lightweight containers to extract coordinates, shielding,
+hyperfine tensors, spin data, susceptibility tensors, and g-tensors from supported
+QC program outputs.
 """
+
+# TODO: Refactor in progress — split this module by responsibility and layer
 
 import datetime
 import logging
