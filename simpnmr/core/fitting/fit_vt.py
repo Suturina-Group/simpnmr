@@ -49,13 +49,11 @@ def fit_chit_linear_model(
               for downstream visualization.
     """
 
-    def _model(T, A, B, tip):
+    def _model(T, Intercept, Slope, tip):
         # TIP contributes a temperature-independent term in chi(T), which becomes
         # a linear-in-T term in chiT(T).
 
-        # x = 1 / T
-        # return A * x + B + tip * 1 / x
-        return A + B / T + tip * T
+        return Intercept + Slope / T + tip * T
 
     norm_factor = compute_curie_prefactor(spin)
 
@@ -112,7 +110,6 @@ def fit_chit_linear_model(
         }
         for name, val in zip(fit_param_names, theta, strict=False):
             params[name] = float(val)
-        # return _model(T, params["slope"], params["intercept"], params["tip"])
 
         return _model(T, params["intercept"], params["slope"], params["tip"])
 

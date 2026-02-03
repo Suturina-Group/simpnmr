@@ -697,23 +697,8 @@ def fit_isoaxrho_vt(
         inv_t=inv_temps_fit,
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
-        y_label=r"$\chi T^{\mathrm{red}}$",
         save_name=os.path.join(config.project_name, "susceptibility_components_chiT"),
         window_title="ChiT Susceptibility components",
-        verbose=True,
-    )
-
-    # Plot chi temperature dependence
-    plot_isoaxrho(
-        vals=chi_vals,
-        errs=chi_errors,
-        params=None,
-        inv_t=inv_temps_fit,
-        show=pl.SHOW_CONV[plot_mode],
-        save=pl.SAVE_CONV[plot_mode],
-        y_label=rf"$\chi\;\mathrm{{{susc_units}}}$",
-        save_name=os.path.join(config.project_name, "susceptibility_components_chi"),
-        window_title="Susceptibility components",
         verbose=True,
     )
 
