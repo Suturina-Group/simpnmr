@@ -27,7 +27,7 @@ from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Hyperfine
 from simpnmr.core.factories.molecule import build_molecule_from_qca
-from simpnmr.core.factories.susc import get_g_corr_iso_susc
+from simpnmr.core.factories.susc import build_ab_initio_chit_series
 from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
 from simpnmr.io.csv import fitting, susceptibility
@@ -42,7 +42,7 @@ from simpnmr.viz.plots.shifts import (
     plot_shift_spread,
 )
 from simpnmr.viz.plots.spectrum_1d import plot_pred_spectrum
-from simpnmr.viz.plots.susceptibility import plot_isoaxrho
+from simpnmr.viz.plots.susceptibility import plot_exp_vs_ab_initio, plot_isoaxrho
 
 logger = logging.getLogger(__name__)
 
@@ -568,13 +568,16 @@ def fit_isoaxrho_vt(
 
         section = config.susc_vt_ab_initio_format.split("orca_", 1)[1]
 
-        suscs_ab_initio = load_susceptibilities(
-            config.susc_vt_ab_initio_file,
-            config.susc_vt_ab_initio_format,
-        )
         g_tensor = rdrs.read_orca_g_tensor(
             config.susc_vt_ab_initio_file,
             section=section,
+        )
+
+        suscs_ab_initio = load_susceptibilities(
+            config.susc_vt_ab_initio_file,
+            config.susc_vt_ab_initio_format,
+            electronic=molecules[0].electronic,
+            g_tensor=g_tensor,
         )
         eff_H = rdrs.read_eff_hamiltonian_tensor(
             config.susc_vt_ab_initio_file,
@@ -584,10 +587,9 @@ def fit_isoaxrho_vt(
         # Find the ab initio susceptibility temperature closest to the fit temperatures
         ab_temps = np.array([s.temperature for s in suscs_ab_initio], dtype=float)
         idx = int(np.argmin(np.abs(ab_temps - np.max(temps_fit))))
-        susc_ab_initio = suscs_ab_initio[idx]
 
-        # Compute the irreducible representation of the susceptibility tensor
-        susc_ab_initio.calc_irred()
+        # Use only the reference susceptibility for the VT/TIP pipeline
+        susc_ab_initio = copy.deepcopy(suscs_ab_initio[idx])
 
         # Rotate the effective Hamiltonian tensor into the chi eigenframe
         eff_H_rot = susc_ab_initio.eigvecs.T @ eff_H @ susc_ab_initio.eigvecs
@@ -599,15 +601,6 @@ def fit_isoaxrho_vt(
 
         # Compute the axial and rhombic parts of the effective Hamiltonian tensor (J)
         D_J, E_J = fit_vt.calculate_E_D_components(eff_H_rot)
-
-        # Compute the corrected isotropic component of the susceptibility tensor
-        susc_ab_initio.iso = get_g_corr_iso_susc(
-            spin=spin,
-            orbit=molecules[0].electronic.orbit_L,
-            g_tensor=g_tensor,
-            chi_tensors=susc_ab_initio.tensor,
-            total_momentum_J=molecules[0].electronic.total_J,
-        )
 
         # Map VT component identifiers to Susceptibility attribute names
         comp_to_attr = {"iso": "iso", "ax": "axiality", "rho": "rhombicity"}
@@ -680,14 +673,84 @@ def fit_isoaxrho_vt(
     # Precompute inverse temperature for plotting
     inv_temps_fit = 1.0 / temps_fit
 
-    # Write iso/ax/rho fit parameters to CSV
-    out_file = os.path.join(config.project_name, "isoaxrho_fit.csv")
-    fits_list = [
-        chiT_fit_params.get("iso"),
-        chiT_fit_params.get("ax"),
-        chiT_fit_params.get("rho"),
-    ]
-    fitting.save_slope_intercept(fits_list, out_file)
+    if tip_type == "fix_tip_from_ab_initio" and method == "vt_2nd_order":
+        ab_series_full = build_ab_initio_chit_series(
+            suscs_ab_initio,
+            g_corr_iso=True,
+            spin=spin,
+            orbit=molecules[0].electronic.orbit_L,
+            total_momentum_J=molecules[0].electronic.total_J,
+            g_tensor=g_tensor,
+        )
+
+        exp_t = np.asarray(temps_fit, dtype=float)
+        inv_t_fit = np.asarray(inv_temps_fit, dtype=float)
+
+        # Native ab initio temperature grid
+        ab_inv_full = np.asarray(ab_series_full["inv_t"], dtype=float)
+        ab_t_full = 1.0 / ab_inv_full
+
+        # Overlap window between experimental and ab initio temperature ranges
+        t_min = max(float(np.min(exp_t)), float(np.min(ab_t_full)))
+        t_max = min(float(np.max(exp_t)), float(np.max(ab_t_full)))
+
+        # Temperature matching tolerance (K). Points farther away are dropped.
+        t_tol = 1.0
+
+        # Match ab initio values onto the experimental grid
+        ab_series = {"inv_t": inv_t_fit}
+        for comp in fit_component:
+            y_full = np.asarray(ab_series_full[comp], dtype=float)
+            y_match = np.full(exp_t.size, np.nan, dtype=float)
+
+            for i, t in enumerate(exp_t):
+                if t < t_min or t > t_max:
+                    continue
+                j = int(np.argmin(np.abs(ab_t_full - t)))
+                if float(np.abs(ab_t_full[j] - t)) <= t_tol:
+                    y_match[i] = y_full[j]
+
+            ab_series[comp] = y_match
+
+        # Keep only temperatures where all components have matched ab initio values.
+        support = np.ones(exp_t.size, dtype=bool)
+        for comp in fit_component:
+            support &= np.isfinite(ab_series[comp])
+
+        inv_t_fit_cmp = inv_t_fit[support]
+
+        chiT_fit_params_cmp = {}
+        for comp in fit_component:
+            p = dict(chiT_fit_params[comp])
+            for k in ("fit_y", "fit_y_low", "fit_y_high"):
+                v = p.get(k)
+                if v is None:
+                    continue
+                a = np.asarray(v, dtype=float)
+                if a.shape[0] == support.shape[0]:
+                    p[k] = a[support]
+                else:
+                    p[k] = a
+            chiT_fit_params_cmp[comp] = p
+
+            ab_series[comp] = ab_series[comp][support]
+
+        ab_series["inv_t"] = inv_t_fit_cmp
+
+        # Normalise ab initio chiT series by the Curie prefactor for consistency
+        curie_prefactor = fit_vt.compute_curie_prefactor(spin)
+        for comp in fit_component:
+            ab_series[comp] = ab_series[comp] / curie_prefactor
+
+        plot_exp_vs_ab_initio(
+            params=chiT_fit_params_cmp,
+            inv_t=ab_series["inv_t"],
+            ab_series=ab_series,
+            show=pl.SHOW_CONV[plot_mode],
+            save=pl.SAVE_CONV[plot_mode],
+            save_name=os.path.join(config.project_name, "exp_vs_ab_initio_susc"),
+            verbose=True,
+        )
 
     # Plot chiT temperature dependence
     plot_isoaxrho(
@@ -698,9 +761,17 @@ def fit_isoaxrho_vt(
         show=pl.SHOW_CONV[plot_mode],
         save=pl.SAVE_CONV[plot_mode],
         save_name=os.path.join(config.project_name, "susceptibility_components_chiT"),
-        window_title="ChiT Susceptibility components",
         verbose=True,
     )
+
+    # Write iso/ax/rho fit parameters to CSV
+    out_file = os.path.join(config.project_name, "isoaxrho_fit.csv")
+    fits_list = [
+        chiT_fit_params.get("iso"),
+        chiT_fit_params.get("ax"),
+        chiT_fit_params.get("rho"),
+    ]
+    fitting.save_slope_intercept(fits_list, out_file)
 
     return
 

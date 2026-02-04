@@ -214,8 +214,8 @@ def save_susc(
     # chi_iso_g_corr = g_e / 3 * Tr(chi @ g.T)
     df = df.rename(
         columns={
-            f"chi_iso ({unit_label})": f"chi_iso_g_corr ({unit_label})",
-            f"chi_iso-s-dev ({unit_label})": f"chi_iso_g_corr-s-dev ({unit_label})",
+            f"chi_iso ({unit_label})": f"chi_iso ({unit_label})",
+            f"chi_iso-s-dev ({unit_label})": f"chi_iso-s-dev ({unit_label})",
         }
     )
 

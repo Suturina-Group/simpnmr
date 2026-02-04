@@ -28,7 +28,6 @@ from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.factories.molecule import build_molecule_from_qca
-from simpnmr.core.factories.susc import get_g_corr_iso_susc, get_spin_only_susc
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation, susceptibility
@@ -65,7 +64,7 @@ def run_predict(
 
     delimiter = options.runtime.csv_delimiter
 
-    # Either load hyperfines from DFT output file
+    # Load hyperfines
     if config.hyperfine_method == "dft":
         qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
         # Write raw calculation data to output file
@@ -121,8 +120,6 @@ def run_predict(
         hyperfine_file=config.hyperfine_file if config.spin_S is None else None,
         hyperfine_method=config.hyperfine_method if config.spin_S is None else None,
     )
-    spin = base_molecule.electronic.spin_S
-
     # Add chemical labels
     if len(config.chem_labels_file):
         al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
@@ -173,19 +170,6 @@ def run_predict(
             # Rotate HFC coords frame into chi eigenframe and save the transformed coords
             tfm.rotate_coords_to_chi_frame(config.project_name, config)
 
-    # Load susceptibility information
-    suscs = load_susceptibilities(
-        config.susceptibility_file,
-        config.susceptibility_format,
-    )
-
-    suscs = [
-        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
-    ]
-
-    if not suscs:
-        raise ValueError("No susceptibility data found for specified temperature(s)")
-
     # Calculate linewidths using user-specified relaxation model (optional)
     if not getattr(config, "relaxation_model", None):
         (
@@ -201,6 +185,30 @@ def run_predict(
         )
     else:
         _apply_relaxation_linewidths(config, base_molecule)
+
+    # Load susceptibility information
+    if "orca" in config.susceptibility_format:
+        section = config.susceptibility_format.split("orca_")[1]
+        g_tensor = rdrs.read_orca_g_tensor(
+            config.susceptibility_file,
+            section=section,
+        )
+    else:
+        g_tensor = None
+
+    suscs = load_susceptibilities(
+        config.susceptibility_file,
+        config.susceptibility_format,
+        electronic=base_molecule.electronic,
+        g_tensor=g_tensor,
+    )
+
+    suscs = [
+        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
+    ]
+
+    if not suscs:
+        raise ValueError("No susceptibility data found for specified temperature(s)")
 
     # Load experimental data from file into list of experiment objects
     if len(config.experiment_files):
@@ -237,54 +245,9 @@ def run_predict(
     if not config.diamagnetic_file:
         _terms.pop(_terms.index("d"))
 
-    if "orca" in config.susceptibility_format:
-        section = config.susceptibility_format.split("orca_")[1]
-        g_tensor = rdrs.read_orca_g_tensor(
-            config.susceptibility_file,
-            section=section,
-        )
-        chi_tensors = rdrs.read_orca_susceptibility(
-            config.susceptibility_file,
-            section=section,
-        )
-
-    # Determine how to compute chi_iso in the next step:
-    use_orca_correction = (
-        "orca" in config.susceptibility_format
-        and spin is not None
-        and g_tensor is not None
-        and chi_tensors is not None
-    )
-
     # Update susceptibility tensor of Molecule using model
     for molecule, susc, experiment in zip(molecules, suscs, experiments):
         molecule.susc = susc
-
-        if use_orca_correction:
-            # Compute the corrected isotropic component of the susceptibility tensor
-            susc.iso = get_g_corr_iso_susc(
-                spin=spin,
-                orbit=config.orbit,
-                g_tensor=g_tensor,
-                chi_tensors=susc.tensor,
-                total_momentum_J=config.total_momentum_J,
-            )
-        elif config.susceptibility_format == "csv":
-            pass
-        elif spin is not None:
-            # Fall back to a spin-only Curie susceptibility
-            # when no ORCA susceptibility tensor is provided
-            susc.iso = get_spin_only_susc(
-                spin=spin,
-                orbit=config.orbit,
-                total_momentum_J=config.total_momentum_J,
-                temperature=susc.temperature,
-            )
-        else:
-            logger.info(
-                "Spin not specified and could not be inferred — "
-                "using chi iso from susceptibility file (no spin-only correction)"
-            )
 
         # Calculate shifts using new susceptibility tensor and rotated hyperfines
         molecule.calculate_shifts()

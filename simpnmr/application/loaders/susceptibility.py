@@ -8,12 +8,17 @@ Reads external data and returns Susceptibility domain objects.
 
 from __future__ import annotations
 
-from typing import Final
+import logging
+from typing import Any, Final
+
+import numpy as np
 
 from simpnmr.core.domain.tensors import Susceptibility
 from simpnmr.core.factories.susc import susc_from_orca_xt
 from simpnmr.io.csv.susceptibility import read_susceptibilities_csv
 from simpnmr.io.qc import qc_readers as rdrs
+
+logger = logging.getLogger(__name__)
 
 _ORCA_PREFIX: Final[str] = "orca_"
 
@@ -21,6 +26,9 @@ _ORCA_PREFIX: Final[str] = "orca_"
 def load_susceptibilities(
     susceptibility_file: str,
     susceptibility_format: str,
+    *,
+    electronic: Any | None = None,
+    g_tensor: np.ndarray | None = None,
 ) -> list[Susceptibility]:
     """Load susceptibility tensors from a given file/format.
 
@@ -30,6 +38,7 @@ def load_susceptibilities(
             - CSV: any string containing ``"csv"``.
             - ORCA: strings starting with ``"orca_"`` (e.g., ``"orca_cas"``).
             - Molcas: any string containing ``"molcas"`` (unsupported).
+        electronic: Optional electronic-state context passed through to the factory.
 
     Returns:
         List of :class:`~simpnmr.core.domain.tensors.Susceptibility`.
@@ -59,16 +68,33 @@ def load_susceptibilities(
         if not tensors:
             raise ValueError("No susceptibility data found in ORCA output")
 
+        # Derive iso handling mode from available electronic-state context.
+        # Priority: g-corr iso -> spin-only -> raw.
+        spin = electronic.spin_S if electronic is not None else None
+        orbit = electronic.orbit_L if electronic is not None else None
+        total_J = electronic.total_J if electronic is not None else None
+
+        # g-correction requires a g-tensor and at least one quantum-number handle.
+        if g_tensor is not None and (
+            spin is not None or orbit is not None or total_J is not None
+        ):
+            iso_mode = "g_corr"
+            logger.info("Using g-tensor–corrected isotropic magnetic susceptibility")
+        elif spin is not None:
+            iso_mode = "spin_only"
+            logger.info("Using spin-only isotropic magnetic susceptibility")
+        else:
+            iso_mode = "raw"
+
         suscs: list[Susceptibility] = []
         for temperature, tensor_xt in tensors.items():
-            chi_tensor = susc_from_orca_xt(
-                temperature=float(temperature),
-                tensor_xt=tensor_xt,
-            )
             suscs.append(
-                Susceptibility(
-                    chi_tensor,
+                susc_from_orca_xt(
                     temperature=float(temperature),
+                    tensor_xt=tensor_xt,
+                    iso_mode=iso_mode,
+                    electronic=electronic,
+                    g_tensor=g_tensor,
                 )
             )
         return suscs
