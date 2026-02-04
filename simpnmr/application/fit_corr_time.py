@@ -20,18 +20,15 @@ from scipy.optimize import curve_fit
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import load_molecule_from_csv
+from simpnmr.application.loaders.hyperfine import load_base_molecule_from_hyperfines
 from simpnmr.application.setup.options import FitCorrTimeRunOptions
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
-from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
-from simpnmr.tools.coords_tools import xyz_format as xyzf
 
 logger = logging.getLogger(__name__)
 
@@ -134,41 +131,11 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
         exp_r1 = np.concatenate([blk[2] for blk in exp_blocks])
         xdata = np.arange(len(exp_r1))
 
-        # Load hyperfine data and create molecule object
-        if config.hyperfine_method == "dft":
-            qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
-            qc_hyperfine_data.save_to_csv(
-                os.path.join(config.project_name, "dft_hyperfines.csv"),
-                verbose=True,
-                delimiter=CSV_DELIMITER,
-                comment=f"# Data taken from file {config.hyperfine_file}",
-            )
-            base_molecule = build_molecule_from_qca(
-                qc_hyperfine_data,
-                converter="MHz_to_Ang-3",
-                elements=config.nuclei_include,
-            )
-        elif config.hyperfine_method == "pdip":
-            if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
-                labels, coords = xyzf.load_xyz(config.hyperfine_file)
-            elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:
-                QCS = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
-                labels = QCS.labels
-                coords = QCS.coords
-            else:
-                raise ValueError(
-                    "Specified hyperfine file format "
-                    f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
-                )
-            base_molecule = Molecule.from_labels_coords(
-                labels, coords, elements=config.nuclei_include
-            )
-            base_molecule.calc_pdip(config.hyperfine_pdip_centres)
-        elif config.hyperfine_method == "csv":
-            base_molecule = load_molecule_from_csv(
-                config.hyperfine_file,
-                elements=config.nuclei_include,
-            )
+        # Load hyperfines / construct base molecule
+        base_molecule = load_base_molecule_from_hyperfines(
+            config=config,
+            delimiter=CSV_DELIMITER,
+        )
 
         # Add chemical labels if provided
         if len(config.chem_labels_file):

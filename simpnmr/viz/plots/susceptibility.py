@@ -284,7 +284,7 @@ def plot_exp_vs_ab_initio(
             marker="s",
             markeredgecolor="none",
             ms=6,
-            label="Fit",
+            label="pNMR",
         )
 
         # Ab initio data (matched to the experimental grid upstream; may contain NaNs)

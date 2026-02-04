@@ -20,14 +20,13 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments
-from simpnmr.application.loaders.molecule import load_molecule_from_csv
+from simpnmr.application.loaders.hyperfine import load_base_molecule_from_hyperfines
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup.options import PredictRunOptions
 from simpnmr.config import config as cfg
 from simpnmr.core.constants.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.constants.physics import EGAMMA
 from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.utils.strings import remove_numbers
 from simpnmr.io.csv import relaxation, susceptibility
@@ -36,7 +35,6 @@ from simpnmr.io.csv.spectrum import read_spectrum
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
 from simpnmr.tools.coords_tools import transform as tfm
-from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spectrum_1d import plot_pred_spectrum, plot_raw_deconv_pred
 
@@ -47,7 +45,7 @@ def run_predict(
     config: cfg.PredictConfig,
     options: PredictRunOptions | None = None,
 ) -> int:
-    """Run PCS prediction from a YAML configuration file.
+    """Run pNMR prediction from a YAML configuration file.
 
     Args:
         config: Prediction configuration loaded from YAML.
@@ -64,53 +62,10 @@ def run_predict(
 
     delimiter = options.runtime.csv_delimiter
 
-    # Load hyperfines
-    if config.hyperfine_method == "dft":
-        qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
-        # Write raw calculation data to output file
-        qc_hyperfine_data.save_to_csv(
-            os.path.join(config.project_name, "dft_hyperfines.csv"),
-            verbose=True,
-            delimiter=delimiter,
-            comment=f"# Data taken from file {config.hyperfine_file}",
-        )
-
-        # Create molecule object from quantum chemical hyperfine data
-        # Retain only the atoms that are given in the labels file
-        base_molecule = build_molecule_from_qca(
-            qc_hyperfine_data,
-            converter="MHz_to_Ang-3",
-            elements=config.nuclei_include,
-        )
-
-    # generate using point dipole approximation
-    elif config.hyperfine_method == "pdip":
-        if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
-            labels, coords = xyzf.load_xyz(config.hyperfine_file)
-        elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:
-            QCS = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
-            labels = QCS.labels
-            coords = QCS.coords
-        else:
-            raise ValueError(
-                "Specified hyperfine file format "
-                f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
-            )
-
-        # Create molecule
-        base_molecule = Molecule.from_labels_coords(
-            labels, coords, elements=config.nuclei_include
-        )
-
-        # Calculate point dipole hyperfine
-        base_molecule.calc_pdip(config.hyperfine_pdip_centres)
-
-    # or load from CSV
-    elif config.hyperfine_method == "csv":
-        base_molecule = load_molecule_from_csv(
-            config.hyperfine_file,
-            elements=config.nuclei_include,
-        )
+    # Load hyperfines / construct base molecule
+    base_molecule = load_base_molecule_from_hyperfines(
+        config=config, delimiter=delimiter
+    )
 
     # Load electronic state
     base_molecule.electronic = load_electronic_state(
@@ -120,7 +75,32 @@ def run_predict(
         hyperfine_file=config.hyperfine_file if config.spin_S is None else None,
         hyperfine_method=config.hyperfine_method if config.spin_S is None else None,
     )
-    # Add chemical labels
+
+    # Load susceptibility information
+    if "orca" in config.susceptibility_format:
+        section = config.susceptibility_format.split("orca_")[1]
+        g_tensor = rdrs.read_orca_g_tensor(
+            config.susceptibility_file,
+            section=section,
+        )
+    else:
+        g_tensor = None
+
+    suscs = load_susceptibilities(
+        config.susceptibility_file,
+        config.susceptibility_format,
+        electronic=base_molecule.electronic,
+        g_tensor=g_tensor,
+    )
+
+    suscs = [
+        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
+    ]
+
+    if not suscs:
+        raise ValueError("No susceptibility data found for specified temperature(s)")
+
+    # Load chemical labels
     if len(config.chem_labels_file):
         al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
         base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
@@ -155,6 +135,29 @@ def run_predict(
             ref_avg_by_label_nn=ref_avg_by_label_nn,
         )
 
+    # Load experimental data from file into list of experiment objects
+    if len(config.experiment_files):
+        experiments = load_experiments(config.experiment_files)
+        for susc, exp in zip(suscs, experiments):
+            if susc.temperature != exp.temperature:
+                logger.warning(
+                    "Mismatch in Susceptibility (%.2f K) and "
+                    "Experimental (%.2f K) temperatures",
+                    susc.temperature,
+                    exp.temperature,
+                )
+            if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
+                logger.warning(
+                    "Experimental isotope (%s) not requested in input file (%s)",
+                    exp.isotope,
+                    config.nuclei_include,
+                )
+    else:
+        experiments = [None] * len(suscs)
+
+    # Create a molecule object which accompanies each experiment object
+    molecules = [copy.deepcopy(base_molecule) for _ in range(len(experiments))]
+
     # Rotationally average hyperfines of user selected nuclei:
     if len(config.hyperfine_average):
         base_molecule.average_hyperfine(config.hyperfine_average)
@@ -185,53 +188,6 @@ def run_predict(
         )
     else:
         _apply_relaxation_linewidths(config, base_molecule)
-
-    # Load susceptibility information
-    if "orca" in config.susceptibility_format:
-        section = config.susceptibility_format.split("orca_")[1]
-        g_tensor = rdrs.read_orca_g_tensor(
-            config.susceptibility_file,
-            section=section,
-        )
-    else:
-        g_tensor = None
-
-    suscs = load_susceptibilities(
-        config.susceptibility_file,
-        config.susceptibility_format,
-        electronic=base_molecule.electronic,
-        g_tensor=g_tensor,
-    )
-
-    suscs = [
-        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
-    ]
-
-    if not suscs:
-        raise ValueError("No susceptibility data found for specified temperature(s)")
-
-    # Load experimental data from file into list of experiment objects
-    if len(config.experiment_files):
-        experiments = load_experiments(config.experiment_files)
-        for susc, exp in zip(suscs, experiments):
-            if susc.temperature != exp.temperature:
-                logger.warning(
-                    "Mismatch in Susceptibility (%.2f K) and "
-                    "Experimental (%.2f K) temperatures",
-                    susc.temperature,
-                    exp.temperature,
-                )
-            if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
-                logger.warning(
-                    "Experimental isotope (%s) not requested in input file (%s)",
-                    exp.isotope,
-                    config.nuclei_include,
-                )
-    else:
-        experiments = [None] * len(suscs)
-
-    # Create a molecule object which accompanies each experiment object
-    molecules = [copy.deepcopy(base_molecule) for _ in range(len(experiments))]
 
     if len(config.experiment_spectrum_files):
         for experiment, spectrum in zip(experiments, config.experiment_spectrum_files):

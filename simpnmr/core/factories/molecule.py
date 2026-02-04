@@ -84,6 +84,56 @@ def build_molecule_from_qca(
     )
 
 
+def build_molecule_with_pdip(
+    labels: list[str],
+    coords: np.ndarray,
+    *,
+    centres: list[int] | np.ndarray,
+    elements: list[str] | str = "all",
+) -> Molecule:
+    """Build a `Molecule` and populate point-dipole hyperfine couplings.
+
+    Args:
+        labels: Atom labels.
+        coords: Cartesian coordinates in Å.
+        centres: Indices or coordinates defining PDIP centres.
+        elements: Elements/labels to include.
+
+    Returns:
+        A `Molecule` instance with PDIP hyperfine couplings populated.
+    """
+    molecule = build_molecule_from_labels_coords(
+        labels=labels,
+        coords=coords,
+        elements=elements,
+    )
+    molecule.calc_pdip(centres)
+    return molecule
+
+
+def build_molecule_from_labels_coords(
+    labels: list[str],
+    coords: np.ndarray,
+    *,
+    elements: list[str] | str = "all",
+) -> Molecule:
+    """Build a `Molecule` from explicit labels and coordinates.
+
+    Args:
+        labels: Atom labels.
+        coords: Cartesian coordinates in Å.
+        elements: Elements/labels to include.
+
+    Returns:
+        A `Molecule` instance.
+    """
+    return Molecule.from_labels_coords(
+        labels=labels,
+        coords=coords,
+        elements=elements,
+    )
+
+
 def build_molecule_from_csv(
     payload: dict,
     *,

@@ -19,14 +19,13 @@ from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
 from simpnmr.application.loaders.diamagnetic import load_diamagnetic_shifts
 from simpnmr.application.loaders.electronic_state import load_electronic_state
 from simpnmr.application.loaders.experiment import load_experiments, save_experiment
-from simpnmr.application.loaders.molecule import load_molecule_from_csv
+from simpnmr.application.loaders.hyperfine import load_base_molecule_from_hyperfines
 from simpnmr.application.loaders.susceptibility import load_susceptibilities
 from simpnmr.application.setup import plotting as pl
 from simpnmr.application.setup.options import FitSuscRunOptions
 from simpnmr.core.domain.experiment import Experiment
 from simpnmr.core.domain.molecule import Molecule
 from simpnmr.core.domain.tensors import Hyperfine
-from simpnmr.core.factories.molecule import build_molecule_from_qca
 from simpnmr.core.factories.susc import build_ab_initio_chit_series
 from simpnmr.core.fitting import fit_models, fit_vt
 from simpnmr.core.pcs.isosurface import compute_pcs_isosurface
@@ -35,7 +34,6 @@ from simpnmr.io.csv.molecule import save_molecule_to_csv
 from simpnmr.io.cube.pcs_isosurface import write_pcs_cube
 from simpnmr.io.qc import qc_readers as rdrs
 from simpnmr.io.xyz import xyz
-from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz.plots.shifts import (
     plot_fitted_shifts,
     plot_shift_contrib,
@@ -69,53 +67,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
 
-    # Either load hyperfines from DFT output file
-    if config.hyperfine_method == "dft":
-        qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
-        # Write raw hyperfine data to output file
-        qc_hyperfine_data.save_to_csv(
-            os.path.join(config.project_name, "dft_hyperfines.csv"),
-            verbose=True,
-            delimiter=delimiter,
-            comment=f"# Data taken from file {config.hyperfine_file}",
-        )
-
-        # Create molecule object from quantum chemical hyperfine data
-        # Retain only the atoms that are given in the labels file
-        base_molecule = build_molecule_from_qca(
-            qc_hyperfine_data,
-            converter="MHz_to_Ang-3",
-            elements=config.nuclei_include,
-        )
-        logger.info("Group(s)/Atoms included: %s", config.nuclei_include)
-    # generate using point dipole approximation
-    elif config.hyperfine_method == "pdip":
-        if os.path.splitext(config.hyperfine_file)[1] == ".xyz":
-            labels, coords = xyzf.load_xyz(config.hyperfine_file)
-        elif os.path.splitext(config.hyperfine_file)[1] in [".log", ".out"]:
-            QCS = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
-            labels = QCS.labels
-            coords = QCS.coords
-        else:
-            raise ValueError(
-                "Specified hyperfine file format "
-                f"{os.path.splitext(config.hyperfine_file)[1]} unsupported"
-            )
-
-        # Create molecule
-        base_molecule = Molecule.from_labels_coords(
-            labels, coords, elements=config.nuclei_include
-        )
-
-        # Calculate point dipole hyperfine
-        base_molecule.calc_pdip(config.hyperfine_pdip_centres)
-
-    # or load from CSV
-    elif config.hyperfine_method == "csv":
-        base_molecule = load_molecule_from_csv(
-            config.hyperfine_file,
-            elements=config.nuclei_include,
-        )
+    # Load hyperfines / construct base molecule
+    base_molecule = load_base_molecule_from_hyperfines(
+        config=config, delimiter=delimiter
+    )
 
     # Load electronic state
     base_molecule.electronic = load_electronic_state(

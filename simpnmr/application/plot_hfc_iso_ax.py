@@ -8,17 +8,15 @@ generates iso/ax plots for one or more input files.
 """
 
 import os
+from dataclasses import replace
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr.application.loaders.chem_labels import load_chem_labels_from_csv
+from simpnmr.application.loaders.hyperfine import load_base_molecule_from_hyperfines
 from simpnmr.application.setup.options import PlotHFCIsoAxRunOptions
 from simpnmr.config import config as cfg
-from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.factories.molecule import build_molecule_from_qca
-from simpnmr.io.qc import qc_readers as rdrs
-from simpnmr.tools.coords_tools import xyz_format as xyzf
 from simpnmr.viz.plots.hyperfine import plot_hyperfine_iso_vs_ax
 
 
@@ -38,36 +36,11 @@ def run_plot_hfc_iso_ax(
     for i, hf_file in enumerate(hf_files):
         symb = symbols[i % len(symbols)]
 
-        if config.hyperfine_method == "dft":
-            qc_hyperfine_data = rdrs.QCA.guess_from_file(hf_file)
-            qc_hyperfine_data.save_to_csv(
-                os.path.join(config.project_name, "dft_hyperfines.csv"),
-                verbose=True,
-                delimiter=options.runtime.csv_delimiter,
-                comment=f"# Data taken from file {hf_file}",
-            )
-            base_molecule = build_molecule_from_qca(
-                qc_hyperfine_data,
-                converter="MHz_to_Ang-3",
-                elements=config.nuclei_include,
-            )
-
-        elif config.hyperfine_method == "pdip":
-            ext = os.path.splitext(hf_file)[1]
-            if ext == ".xyz":
-                labels, coords = xyzf.load_xyz(hf_file)
-            elif ext in {".log", ".out"}:
-                qcs = rdrs.QCStructure.guess_from_file(hf_file)
-                labels, coords = qcs.labels, qcs.coords
-            else:
-                raise ValueError(f"Unsupported hyperfine file format: {ext}")
-
-            base_molecule = Molecule.from_labels_coords(
-                labels, coords, elements=config.nuclei_include
-            )
-            base_molecule.calc_pdip(config.hyperfine_pdip_centres)
-        else:
-            raise ValueError(f"Unknown hyperfine_method: {config.hyperfine_method}")
+        local_cfg = replace(config, hyperfine_file=hf_file)
+        base_molecule = load_base_molecule_from_hyperfines(
+            config=local_cfg,
+            delimiter=options.runtime.csv_delimiter,
+        )
 
         for av in config.hyperfine_average or []:
             base_molecule.average_hyperfine(av)
