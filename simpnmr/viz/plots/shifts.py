@@ -16,14 +16,14 @@ import matplotlib.ticker as ticker
 import numpy as np
 import scipy.constants as constants
 
-from simpnmr.core.constants import periodic_table
-from simpnmr.core.domain.experiment import Experiment
-from simpnmr.core.domain.molecule import Molecule
-from simpnmr.core.fitting import fit_models
+from simpnmr.core.const import ptable
+from simpnmr.core.domain.exp import Experiment
+from simpnmr.core.domain.mol import Molecule
+from simpnmr.core.fitting import models
 from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.layout.violin import set_violin_colours
 from simpnmr.viz.style.palette import SAFE_COLOURS
-from simpnmr.viz.utils.format import isotope_format
+from simpnmr.viz.utils.fmt import isotope_format
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 def plot_fitted_shifts(
     molecule: Molecule,
     experiment: Experiment,
-    susc_model: fit_models.SusceptibilityModel,
+    susc_model: models.SusceptibilityModel,
     average: bool = True,
     save: bool = True,
     show: bool = True,
@@ -85,9 +85,7 @@ def plot_fitted_shifts(
 
     # Element specific markers with consistent order
     _unique_elements = [
-        ele
-        for ele in periodic_table.elements
-        if ele in [nuc.label_nn for nuc in unique_nuclei]
+        ele for ele in ptable.elements if ele in [nuc.label_nn for nuc in unique_nuclei]
     ]
     _markers = {
         ele: mrkr for (ele, mrkr) in zip(_unique_elements, ["x", "o", "v", "s", "*"])

@@ -8,8 +8,8 @@ Provides helpers to evaluate dipolar and contact R1 and R2 rates for labelled nu
 
 import numpy as np
 
-from simpnmr.core.constants.physics import MU0, MUB
-from simpnmr.core.factories.eff_factors import calc_g_eff, choose_S_eff
+from simpnmr.core.build.eff_factors import calc_g_eff, choose_S_eff
+from simpnmr.core.const.physics import MU0, MUB
 
 
 def calc_r1_dipolar(
