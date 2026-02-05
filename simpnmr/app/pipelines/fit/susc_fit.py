@@ -10,7 +10,6 @@ import copy
 import logging
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 from pathos import multiprocessing as mp
 
@@ -311,83 +310,62 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         molecule.calculate_shifts()
         molecule.average_shifts()
 
-        visible = ["show", "on"]
+        with spec.context():
+            plot_fitted_shifts(
+                molecule,
+                experiment,
+                susc_model,
+                spec=spec,
+                show=options.runtime.show_plots,
+                susc_units=options.susc_units,
+                average=len(config.susc_fit_average_shifts),
+                save=True,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"shifts_{experiment.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
+            )
 
-        if options.shift_plots in pl.PLOT_ACTIVE:
-            if any(
-                cfg in visible for cfg in [options.contrib_plots, options.spread_plots]
-            ):
-                show = False
-            else:
-                show = pl.SHOW_CONV[options.shift_plots]
-            with spec.context():
-                plot_fitted_shifts(
-                    molecule,
-                    experiment,
-                    susc_model,
-                    spec=spec,
-                    show=show,
-                    susc_units=options.susc_units,
-                    average=len(config.susc_fit_average_shifts),
-                    save=pl.SAVE_CONV[options.shift_plots],
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"shifts_{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
-                )
+        with spec.context():
+            plot_shift_spread(
+                molecule,
+                experiment,
+                spec=spec,
+                terms=_terms,
+                show=options.runtime.show_plots,
+                save=True,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"shift_spread_{molecule.susc.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=(
+                    f"Spread of predicted shift components "
+                    f"at {experiment.temperature:.2f} K"
+                ),
+                order="descending",
+            )
 
-            visible = ["show", "on"]
-
-            if all(
-                cfg not in visible
-                for cfg in [options.contrib_plots, options.spread_plots]
-            ):
-                plt.close("all")
-
-            if options.spread_plots in pl.PLOT_ACTIVE:
-                with spec.context():
-                    plot_shift_spread(
-                        molecule,
-                        experiment,
-                        spec=spec,
-                        terms=_terms,
-                        show=pl.SHOW_CONV[options.spread_plots],
-                        save=pl.SAVE_CONV[options.spread_plots],
-                        save_name=os.path.join(
-                            config.project_name,
-                            f"shift_spread_{molecule.susc.temperature:.2f}_K",
-                        ),
-                        verbose=True,
-                        window_title=(
-                            f"Spread of predicted shift components "
-                            f"at {experiment.temperature:.2f} K"
-                        ),
-                        order="descending",
-                    )
-
-            if options.contrib_plots in pl.PLOT_ACTIVE:
-                with spec.context():
-                    plot_shift_contrib(
-                        molecule,
-                        experiment,
-                        spec=spec,
-                        terms=_terms,
-                        show=pl.SHOW_CONV[options.contrib_plots],
-                        save=pl.SAVE_CONV[options.contrib_plots],
-                        save_name=os.path.join(
-                            config.project_name,
-                            f"mean_components_{experiment.temperature:.2f}_K",
-                        ),
-                        verbose=True,
-                        window_title=(
-                            f"Predicted shift components at {experiment.temperature:.2f} K"
-                        ),
-                        order="descending",
-                    )
-
-                plt.close("all")
+        with spec.context():
+            plot_shift_contrib(
+                molecule,
+                experiment,
+                spec=spec,
+                terms=_terms,
+                show=options.runtime.show_plots,
+                save=True,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"mean_components_{experiment.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=(
+                    f"Predicted shift components at {experiment.temperature:.2f} K"
+                ),
+                order="descending",
+            )
 
     # Write shift data to file
     _comment_base = f"# Hyperfines from file {config.hyperfine_file}\n"
@@ -483,6 +461,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             plot_mode=options.isoaxrho_plots,
             susc_units=options.susc_units,
             plot_profile=options.runtime.plot_profile,
+            show_plots=options.runtime.show_plots,
         )
 
     with spec.context():
@@ -492,7 +471,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             shift_range=shift_range,
             spec=spec,
             save=True,
-            show=False,
+            show=options.runtime.show_plots,
             save_name=os.path.join(
                 config.project_name,
                 f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
@@ -510,6 +489,7 @@ def fit_isoaxrho_vt(
     plot_mode: pl.PlotMode,
     susc_units: str,
     plot_profile: str,
+    show_plots: bool,
 ) -> None:
     # Define the components to fit
     fit_component = ["iso", "ax", "rho"]
@@ -728,8 +708,8 @@ def fit_isoaxrho_vt(
                 inv_t=ab_series["inv_t"],
                 ab_series=ab_series,
                 spec=spec,
-                show=pl.SHOW_CONV[plot_mode],
-                save=pl.SAVE_CONV[plot_mode],
+                show=show_plots,
+                save=True,
                 save_name=os.path.join(config.project_name, "exp_vs_ab_initio_susc"),
                 verbose=True,
             )
@@ -742,8 +722,8 @@ def fit_isoaxrho_vt(
             params=chiT_fit_params,
             inv_t=inv_temps_fit,
             spec=spec,
-            show=pl.SHOW_CONV[plot_mode],
-            save=pl.SAVE_CONV[plot_mode],
+            show=show_plots,
+            save=True,
             save_name=os.path.join(
                 config.project_name, "susceptibility_components_chiT"
             ),

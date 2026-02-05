@@ -224,6 +224,11 @@ def read_args(arg_list=None):
             "Default: paper"
         ),
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help=("Display plots interactively (default: do not show; always saves)."),
+    )
 
     parser.add_argument(
         "--accessibility",
@@ -318,67 +323,57 @@ def read_args(arg_list=None):
 
     fit_susc.add_argument(
         "--shift_plots",
-        choices=["on", "show", "save", "off"],
+        choices=["on", "off"],
         metavar="<str>",
         type=str,
-        default="save",
+        default="on",
         help=(
-            "Plot Experimental and Calculated Chemical shifts "
-            "against each other \n"
-            " - 'on' shows and saves the plots\n"
-            " - 'show' shows the plots\n"
-            " - 'save' saves the plots\n"
-            " - 'off' neither shows nor saves\n"
-            "Default: save"
+            "Enable/disable the fitted shifts plot.\n"
+            " - 'on': generate the plot (always saved; use --show to display)\n"
+            " - 'off': skip\n"
+            "Default: on"
         ),
     )
 
     fit_susc.add_argument(
         "--spread_plots",
-        choices=["on", "show", "save", "off"],
+        choices=["on", "off"],
         metavar="<str>",
         type=str,
-        default="save",
+        default="on",
         help=(
-            "Plot spread of contributions to calculated shifts \n"
-            " - 'on' shows and saves the plots\n"
-            " - 'show' shows the plots\n"
-            " - 'save' saves the plots\n"
-            " - 'off' neither shows nor saves\n"
-            "Default: save"
+            "Enable/disable the shift spread plot.\n"
+            " - 'on': generate the plot (always saved; use --show to display)\n"
+            " - 'off': skip\n"
+            "Default: on"
         ),
     )
 
     fit_susc.add_argument(
         "--contrib_plots",
-        choices=["on", "show", "save", "off"],
+        choices=["on", "off"],
         metavar="<str>",
         type=str,
-        default="save",
+        default="on",
         help=(
-            "Plot mean of contributions to mean calculated shifts \n"
-            " - 'on' shows and saves the plots\n"
-            " - 'show' shows the plots\n"
-            " - 'save' saves the plots\n"
-            " - 'off' neither shows nor saves\n"
+            "Enable/disable the shift component plot.\n"
+            " - 'on': generate the plot (always saved; use --show to display)\n"
+            " - 'off': skip\n"
             "Default: on"
         ),
     )
 
     fit_susc.add_argument(
         "--isoaxrho_plots",
-        choices=["on", "show", "save", "off"],
+        choices=["on", "off"],
         metavar="<str>",
         type=str,
-        default="save",
+        default="on",
         help=(
-            "Plot Isotropic, Axial, and Rhombic susceptibility "
-            "as a function of temperature \n"
-            " - 'on' shows and saves the plots\n"
-            " - 'show' shows the plots\n"
-            " - 'save' saves the plots\n"
-            " - 'off' neither shows nor saves\n"
-            "Default: save"
+            "Enable/disable susceptibility component plots (iso/ax/rho vs T).\n"
+            " - 'on': generate the plot (always saved; use --show to display)\n"
+            " - 'off': skip\n"
+            "Default: on"
         ),
     )
 
@@ -623,8 +618,10 @@ def interface(argv=None):
 
     runtime = apply_runtime_settings(
         plot_profile=args.plot_profile,
+        show_plots=args.show,
         # accessibility=args.accessibility, TODO
     )
+
     args.runtime = runtime
 
     try:

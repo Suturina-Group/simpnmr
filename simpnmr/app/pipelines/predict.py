@@ -13,7 +13,6 @@ import os
 import re
 from collections import defaultdict
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 # Application layer
@@ -229,7 +228,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 experiment=experiment,
                 spec=spec,
                 save=True,
-                show=False,
+                show=options.runtime.show_plots,
                 terms=_terms,
                 save_name=os.path.join(
                     config.project_name,
@@ -246,7 +245,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 experiment=experiment,
                 spec=spec,
                 save=True,
-                show=False,
+                show=options.runtime.show_plots,
                 save_name=os.path.join(
                     config.project_name,
                     f"pred_mean_components_{molecule.susc.temperature:.2f}_K",
@@ -279,7 +278,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     experiment=experiment,
                     spec=spec,
                     save=True,
-                    show=False,
+                    show=options.runtime.show_plots,
                     save_name=os.path.join(
                         config.project_name,
                         f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K",
@@ -292,16 +291,12 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 shift_range=shift_range,
                 spec=spec,
                 save=True,
-                show=False,
+                show=options.runtime.show_plots,
                 save_name=os.path.join(
                     config.project_name,
                     f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
                 ),
             )
-
-        plt.show()
-
-        plt.close("all")
 
     # TODO If more than one temperature, then make a stacked plot of spectra
 

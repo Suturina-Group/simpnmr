@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 from simpnmr.app.params.options import RuntimeSettings
 
 
-def apply_runtime_settings(plot_profile: str = "paper") -> RuntimeSettings:
+def apply_runtime_settings(
+    plot_profile: str = "paper",
+    show_plots: bool = False,
+) -> RuntimeSettings:
     """Apply global side effects and return RuntimeSettings."""
 
     mpl.rcParams["savefig.directory"] = ""
@@ -38,4 +41,5 @@ def apply_runtime_settings(plot_profile: str = "paper") -> RuntimeSettings:
         echo_r2=echo_r2,
         csv_delimiter=csv_delimiter,
         plot_profile=plot_profile,
+        show_plots=show_plots,
     )

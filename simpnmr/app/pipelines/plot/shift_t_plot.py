@@ -27,8 +27,8 @@ def run_plot_shift_tdep(
             experiments,
             "ShiftT_vs_T",
             spec=spec,
-            show=options.show,
-            save=options.save,
+            show=options.runtime.show_plots,
+            save=True,
             save_name="shift_x_T_vs_T",
         )
 
@@ -36,8 +36,8 @@ def run_plot_shift_tdep(
             experiments,
             "Shift_vs_1/T",
             spec=spec,
-            show=options.show,
-            save=options.save,
+            show=options.runtime.show_plots,
+            save=True,
             save_name="shift_vs_T-1",
         )
 

@@ -75,8 +75,8 @@ def run_plot_hfc_iso_ax(
                 ax=ax,
                 spec=spec,
                 symbol=symb,
-                save=options.save,
-                show=False,
+                save=True,
+                show=options.runtime.show_plots,
                 save_name=os.path.join(
                     config.project_name,
                     f"hyperfine_iso_ax_{file_head}",

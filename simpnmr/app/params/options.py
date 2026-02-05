@@ -23,6 +23,7 @@ class RuntimeSettings:
     echo_r2: bool = False
     plot_profile: PlotProfile = "paper"
     accessibility: str = "default"
+    show_plots: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,10 +55,10 @@ class FitSuscRunOptions:
     runtime: RuntimeSettings
     dry_run: bool = False
     susc_units: str = "A3"
-    shift_plots: PlotMode = "save"
-    spread_plots: PlotMode = "save"
-    contrib_plots: PlotMode = "save"
-    isoaxrho_plots: PlotMode = "save"
+    shift_plots: PlotMode = "on"
+    spread_plots: PlotMode = "on"
+    contrib_plots: PlotMode = "on"
+    isoaxrho_plots: PlotMode = "on"
     pcs_isosurface: bool = False
 
     @classmethod
@@ -103,14 +104,14 @@ class CalcPdipRunOptions:
     """Runtime options for point-dipole PCS calculation."""
 
     runtime: RuntimeSettings
-    plot_mode: PlotMode = "save"
+    plot_mode: PlotMode = "on"
     plot_components: list[str] | None = None
 
     @classmethod
     def from_namespace(cls, ns):
         return cls(
             runtime=ns.runtime,
-            plot_mode=getattr(ns, "plot_mode", "save"),
+            plot_mode=getattr(ns, "plot_mode", "on"),
             plot_components=getattr(ns, "plot_components", None),
         )
 

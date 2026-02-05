@@ -40,29 +40,28 @@ def run_plot_hfc(
     # Build the resolved plotting contract once per run.
     spec = apply_profile(options.runtime.plot_profile)
 
-    if not (not options.show and not options.save):
-        with spec.context():
-            if chem_labels is not None:
-                plot_hyperfine_spread(
-                    molecule.nuclei,
-                    components=components,
-                    spec=spec,
-                    save=options.save,
-                    show=False,
-                    save_name=f"hyperfine_spread_{file_head}",
-                    window_title=f"Spread of hyperfine data from {calculation_data}",
-                    verbose=True,
-                )
-
-            plot_hyperfine(
+    with spec.context():
+        if chem_labels is not None:
+            plot_hyperfine_spread(
                 molecule.nuclei,
                 components=components,
                 spec=spec,
-                save=options.save,
-                show=False,
-                save_name=f"hyperfine_{file_head}",
-                window_title=f"Hyperfine data from {calculation_data}",
+                save=True,
+                show=options.runtime.show_plots,
+                save_name=f"hyperfine_spread_{file_head}",
+                window_title=f"Spread of hyperfine data from {calculation_data}",
                 verbose=True,
             )
+
+        plot_hyperfine(
+            molecule.nuclei,
+            components=components,
+            spec=spec,
+            save=True,
+            show=options.runtime.show_plots,
+            save_name=f"hyperfine_{file_head}",
+            window_title=f"Hyperfine data from {calculation_data}",
+            verbose=True,
+        )
 
     return 0
