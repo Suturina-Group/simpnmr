@@ -5,3 +5,11 @@
 
 Provides theme-level configuration helpers for consistent Matplotlib styling.
 """
+
+from __future__ import annotations
+
+from typing import Literal
+
+SizeClass = Literal["small", "standard", "large"]
+
+DEFAULT_SIZE: SizeClass = "standard"

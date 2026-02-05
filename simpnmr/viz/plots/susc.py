@@ -15,8 +15,12 @@ import numpy as np
 from matplotlib.ticker import FuncFormatter
 
 from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.style.glyphs import get_glyphs
+from simpnmr.viz.style.theme import DEFAULT_SIZE
+from simpnmr.viz.style.typography import apply_typography
 
 logger = logging.getLogger(__name__)
+glyphs = get_glyphs(DEFAULT_SIZE)
 
 
 def plot_isoaxrho(
@@ -42,6 +46,7 @@ def plot_isoaxrho(
               params[component]["fit_y_low"]
               params[component]["fit_y_high"]
     """
+
     # Early guard clause for empty vals
     if not vals:
         raise ValueError("plot_isoaxrho: no components provided in `vals`")
@@ -55,7 +60,7 @@ def plot_isoaxrho(
     for component in vals.keys():
         p = params[component]
 
-        fig, ax = plt.subplots(1, 1, figsize=(7.0, 5.0))
+        fig, ax = plt.subplots(1, 1, figsize=(6.4, 4.0))
 
         # Experimental values with error bars (markers only)
         ax.errorbar(
@@ -63,12 +68,12 @@ def plot_isoaxrho(
             vals[component],
             yerr=errs[component],
             lw=0,
-            elinewidth=1.5,
+            elinewidth=glyphs.elinewidth,
             color="black",
-            capsize=1.5,
-            marker="s",
-            markeredgecolor="none",
-            ms=6,
+            capsize=glyphs.capsize,
+            marker=glyphs.marker,
+            markeredgecolor=glyphs.mec,
+            ms=glyphs.ms,
             label="Exp.",
         )
 
@@ -79,13 +84,13 @@ def plot_isoaxrho(
                 inv_t,
                 vals[component] - (tip / inv_t),
                 lw=0,
-                elinewidth=1.5,
+                elinewidth=glyphs.elinewidth,
                 color="#bdbdbd",
-                alpha=0.65,
-                capsize=1.5,
-                marker="s",
-                markeredgecolor="none",
-                ms=6,
+                alpha=glyphs.series_alpha_muted,
+                capsize=glyphs.capsize,
+                marker=glyphs.marker,
+                markeredgecolor=glyphs.mec,
+                ms=glyphs.ms,
                 label="Exp. w/o TIP",
             )
 
@@ -99,7 +104,7 @@ def plot_isoaxrho(
                 inv_t,
                 fit_y,
                 linestyle="-",
-                linewidth=1.5,
+                linewidth=glyphs.fit_lw,
                 color="black",
                 label="Slope/Intercept Fit",
             )
@@ -109,8 +114,8 @@ def plot_isoaxrho(
                 inv_t,
                 fit_y_low,
                 fit_y_high,
-                alpha=0.15,
-                linewidth=0,
+                alpha=glyphs.band_alpha,
+                linewidth=glyphs.band_lw,
             )
 
         # Caption panel: only display values already present in params
@@ -151,30 +156,10 @@ def plot_isoaxrho(
             pad = y_pad_frac * y_range
             ax.set_ylim(y_min - pad, y_max + pad)
 
-        # Move the caption annotation inside the main axis
-        if caption_lines:
-            ax.annotate(
-                " ".join(str(s) for s in caption_lines if s),
-                xy=(0.98, 0.03),
-                xycoords="axes fraction",
-                ha="right",
-                va="bottom",
-                fontsize=10,
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    fc="white",
-                    ec="black",
-                    lw=1.0,
-                ),
-            )
-
         # Axis labels/styling
-        ax.set_xlabel(r"$1/T$ (K$^{-1})$", fontsize=14)
+        ax.set_xlabel(r"$1/T$ (K$^{-1})$")
         chi_sub = _chiT_label_map.get(component, component)
-        ax.set_ylabel(
-            rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$",
-            fontsize=14,
-        )
+        ax.set_ylabel(rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$")
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0e}"))
@@ -200,8 +185,29 @@ def plot_isoaxrho(
             return out
 
         top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
-        top_ax.set_xlabel(r"$T$ (K)", fontsize=14)
+        top_ax.set_xlabel(r"$T$ (K)")
         top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+
+        # Typography (centralised): apply after axes + secondary axes exist.
+        scale = apply_typography(ax, size=DEFAULT_SIZE)
+        apply_typography(top_ax, size=DEFAULT_SIZE)
+
+        # Move the caption annotation inside the main axis
+        if caption_lines:
+            ax.annotate(
+                " ".join(str(s) for s in caption_lines if s),
+                xy=(0.98, 0.03),
+                xycoords="axes fraction",
+                ha="right",
+                va="bottom",
+                fontsize=scale.annotation,
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    fc="white",
+                    ec="black",
+                    lw=1.0,
+                ),
+            )
 
         # Legend styling (white background + black border)
         leg = ax.legend(
@@ -210,7 +216,7 @@ def plot_isoaxrho(
             frameon=True,
             fancybox=True,
             framealpha=1.0,
-            fontsize="10",
+            fontsize=scale.legend,
             columnspacing=1.2,
             handletextpad=0.6,
             borderpad=0.6,
@@ -218,9 +224,6 @@ def plot_isoaxrho(
         leg.get_frame().set_facecolor("white")
         leg.get_frame().set_edgecolor("black")
         leg.get_frame().set_linewidth(1.0)
-
-        ax.tick_params(axis="both", labelsize=12)
-        top_ax.tick_params(axis="x", labelsize=12)
 
         fig.tight_layout()
 
@@ -266,7 +269,7 @@ def plot_exp_vs_ab_initio(
     }
 
     for component in params.keys():
-        fig, ax = plt.subplots(1, 1, figsize=(7.0, 5.0))
+        fig, ax = plt.subplots(1, 1, figsize=(6.4, 4.0))
 
         p_exp = params[component]
         fit_y = p_exp.get("fit_y")
@@ -281,9 +284,9 @@ def plot_exp_vs_ab_initio(
             y_fit,
             lw=0,
             color="#E69F00",  # orange
-            marker="s",
-            markeredgecolor="none",
-            ms=6,
+            marker=glyphs.marker,
+            markeredgecolor=glyphs.mec,
+            ms=glyphs.ms,
             label="pNMR",
         )
 
@@ -296,22 +299,19 @@ def plot_exp_vs_ab_initio(
                 y_ab[m_ab],
                 yerr=None,
                 lw=0,
-                elinewidth=1.5,
+                elinewidth=glyphs.elinewidth,
                 color="#1f77b4",  # muted blue
-                capsize=1.5,
-                marker="s",
-                markeredgecolor="none",
-                ms=6,
+                capsize=glyphs.capsize,
+                marker=glyphs.marker,
+                markeredgecolor=glyphs.mec,
+                ms=glyphs.ms,
                 label="Ab initio",
             )
 
         # Axis labels/styling
-        ax.set_xlabel(r"$1/T$ (K$^{-1})$", fontsize=14)
+        ax.set_xlabel(r"$1/T$ (K$^{-1})$")
         chi_sub = _chiT_label_map.get(component, component)
-        ax.set_ylabel(
-            rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$",
-            fontsize=14,
-        )
+        ax.set_ylabel(rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$")
 
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
@@ -336,8 +336,12 @@ def plot_exp_vs_ab_initio(
                 return 1.0 / t_arr
 
         top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
-        top_ax.set_xlabel(r"$T$ (K)", fontsize=14)
+        top_ax.set_xlabel(r"$T$ (K)")
         top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+
+        # Typography (centralised): apply after axes + secondary axes exist.
+        scale = apply_typography(ax, size="standard")
+        apply_typography(top_ax, size="standard")
 
         # Legend
         leg = ax.legend(
@@ -346,7 +350,7 @@ def plot_exp_vs_ab_initio(
             frameon=True,
             fancybox=True,
             framealpha=1.0,
-            fontsize="10",
+            fontsize=scale.legend,
             columnspacing=1.2,
             handletextpad=0.6,
             borderpad=0.6,
@@ -354,9 +358,6 @@ def plot_exp_vs_ab_initio(
         leg.get_frame().set_facecolor("white")
         leg.get_frame().set_edgecolor("black")
         leg.get_frame().set_linewidth(1.0)
-
-        ax.tick_params(axis="both", labelsize=12)
-        top_ax.tick_params(axis="x", labelsize=12)
 
         fig.tight_layout()
 
