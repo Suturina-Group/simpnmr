@@ -46,6 +46,7 @@ from simpnmr.tools.coords import transform as tfm
 # Visualisation
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spect import plot_pred_spectrum, plot_raw_deconv_pred
+from simpnmr.viz.style.theme import apply_profile
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,9 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         raise ValueError("PredictRunOptions is required")
 
     delimiter = options.runtime.csv_delimiter
+
+    # Build the resolved plotting contract for this run.
+    spec = apply_profile(options.runtime.plot_profile)
 
     # Load hyperfines / construct base molecule
     base_molecule = load_base_molecule_from_hyperfines(
@@ -218,38 +222,41 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         molecule.average_shifts()
 
         # Plot theoretical shifts
-        # Spread
-        plot_shift_spread(
-            molecule,
-            experiment=experiment,
-            save=True,
-            show=False,
-            terms=_terms,
-            save_name=os.path.join(
-                config.project_name,
-                f"pred_shift_spread_{molecule.susc.temperature:.2f}_K",
-            ),
-            verbose=True,
-            window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
-            order="descending",
-        )
+        with spec.context():
+            # Spread
+            plot_shift_spread(
+                molecule,
+                experiment=experiment,
+                spec=spec,
+                save=True,
+                show=False,
+                terms=_terms,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"pred_shift_spread_{molecule.susc.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
+                order="descending",
+            )
 
-        # Bar chart for means
-        plot_shift_contrib(
-            molecule,
-            experiment=experiment,
-            save=True,
-            show=False,
-            save_name=os.path.join(
-                config.project_name,
-                f"pred_mean_components_{molecule.susc.temperature:.2f}_K",
-            ),
-            verbose=True,
-            window_title=(
-                f"Predicted mean shifts and components at {susc.temperature:.2f} K"
-            ),
-            order="descending",
-        )
+            # Bar chart for means
+            plot_shift_contrib(
+                molecule,
+                experiment=experiment,
+                spec=spec,
+                save=True,
+                show=False,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"pred_mean_components_{molecule.susc.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=(
+                    f"Predicted mean shifts and components at {susc.temperature:.2f} K"
+                ),
+                order="descending",
+            )
 
         shift_range = [
             np.min([nuc.shift.avg for nuc in molecule.nuclei]),
@@ -263,30 +270,34 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
             shift_range[1] + np.positive(np.max(extras)),
         ]
 
-        if len(config.experiment_files):
-            plot_raw_deconv_pred(
-                molecule=molecule,
+        with spec.context():
+            if len(config.experiment_files):
+                plot_raw_deconv_pred(
+                    molecule=molecule,
+                    isotope=molecule.nuclei[0].isotope,
+                    shift_range=shift_range,
+                    experiment=experiment,
+                    spec=spec,
+                    save=True,
+                    show=False,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K",
+                    ),
+                )
+
+            plot_pred_spectrum(
+                molecule,
                 isotope=molecule.nuclei[0].isotope,
                 shift_range=shift_range,
-                experiment=experiment,
+                spec=spec,
                 save=True,
                 show=False,
                 save_name=os.path.join(
                     config.project_name,
-                    f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K",
+                    f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
                 ),
             )
-        plot_pred_spectrum(
-            molecule,
-            isotope=molecule.nuclei[0].isotope,
-            shift_range=shift_range,
-            save=True,
-            show=False,
-            save_name=os.path.join(
-                config.project_name,
-                f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
-            ),
-        )
 
         plt.show()
 

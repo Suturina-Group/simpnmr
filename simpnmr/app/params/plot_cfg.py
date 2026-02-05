@@ -29,6 +29,8 @@ SAVE_CONV: dict[PlotMode, bool] = {
 
 PLOT_ACTIVE: set[PlotMode] = {"on", "show", "save"}
 
+PlotProfile = Literal["paper", "poster"]
+
 
 def mode_to_show_save(mode: PlotMode) -> tuple[bool, bool]:
     """Convert a PlotMode into (show, save) flags.

@@ -24,6 +24,7 @@ from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.util.arrays import find_index_of_nearest
 from simpnmr.core.util.strings import remove_numbers
 from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.style.theme import PlotSpec
 from simpnmr.viz.utils.fmt import isotope_format
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def plot_pred_spectrum(
     molecule: Molecule,
     isotope: str,
     shift_range: ArrayLike,
+    spec: PlotSpec,
     save: bool = True,
     show: bool = True,
     save_name: str = "predicted_spectrum.png",
@@ -68,11 +70,15 @@ def plot_pred_spectrum(
     # Normalise spectrum
     y_intensity /= np.max(y_intensity)
 
+    glyphs = spec.glyphs
+    palette = spec.palette
+
     # Make plot
-    fig, ax = plt.subplots(1, 1, num=window_title, figsize=(8, 5.5))
+    fig, ax = plt.subplots(1, 1, num=window_title, figsize=(6.8, 4.6))
+    spec.skin_axes(ax)
 
     # Spectrum trace
-    ax.plot(x_grid, y_intensity, color="k")
+    ax.plot(x_grid, y_intensity, color=palette.reference, lw=glyphs.line_lw)
 
     # Labels
     avg_shifts = {
@@ -90,7 +96,14 @@ def plot_pred_spectrum(
     closest_y = [y_intensity[find_index_of_nearest(x_grid, sh)] for sh in sorted_shifts]
 
     # Marker at shift peak position
-    ax.plot(sorted_shifts, closest_y, lw=0, marker="x", color="k", markersize=7)
+    ax.plot(
+        sorted_shifts,
+        closest_y,
+        lw=0,
+        marker="x",
+        color=palette.reference,
+        markersize=glyphs.ms,
+    )
 
     # Draw text-label barrier 10% above the highest peak
     label_barrier = 1.1 * np.max(y_intensity)
@@ -99,8 +112,8 @@ def plot_pred_spectrum(
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
-        color="black",
-        linewidth=0.8,
+        color=palette.reference,
+        linewidth=max(0.8, 0.5 * glyphs.line_lw),
         alpha=0.7,
     )
 
@@ -123,7 +136,7 @@ def plot_pred_spectrum(
         distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
         np.fill_diagonal(distance, np.inf)
 
-    # Peak label y position (20% above max peak)
+    # Peak label y position (15% above max peak)
     label_y = 1.15 * np.max(y_intensity)
 
     # Add label and dashed lines
@@ -136,7 +149,7 @@ def plot_pred_spectrum(
             rotation="vertical",
             ha="center",
             va="bottom",
-            fontsize="18",
+            fontsize=str(spec.typography.title),
         )
 
         # Draw segmented line from peak to label via horizontal line
@@ -145,12 +158,12 @@ def plot_pred_spectrum(
             [x_grid[peak_index], x_grid[peak_index], label_x],
             [y_intensity[peak_index], label_barrier, label_y],
             linestyle="--",
-            color="black",
-            linewidth=0.8,
+            color=palette.reference,
+            linewidth=max(0.8, 0.5 * glyphs.line_lw),
             alpha=0.6,
         )
 
-    ax.set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)), fontsize="18")
+    ax.set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)))
 
     # Deactivate borders, y axis and y ticks
     ax.set_yticks([])
@@ -190,6 +203,7 @@ def plot_raw_deconv_pred(
     isotope: str,
     shift_range: ArrayLike,
     experiment: Experiment,
+    spec: PlotSpec,
     save: bool = True,
     show: bool = True,
     save_name: str = "pred_and_exp_spectrum.png",
@@ -262,16 +276,28 @@ def plot_raw_deconv_pred(
             x_grid, exp_width_ppm, signal.shift, signal.area
         )
 
+    glyphs = spec.glyphs
+    palette = spec.palette
+
     # Define plot space
     fig, ax = plt.subplots(
-        n_subplots, 1, figsize=(8, 5.5), num=window_title, sharex=True
+        n_subplots, 1, figsize=(6.8, 4.6), num=window_title, sharex=True
     )
+    for axis in ax:
+        spec.skin_axes(axis)
 
     # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
 
     ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
-    ax[0].plot(x_grid, y_sim_intensity, lw=1, color="k")
-    ax[0].plot(shifts, sim_peak_heights, lw=0, marker="x", color="k")
+    ax[0].plot(x_grid, y_sim_intensity, lw=glyphs.line_lw, color=palette.reference)
+    ax[0].plot(
+        shifts,
+        sim_peak_heights,
+        lw=0,
+        marker="x",
+        color=palette.reference,
+        markersize=glyphs.ms,
+    )
 
     # Draw text-label barrier 10% above the highest simulated (predicted) peak
     label_barrier = 1.1 * np.max(y_sim_intensity)
@@ -281,8 +307,8 @@ def plot_raw_deconv_pred(
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
-        color="black",
-        linewidth=0.5,
+        color=palette.reference,
+        linewidth=max(0.8, 0.5 * glyphs.line_lw),
         alpha=0.7,
     )
 
@@ -316,7 +342,7 @@ def plot_raw_deconv_pred(
             label_x,
             labels_position_y,
             label,
-            fontsize="9",
+            fontsize=str(spec.typography.annotation),
             rotation="vertical",
             va="bottom",
             ha="center",
@@ -327,24 +353,22 @@ def plot_raw_deconv_pred(
             [peak_x, peak_x, label_x],
             [peak_y, label_barrier, labels_position_y],
             linestyle="--",
-            color="black",
-            linewidth=0.7,
+            color=palette.reference,
+            linewidth=max(0.8, 0.5 * glyphs.line_lw),
             alpha=0.4,
         )
 
     ax[0].set_title(
         "Simulation",
         loc="left",
-        fontdict={"size": "smaller"},
         pad=-6,
     )
 
     # SUBPLOT NUMBER 2 - Deconvoluted (processed experimental) spectrum
-    ax[1].plot(x_grid, y_deconv_intensity, lw=1, color="k")
+    ax[1].plot(x_grid, y_deconv_intensity, lw=glyphs.line_lw, color=palette.reference)
     ax[1].set_title(
         "Paramagnetic Signals",
         loc="left",
-        fontdict={"size": "smaller"},
         pad=-6,
     )
 
@@ -353,13 +377,12 @@ def plot_raw_deconv_pred(
         ax[2].plot(
             experiment.spectrum[:, 0],
             experiment.spectrum[:, 1],
-            lw=1,
-            color="k",
+            lw=glyphs.line_lw,
+            color=palette.reference,
         )
         ax[2].set_title(
             "Full Spectrum",
             loc="left",
-            fontdict={"size": "smaller"},
             pad=-6,
         )
 

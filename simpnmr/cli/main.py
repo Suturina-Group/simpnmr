@@ -210,6 +210,35 @@ def read_args(arg_list=None):
         version=f"simpnmr {__version__}",
     )
 
+    parser.add_argument(
+        "--plot-profile",
+        choices=["paper", "poster"],
+        metavar="<str>",
+        type=str,
+        default=os.environ.get("SIMPNMR_PLOT_PROFILE", "paper"),
+        help=(
+            "Global plotting profile used by all plot-generating workflows.\n"
+            " - 'paper': compact typography for manuscripts\n"
+            " - 'poster': larger typography for slides/posters\n"
+            "You can also set SIMPNMR_PLOT_PROFILE=paper|poster.\n"
+            "Default: paper"
+        ),
+    )
+
+    parser.add_argument(
+        "--accessibility",
+        choices=["default", "colorblind"],
+        metavar="<str>",
+        type=str,
+        default=os.environ.get("SIMPNMR_ACCESSIBILITY", "default"),
+        help=(
+            "Accessibility mode for plots.\n"
+            " - 'default': colour-only encoding (default)\n"
+            " - 'colorblind': colour + pattern encoding for shift components\n"
+            "You can also set SIMPNMR_ACCESSIBILITY=default|colorblind."
+        ),
+    )
+
     parser._positionals.title = "Subprograms"
 
     subparsers = parser.add_subparsers(dest="prog")
@@ -592,7 +621,10 @@ def interface(argv=None):
     setup_logging(verbose=args.verbose, quiet=args.quiet, base_dir=os.getcwd())
     logger.info("Output directory: %s", os.getcwd())
 
-    runtime = apply_runtime_settings()
+    runtime = apply_runtime_settings(
+        plot_profile=args.plot_profile,
+        # accessibility=args.accessibility, TODO
+    )
     args.runtime = runtime
 
     try:

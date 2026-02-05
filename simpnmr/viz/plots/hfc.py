@@ -15,6 +15,7 @@ import numpy as np
 
 from simpnmr.core.domain.mol import Nucleus
 from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.style.theme import PlotSpec
 from simpnmr.viz.utils.tensor_comp import comp2ind
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 def plot_hyperfine(
     nuclei: list[Nucleus],
     components: list[str],
+    spec: PlotSpec | None = None,
     save: bool = False,
     show: bool = True,
     save_name: str = "hyperfines.dat",
@@ -82,6 +84,11 @@ def plot_hyperfine(
 
     fig, ax = plt.subplots(1, 1, num=window_title)
 
+    glyphs = spec.glyphs if spec is not None else None
+    if spec is not None:
+        spec.skin_axes(ax)
+    palette = spec.palette if spec is not None else None
+
     n_nuclei = len(nuclei)
 
     # width of bars, and shift to apply for starting positions
@@ -116,11 +123,17 @@ def plot_hyperfine(
     ax.set_xlim(0.5, len(labels) + 1.5)
     ax.xaxis.set_tick_params("major", length=0)
 
-    ax.hlines(0, 0.5, len(labels) + 1.5, lw=0.5, color="k")
+    ax.hlines(
+        0,
+        0.5,
+        len(labels) + 1.5,
+        lw=(glyphs.line_lw if glyphs is not None else 0.5),
+        color=(palette.reference if palette is not None else "k"),
+    )
 
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-    ax.legend()
+    ax.legend(loc="best")
 
     ax.set_ylabel(r"Hyperfine Coupling (ppm Å$^\mathregular{-3}$)")
     fig.tight_layout()
@@ -143,6 +156,7 @@ def plot_hyperfine_iso_vs_ax(
     order: list[int],
     fig: plt.Figure = None,
     ax: plt.Axes = None,
+    spec: PlotSpec | None = None,
     symbol="x",
     save: bool = False,
     show: bool = True,
@@ -153,9 +167,21 @@ def plot_hyperfine_iso_vs_ax(
     if all([fig is None, ax is None]):
         fig, ax = plt.subplots(num=window_title)
 
+    glyphs = spec.glyphs if spec is not None else None
+    if spec is not None:
+        spec.skin_axes(ax)
+    palette = spec.palette if spec is not None else None
+
     vals = list(value_dict.values())
 
-    ax.plot([vals[o] for o in order], lw=0, marker=symbol, fillstyle="none", color="C1")
+    ax.plot(
+        [vals[o] for o in order],
+        lw=0,
+        marker=symbol,
+        markersize=(glyphs.ms if glyphs is not None else None),
+        fillstyle="none",
+        color=(palette.secondary if palette is not None else "C1"),
+    )
 
     ax.xaxis.set_major_locator(ticker.FixedLocator(np.arange(len(value_dict))))
     labels = [label for label in value_dict.keys()]
@@ -181,6 +207,7 @@ def plot_hyperfine_iso_vs_ax(
 def plot_hyperfine_spread(
     nuclei: list[Nucleus],
     components: list[str] | None = None,
+    spec: PlotSpec | None = None,
     save: bool = False,
     show: bool = True,
     save_name: str = "hyperfines.png",
@@ -252,6 +279,11 @@ def plot_hyperfine_spread(
 
     fig, ax = plt.subplots(1, 1, num=window_title)
 
+    glyphs = spec.glyphs if spec is not None else None
+    if spec is not None:
+        spec.skin_axes(ax)
+    palette = spec.palette if spec is not None else None
+
     xvals = np.arange(1, len(unique_chemlabels) + 1)
 
     legend_markers = []
@@ -279,11 +311,21 @@ def plot_hyperfine_spread(
     ax.set_xlim(0.5, len(labels) + 1.5)
     ax.xaxis.set_tick_params("major", length=0)
 
-    ax.hlines(0, 0.5, len(labels) + 1.5, lw=0.5, color="k")
+    ax.hlines(
+        0,
+        0.5,
+        len(labels) + 1.5,
+        lw=(glyphs.line_lw if glyphs is not None else 0.5),
+        color=(palette.reference if palette is not None else "k"),
+    )
 
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-    ax.legend(legend_markers, [legend_labels[comp] for comp in a_comps.keys()])
+    ax.legend(
+        legend_markers,
+        [legend_labels[comp] for comp in a_comps.keys()],
+        loc="best",
+    )
 
     ax.set_ylabel(r"Hyperfine Coupling (ppm Å$^\mathregular{-3}$)")
     fig.tight_layout()

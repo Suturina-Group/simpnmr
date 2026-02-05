@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from simpnmr.app.params.plot_cfg import PlotMode
+from simpnmr.app.params.plot_cfg import PlotMode, PlotProfile
 
 
 # Shared runtime context passed from CLI into all pipelines
@@ -21,6 +21,8 @@ class RuntimeSettings:
 
     csv_delimiter: str = ","
     echo_r2: bool = False
+    plot_profile: PlotProfile = "paper"
+    accessibility: str = "default"
 
 
 @dataclass(frozen=True)

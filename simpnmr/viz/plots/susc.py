@@ -12,15 +12,11 @@ import logging
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
-from matplotlib.ticker import FuncFormatter
 
 from simpnmr.viz.layout.export import render_figure
-from simpnmr.viz.style.glyphs import get_glyphs
-from simpnmr.viz.style.theme import DEFAULT_SIZE
-from simpnmr.viz.style.typography import apply_typography
+from simpnmr.viz.style.theme import PlotSpec
 
 logger = logging.getLogger(__name__)
-glyphs = get_glyphs(DEFAULT_SIZE)
 
 
 def plot_isoaxrho(
@@ -28,6 +24,7 @@ def plot_isoaxrho(
     errs: dict,
     params: dict,
     inv_t: np.ndarray,
+    spec: PlotSpec,
     show: bool = True,
     save: bool = True,
     save_name: str = "susceptibility_components",
@@ -51,6 +48,8 @@ def plot_isoaxrho(
     if not vals:
         raise ValueError("plot_isoaxrho: no components provided in `vals`")
 
+    glyphs = spec.glyphs
+
     _chiT_label_map = {
         "iso": r"\mathrm{iso}",
         "ax": r"\mathrm{ax}",
@@ -59,17 +58,20 @@ def plot_isoaxrho(
 
     for component in vals.keys():
         p = params[component]
+        palette = spec.palette
 
-        fig, ax = plt.subplots(1, 1, figsize=(6.4, 4.0))
+        fig, ax = plt.subplots(1, 1, figsize=(6.8, 4.6))
+
+        inv_t_plot = inv_t * 1.0e3
 
         # Experimental values with error bars (markers only)
         ax.errorbar(
-            inv_t,
+            inv_t_plot,
             vals[component],
             yerr=errs[component],
             lw=0,
             elinewidth=glyphs.elinewidth,
-            color="black",
+            color=palette.experimental,
             capsize=glyphs.capsize,
             marker=glyphs.marker,
             markeredgecolor=glyphs.mec,
@@ -81,11 +83,11 @@ def plot_isoaxrho(
         tip = p.get("tip", 0.0)
         if np.isfinite(tip) and abs(float(tip)) > 0.0:
             ax.errorbar(
-                inv_t,
+                inv_t_plot,
                 vals[component] - (tip / inv_t),
                 lw=0,
                 elinewidth=glyphs.elinewidth,
-                color="#bdbdbd",
+                color=palette.muted,
                 alpha=glyphs.series_alpha_muted,
                 capsize=glyphs.capsize,
                 marker=glyphs.marker,
@@ -101,17 +103,17 @@ def plot_isoaxrho(
         fit_y_high = p.get("fit_y_high")
         if fit_y is not None:
             ax.plot(
-                inv_t,
+                inv_t_plot,
                 fit_y,
                 linestyle="-",
                 linewidth=glyphs.fit_lw,
-                color="black",
+                color=palette.reference,
                 label="Slope/Intercept Fit",
             )
 
         if fit_y_low is not None and fit_y_high is not None:
             ax.fill_between(
-                inv_t,
+                inv_t_plot,
                 fit_y_low,
                 fit_y_high,
                 alpha=glyphs.band_alpha,
@@ -125,7 +127,7 @@ def plot_isoaxrho(
         else:
             _adj_r2_txt = f"{_adj_r2:.3f}"
 
-        caption_lines = [rf"$R^{{2}}_{{\mathrm{{adj}}}} = {_adj_r2_txt}$"]
+        caption_lines = [rf"$\mathrm{{adj.}}\ R^{{2}} = {_adj_r2_txt}$"]
 
         intercept = p.get("intercept")
         intercept_err = p.get("intercept_err")
@@ -145,9 +147,11 @@ def plot_isoaxrho(
         elif slope is not None:
             caption_lines.append(rf"$\mathrm{{Slope}} = {slope:.1f}$")
 
-        tip_txt = p.get("tip")
-        if tip_txt is not None:
-            caption_lines.append(rf"$\mathrm{{TIP}} = {float(tip_txt):.1e}$")
+        tip_val = p.get("tip")
+        if tip_val is not None and tip_val != 0.0:
+            exp = int(np.floor(np.log10(abs(tip_val))))
+            mant = tip_val / 10**exp
+            caption_lines.append(rf"$\mathrm{{TIP}} = {mant:.1f}\times 10^{{{exp}}}$")
 
         y_min, y_max = ax.get_ylim()
         y_range = y_max - y_min
@@ -157,31 +161,30 @@ def plot_isoaxrho(
             ax.set_ylim(y_min - pad, y_max + pad)
 
         # Axis labels/styling
-        ax.set_xlabel(r"$1/T$ (K$^{-1})$")
+        ax.set_xlabel(r"$1/T\;10^{3}$ (K$^{-1}$)")
         chi_sub = _chiT_label_map.get(component, component)
         ax.set_ylabel(rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$")
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0e}"))
 
-        # Add 10% padding on x-axis (inverse temperature)
-        x_min, x_max = ax.get_xlim()
-        x_range = x_max - x_min
-        if np.isfinite(x_range) and x_range > 0:
-            pad = 0.10 * x_range
-            ax.set_xlim(x_min - pad, x_max + pad)
+        # # Add 10% padding on x-axis (inverse temperature)
+        # x_min, x_max = ax.get_xlim()
+        # x_range = x_max - x_min
+        # if np.isfinite(x_range) and x_range > 0:
+        #     pad = 0.10 * x_range
+        #     ax.set_xlim(x_min - pad, x_max + pad)
 
         # Secondary top axis for T(K): uses axis transform only
-        def _inv_to_t(inv: float | np.ndarray) -> float | np.ndarray:
-            inv_arr = np.asarray(inv, dtype=float)
+        def _inv_to_t(inv_plot: float | np.ndarray) -> float | np.ndarray:
+            inv_arr = np.asarray(inv_plot, dtype=float)
             with np.errstate(divide="ignore", invalid="ignore"):
-                out = 1.0 / inv_arr
+                out = 1.0e3 / inv_arr
             return out
 
         def _t_to_inv(t: float | np.ndarray) -> float | np.ndarray:
             t_arr = np.asarray(t, dtype=float)
             with np.errstate(divide="ignore", invalid="ignore"):
-                out = 1.0 / t_arr
+                out = 1.0e3 / t_arr
             return out
 
         top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
@@ -189,8 +192,8 @@ def plot_isoaxrho(
         top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
         # Typography (centralised): apply after axes + secondary axes exist.
-        scale = apply_typography(ax, size=DEFAULT_SIZE)
-        apply_typography(top_ax, size=DEFAULT_SIZE)
+        scale = spec.skin_axes(ax)
+        spec.skin_axes(top_ax)
 
         # Move the caption annotation inside the main axis
         if caption_lines:
@@ -203,27 +206,13 @@ def plot_isoaxrho(
                 fontsize=scale.annotation,
                 bbox=dict(
                     boxstyle="round,pad=0.3",
-                    fc="white",
-                    ec="black",
+                    fc=palette.annotation_bg,
+                    ec=palette.legend_edge,
                     lw=1.0,
                 ),
             )
 
-        # Legend styling (white background + black border)
-        leg = ax.legend(
-            loc="upper left",
-            ncol=3,
-            frameon=True,
-            fancybox=True,
-            framealpha=1.0,
-            fontsize=scale.legend,
-            columnspacing=1.2,
-            handletextpad=0.6,
-            borderpad=0.6,
-        )
-        leg.get_frame().set_facecolor("white")
-        leg.get_frame().set_edgecolor("black")
-        leg.get_frame().set_linewidth(1.0)
+        ax.legend(loc="upper left", ncol=3)
 
         fig.tight_layout()
 
@@ -247,6 +236,7 @@ def plot_exp_vs_ab_initio(
     params: dict,
     inv_t: np.ndarray,
     ab_series: dict,
+    spec: PlotSpec,
     show: bool = True,
     save: bool = True,
     save_name: str = "exp_vs_ab_initio_susc",
@@ -268,8 +258,13 @@ def plot_exp_vs_ab_initio(
         "rho": r"\mathrm{rh}",
     }
 
+    glyphs = spec.glyphs
+
     for component in params.keys():
-        fig, ax = plt.subplots(1, 1, figsize=(6.4, 4.0))
+        inv_t_plot = inv_t * 1.0e3
+
+        fig, ax = plt.subplots(1, 1, figsize=(6.8, 4.6))
+        palette = spec.palette
 
         p_exp = params[component]
         fit_y = p_exp.get("fit_y")
@@ -280,10 +275,10 @@ def plot_exp_vs_ab_initio(
         y_fit = np.asarray(fit_y, dtype=float)
 
         ax.plot(
-            inv_t,
+            inv_t_plot,
             y_fit,
             lw=0,
-            color="#E69F00",  # orange
+            color=palette.primary,
             marker=glyphs.marker,
             markeredgecolor=glyphs.mec,
             ms=glyphs.ms,
@@ -295,12 +290,12 @@ def plot_exp_vs_ab_initio(
         m_ab = np.isfinite(y_ab)
         if np.any(m_ab):
             ax.errorbar(
-                inv_t[m_ab],
+                inv_t_plot[m_ab],
                 y_ab[m_ab],
                 yerr=None,
                 lw=0,
                 elinewidth=glyphs.elinewidth,
-                color="#1f77b4",  # muted blue
+                color=palette.secondary,
                 capsize=glyphs.capsize,
                 marker=glyphs.marker,
                 markeredgecolor=glyphs.mec,
@@ -309,13 +304,12 @@ def plot_exp_vs_ab_initio(
             )
 
         # Axis labels/styling
-        ax.set_xlabel(r"$1/T$ (K$^{-1})$")
+        ax.set_xlabel(r"$1/T\;10^{3}$ (K$^{-1}$)")
         chi_sub = _chiT_label_map.get(component, component)
         ax.set_ylabel(rf"$\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$")
 
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0e}"))
 
         # Add 10% padding on y-axis
         y_min, y_max = ax.get_ylim()
@@ -325,39 +319,25 @@ def plot_exp_vs_ab_initio(
             ax.set_ylim(y_min - pad, y_max + pad)
 
         # Secondary top axis: T(K)
-        def _inv_to_t(inv: float | np.ndarray) -> float | np.ndarray:
-            inv_arr = np.asarray(inv, dtype=float)
+        def _inv_to_t(inv_plot: float | np.ndarray) -> float | np.ndarray:
+            inv_arr = np.asarray(inv_plot, dtype=float)
             with np.errstate(divide="ignore", invalid="ignore"):
-                return 1.0 / inv_arr
+                return 1.0e3 / inv_arr
 
         def _t_to_inv(t: float | np.ndarray) -> float | np.ndarray:
             t_arr = np.asarray(t, dtype=float)
             with np.errstate(divide="ignore", invalid="ignore"):
-                return 1.0 / t_arr
+                return 1.0e3 / t_arr
 
         top_ax = ax.secondary_xaxis("top", functions=(_inv_to_t, _t_to_inv))
         top_ax.set_xlabel(r"$T$ (K)")
         top_ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
         # Typography (centralised): apply after axes + secondary axes exist.
-        scale = apply_typography(ax, size="standard")
-        apply_typography(top_ax, size="standard")
+        spec.skin_axes(ax)
+        spec.skin_axes(top_ax)
 
-        # Legend
-        leg = ax.legend(
-            loc="upper left",
-            ncol=2,
-            frameon=True,
-            fancybox=True,
-            framealpha=1.0,
-            fontsize=scale.legend,
-            columnspacing=1.2,
-            handletextpad=0.6,
-            borderpad=0.6,
-        )
-        leg.get_frame().set_facecolor("white")
-        leg.get_frame().set_edgecolor("black")
-        leg.get_frame().set_linewidth(1.0)
+        ax.legend(loc="upper left", ncol=3)
 
         fig.tight_layout()
 

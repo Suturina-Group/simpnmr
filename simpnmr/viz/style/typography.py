@@ -14,11 +14,11 @@ drift across plots.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
+import matplotlib as mpl
 import matplotlib.axes
 
-SizeClass = Literal["small", "standard", "large"]
+from simpnmr.app.params.plot_cfg import PlotProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,9 +42,9 @@ class TypographyScale:
     annotation: int
 
 
-SCALES: dict[SizeClass, TypographyScale] = {
+SCALES: dict[PlotProfile, TypographyScale] = {
     # Default for most figures, designed for publication-style PDFs.
-    "standard": TypographyScale(
+    "paper": TypographyScale(
         base=10,
         axis_label=11,
         tick_label=9,
@@ -52,17 +52,8 @@ SCALES: dict[SizeClass, TypographyScale] = {
         title=12,
         annotation=9,
     ),
-    # For dense multi-panel figures or small embeds.
-    "small": TypographyScale(
-        base=9,
-        axis_label=10,
-        tick_label=8,
-        legend=8,
-        title=11,
-        annotation=8,
-    ),
     # For wide figures, posters, and slides.
-    "large": TypographyScale(
+    "poster": TypographyScale(
         base=11,
         axis_label=12,
         tick_label=10,
@@ -73,7 +64,7 @@ SCALES: dict[SizeClass, TypographyScale] = {
 }
 
 
-def get_scale(size: SizeClass = "standard") -> TypographyScale:
+def get_scale(size: PlotProfile = "paper") -> TypographyScale:
     """Return the typography scale for a given size class.
 
     Args:
@@ -90,7 +81,7 @@ def get_scale(size: SizeClass = "standard") -> TypographyScale:
 
 
 def apply_typography(
-    ax: matplotlib.axes.Axes, size: SizeClass = "standard"
+    ax: matplotlib.axes.Axes, size: PlotProfile = "paper"
 ) -> TypographyScale:
     """Apply tick/axis-label typography defaults to an Axes.
 
@@ -120,7 +111,7 @@ def apply_typography(
 
 def apply_typography_many(
     axes: list[matplotlib.axes.Axes],
-    size: SizeClass = "standard",
+    size: PlotProfile = "paper",
 ) -> TypographyScale:
     """Apply typography defaults to multiple Axes.
 
@@ -135,4 +126,35 @@ def apply_typography_many(
     scale = get_scale(size)
     for ax in axes:
         apply_typography(ax=ax, size=size)
+    return scale
+
+
+def apply_global_typography(profile: PlotProfile = "paper") -> TypographyScale:
+    """Apply global Matplotlib typography defaults for a plotting profile.
+
+    This function sets rcParams that are safe to apply globally and should be
+    called once per pipeline run via theme.apply_profile().
+    """
+
+    scale = get_scale(profile)
+
+    mpl.rcParams.update(
+        {
+            # Base font size
+            "font.size": scale.base,
+            # Axis titles and labels
+            "axes.labelsize": scale.axis_label,
+            "axes.titlesize": scale.title,
+            # Tick labels
+            "xtick.labelsize": scale.tick_label,
+            "ytick.labelsize": scale.tick_label,
+            # Legend
+            "legend.fontsize": scale.legend,
+            "legend.title_fontsize": scale.legend,
+            # Math text (critical for NMR / physics plots)
+            "mathtext.fontset": "dejavusans",
+            "mathtext.default": "regular",
+        }
+    )
+
     return scale

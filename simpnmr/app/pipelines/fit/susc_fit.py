@@ -49,6 +49,7 @@ from simpnmr.viz.plots.shifts import (
 )
 from simpnmr.viz.plots.spect import plot_pred_spectrum
 from simpnmr.viz.plots.susc import plot_exp_vs_ab_initio, plot_isoaxrho
+from simpnmr.viz.style.theme import apply_profile
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         raise ValueError("FitSuscRunOptions is required")
 
     delimiter = options.runtime.csv_delimiter
+
+    # Build the resolved plotting contract once per run.
+    spec = apply_profile(options.runtime.plot_profile)
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
@@ -316,21 +320,23 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 show = False
             else:
                 show = pl.SHOW_CONV[options.shift_plots]
-            plot_fitted_shifts(
-                molecule,
-                experiment,
-                susc_model,
-                show=show,
-                susc_units=options.susc_units,
-                average=len(config.susc_fit_average_shifts),
-                save=pl.SAVE_CONV[options.shift_plots],
-                save_name=os.path.join(
-                    config.project_name,
-                    f"shifts_{experiment.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
-            )
+            with spec.context():
+                plot_fitted_shifts(
+                    molecule,
+                    experiment,
+                    susc_model,
+                    spec=spec,
+                    show=show,
+                    susc_units=options.susc_units,
+                    average=len(config.susc_fit_average_shifts),
+                    save=pl.SAVE_CONV[options.shift_plots],
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"shifts_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
+                )
 
             visible = ["show", "on"]
 
@@ -341,41 +347,45 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 plt.close("all")
 
             if options.spread_plots in pl.PLOT_ACTIVE:
-                plot_shift_spread(
-                    molecule,
-                    experiment,
-                    terms=_terms,
-                    show=pl.SHOW_CONV[options.spread_plots],
-                    save=pl.SAVE_CONV[options.spread_plots],
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"shift_spread_{molecule.susc.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Spread of predicted shift components "
-                        f"at {experiment.temperature:.2f} K"
-                    ),
-                    order="descending",
-                )
+                with spec.context():
+                    plot_shift_spread(
+                        molecule,
+                        experiment,
+                        spec=spec,
+                        terms=_terms,
+                        show=pl.SHOW_CONV[options.spread_plots],
+                        save=pl.SAVE_CONV[options.spread_plots],
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"shift_spread_{molecule.susc.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Spread of predicted shift components "
+                            f"at {experiment.temperature:.2f} K"
+                        ),
+                        order="descending",
+                    )
 
             if options.contrib_plots in pl.PLOT_ACTIVE:
-                plot_shift_contrib(
-                    molecule,
-                    experiment,
-                    terms=_terms,
-                    show=pl.SHOW_CONV[options.contrib_plots],
-                    save=pl.SAVE_CONV[options.contrib_plots],
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"mean_components_{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Predicted shift components at {experiment.temperature:.2f} K"
-                    ),
-                    order="descending",
-                )
+                with spec.context():
+                    plot_shift_contrib(
+                        molecule,
+                        experiment,
+                        spec=spec,
+                        terms=_terms,
+                        show=pl.SHOW_CONV[options.contrib_plots],
+                        save=pl.SAVE_CONV[options.contrib_plots],
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"mean_components_{experiment.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Predicted shift components at {experiment.temperature:.2f} K"
+                        ),
+                        order="descending",
+                    )
 
                 plt.close("all")
 
@@ -472,19 +482,22 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             susc_models=susc_models,
             plot_mode=options.isoaxrho_plots,
             susc_units=options.susc_units,
+            plot_profile=options.runtime.plot_profile,
         )
 
-    plot_pred_spectrum(
-        molecule,
-        isotope=mol.nuclei[0].isotope,
-        shift_range=shift_range,
-        save=True,
-        show=False,
-        save_name=os.path.join(
-            config.project_name,
-            f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
-        ),
-    )
+    with spec.context():
+        plot_pred_spectrum(
+            molecule,
+            isotope=mol.nuclei[0].isotope,
+            shift_range=shift_range,
+            spec=spec,
+            save=True,
+            show=False,
+            save_name=os.path.join(
+                config.project_name,
+                f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
+            ),
+        )
 
     return 0
 
@@ -496,6 +509,7 @@ def fit_isoaxrho_vt(
     susc_models,
     plot_mode: pl.PlotMode,
     susc_units: str,
+    plot_profile: str,
 ) -> None:
     # Define the components to fit
     fit_component = ["iso", "ax", "rho"]
@@ -636,6 +650,9 @@ def fit_isoaxrho_vt(
     # Precompute inverse temperature for plotting
     inv_temps_fit = 1.0 / temps_fit
 
+    # Build the resolved plotting contract for this run.
+    spec = apply_profile(plot_profile)
+
     if tip_type == "fix_tip_from_ab_initio" and method == "vt_2nd_order":
         ab_series_full = build_ab_initio_chit_series(
             suscs_ab_initio,
@@ -705,27 +722,33 @@ def fit_isoaxrho_vt(
         for comp in fit_component:
             ab_series[comp] = ab_series[comp] / curie_prefactor
 
-        plot_exp_vs_ab_initio(
-            params=chiT_fit_params_cmp,
-            inv_t=ab_series["inv_t"],
-            ab_series=ab_series,
-            show=pl.SHOW_CONV[plot_mode],
-            save=pl.SAVE_CONV[plot_mode],
-            save_name=os.path.join(config.project_name, "exp_vs_ab_initio_susc"),
-            verbose=True,
-        )
+        with spec.context():
+            plot_exp_vs_ab_initio(
+                params=chiT_fit_params_cmp,
+                inv_t=ab_series["inv_t"],
+                ab_series=ab_series,
+                spec=spec,
+                show=pl.SHOW_CONV[plot_mode],
+                save=pl.SAVE_CONV[plot_mode],
+                save_name=os.path.join(config.project_name, "exp_vs_ab_initio_susc"),
+                verbose=True,
+            )
 
     # Plot chiT temperature dependence
-    plot_isoaxrho(
-        vals=chiT_reduced,
-        errs=chiT_err_reduced,
-        params=chiT_fit_params,
-        inv_t=inv_temps_fit,
-        show=pl.SHOW_CONV[plot_mode],
-        save=pl.SAVE_CONV[plot_mode],
-        save_name=os.path.join(config.project_name, "susceptibility_components_chiT"),
-        verbose=True,
-    )
+    with spec.context():
+        plot_isoaxrho(
+            vals=chiT_reduced,
+            errs=chiT_err_reduced,
+            params=chiT_fit_params,
+            inv_t=inv_temps_fit,
+            spec=spec,
+            show=pl.SHOW_CONV[plot_mode],
+            save=pl.SAVE_CONV[plot_mode],
+            save_name=os.path.join(
+                config.project_name, "susceptibility_components_chiT"
+            ),
+            verbose=True,
+        )
 
     # Write iso/ax/rho fit parameters to CSV
     out_file = os.path.join(config.project_name, "isoaxrho_fit.csv")

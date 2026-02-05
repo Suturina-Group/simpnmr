@@ -13,9 +13,8 @@ small set of size classes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
-SizeClass = Literal["small", "standard", "large"]
+from simpnmr.app.params.plot_cfg import PlotProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,42 +48,29 @@ class GlyphScale:
     series_alpha_muted: float
 
 
-SCALES: dict[SizeClass, GlyphScale] = {
-    "standard": GlyphScale(
+SCALES: dict[PlotProfile, GlyphScale] = {
+    "paper": GlyphScale(
         marker="s",
-        ms=6.5,
+        ms=5.5,
         mec="none",
         mew=0.0,
-        line_lw=1.5,
-        fit_lw=2.0,
-        elinewidth=1.5,
-        capsize=2.5,
-        band_alpha=0.15,
-        band_lw=0.0,
-        series_alpha_muted=0.65,
-    ),
-    "small": GlyphScale(
-        marker="s",
-        ms=5.8,
-        mec="none",
-        mew=0.0,
-        line_lw=1.3,
-        fit_lw=1.8,
-        elinewidth=1.3,
+        line_lw=1.2,
+        fit_lw=1.6,
+        elinewidth=1.2,
         capsize=2.0,
         band_alpha=0.15,
         band_lw=0.0,
         series_alpha_muted=0.65,
     ),
-    "large": GlyphScale(
+    "poster": GlyphScale(
         marker="s",
-        ms=7.2,
+        ms=7.0,
         mec="none",
         mew=0.0,
         line_lw=1.8,
-        fit_lw=2.2,
-        elinewidth=1.8,
-        capsize=3.0,
+        fit_lw=2.3,
+        elinewidth=1.9,
+        capsize=3.2,
         band_alpha=0.15,
         band_lw=0.0,
         series_alpha_muted=0.65,
@@ -92,17 +78,17 @@ SCALES: dict[SizeClass, GlyphScale] = {
 }
 
 
-def get_glyphs(size: SizeClass = "standard") -> GlyphScale:
-    """Return the glyph scale for a given size class.
+def get_glyphs(profile: PlotProfile = "paper") -> GlyphScale:
+    """Return the glyph scale for a given plotting profile.
 
     Args:
-        size: Size class name.
+        profile: Plotting profile name ("paper" or "poster").
 
     Returns:
-        GlyphScale for the requested size class.
+        GlyphScale for the requested profile.
 
     Raises:
-        KeyError: If an unknown size class is provided.
+        KeyError: If an unknown profile is provided.
     """
 
-    return SCALES[size]
+    return SCALES[profile]

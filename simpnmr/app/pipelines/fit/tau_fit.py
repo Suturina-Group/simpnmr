@@ -669,6 +669,9 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             verbose=True,
         )
 
+        # TODO(viz): Move all inline Matplotlib plotting from this pipeline into
+        # viz/plots and render via the unified PlotSpec style contract.
+
         # Plot experimental vs theoretical R2
         plt.figure(figsize=(6, 6))
         plt.scatter(theory_r1, exp_r1, marker="x", color="blue")

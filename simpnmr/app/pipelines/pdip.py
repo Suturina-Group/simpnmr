@@ -10,7 +10,6 @@ chemical labels, and writes results to CSV with optional plots.
 import logging
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from simpnmr.app.loaders.labels_load import load_chem_labels_from_csv
@@ -19,6 +18,7 @@ from simpnmr.core.domain.mol import Molecule
 from simpnmr.io.qc import readers as rdrs
 from simpnmr.tools.coords import xyz_fmt as xyzf
 from simpnmr.viz.plots.hfc import plot_hyperfine, plot_hyperfine_spread
+from simpnmr.viz.style.theme import apply_profile
 
 logger = logging.getLogger(__name__)
 
@@ -94,29 +94,32 @@ def run_calc_pdip(
     )
     logger.info("Point dipole dipolar tensors saved to %s", file_name)
 
-    if plot_components:
-        plot_hyperfine(
-            molecule.nuclei,
-            plot_components,
-            save=options.save,
-            show=options.show,
-            save_name=f"point_dipole_A_dip_{file_head}",
-            verbose=True,
-            window_title="Point-Dipole Hyperfines",
-        )
+    # Build the resolved plotting contract once per run.
+    spec = apply_profile(options.runtime.plot_profile)
 
-        if chem_labels is not None:
-            plot_hyperfine_spread(
+    if plot_components:
+        with spec.context():
+            plot_hyperfine(
                 molecule.nuclei,
                 plot_components,
+                spec=spec,
                 save=options.save,
                 show=options.show,
-                save_name=(f"spread_point_dipole_A_dip_{file_head}"),
+                save_name=f"point_dipole_A_dip_{file_head}",
                 verbose=True,
-                window_title="Point-Dipole Hyperfines Spread",
+                window_title="Point-Dipole Hyperfines",
             )
 
-        if options.show:
-            plt.show()
+            if chem_labels is not None:
+                plot_hyperfine_spread(
+                    molecule.nuclei,
+                    plot_components,
+                    spec=spec,
+                    save=options.save,
+                    show=options.show,
+                    save_name=f"spread_point_dipole_A_dip_{file_head}",
+                    verbose=True,
+                    window_title="Point-Dipole Hyperfines Spread",
+                )
 
     return 0

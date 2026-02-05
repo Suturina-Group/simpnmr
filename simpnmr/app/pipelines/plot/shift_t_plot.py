@@ -10,6 +10,7 @@ temperature plots.
 from simpnmr.app.loaders.exp_load import load_experiments
 from simpnmr.app.params.options import PlotShiftTdepRunOptions
 from simpnmr.viz.plots.shifts import plot_shift_tdep
+from simpnmr.viz.style.theme import apply_profile
 
 
 def run_plot_shift_tdep(
@@ -18,20 +19,26 @@ def run_plot_shift_tdep(
 ) -> int:
     experiments = load_experiments(experiment_files)
 
-    plot_shift_tdep(
-        experiments,
-        "ShiftT_vs_T",
-        show=options.show,
-        save=options.save,
-        save_name="shift_x_T_vs_T",
-    )
+    # Build the resolved plotting contract once per run.
+    spec = apply_profile(options.runtime.plot_profile)
 
-    plot_shift_tdep(
-        experiments,
-        "Shift_vs_1/T",
-        show=options.show,
-        save=options.save,
-        save_name="shift_vs_T-1",
-    )
+    with spec.context():
+        plot_shift_tdep(
+            experiments,
+            "ShiftT_vs_T",
+            spec=spec,
+            show=options.show,
+            save=options.save,
+            save_name="shift_x_T_vs_T",
+        )
+
+        plot_shift_tdep(
+            experiments,
+            "Shift_vs_1/T",
+            spec=spec,
+            show=options.show,
+            save=options.save,
+            save_name="shift_vs_T-1",
+        )
 
     return 0

@@ -9,12 +9,11 @@ hyperfine plots with optional saving and display.
 
 import os
 
-import matplotlib.pyplot as plt
-
 from simpnmr.app.loaders.labels_load import load_chem_labels_from_csv
 from simpnmr.app.loaders.mol_load import load_molecule_from_qca
 from simpnmr.app.params.options import PlotHFCRunOptions
 from simpnmr.viz.plots.hfc import plot_hyperfine, plot_hyperfine_spread
+from simpnmr.viz.style.theme import apply_profile
 
 
 def run_plot_hfc(
@@ -38,29 +37,32 @@ def run_plot_hfc(
 
     file_head = os.path.splitext(os.path.basename(calculation_data))[0]
 
+    # Build the resolved plotting contract once per run.
+    spec = apply_profile(options.runtime.plot_profile)
+
     if not (not options.show and not options.save):
-        if chem_labels is not None:
-            plot_hyperfine_spread(
+        with spec.context():
+            if chem_labels is not None:
+                plot_hyperfine_spread(
+                    molecule.nuclei,
+                    components=components,
+                    spec=spec,
+                    save=options.save,
+                    show=False,
+                    save_name=f"hyperfine_spread_{file_head}",
+                    window_title=f"Spread of hyperfine data from {calculation_data}",
+                    verbose=True,
+                )
+
+            plot_hyperfine(
                 molecule.nuclei,
                 components=components,
+                spec=spec,
                 save=options.save,
                 show=False,
-                save_name=f"hyperfine_spread_{file_head}",
-                window_title=f"Spread of hyperfine data from {calculation_data}",
+                save_name=f"hyperfine_{file_head}",
+                window_title=f"Hyperfine data from {calculation_data}",
                 verbose=True,
             )
-
-        plot_hyperfine(
-            molecule.nuclei,
-            components=components,
-            save=options.save,
-            show=False,
-            save_name=f"hyperfine_{file_head}",
-            window_title=f"Hyperfine data from {calculation_data}",
-            verbose=True,
-        )
-
-        if options.show:
-            plt.show()
 
     return 0
