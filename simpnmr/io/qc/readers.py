@@ -17,7 +17,10 @@ import numpy as np
 import numpy.typing as npt
 
 from simpnmr.core.util.text import subtitle, title
-from simpnmr.io.qc.backends.gaussian.detect import GAUSSIAN_SIGNATURE  # noqa
+from simpnmr.io.qc.backends.gaussian.detect import (  # noqa
+    GAUSSIAN_SIGNATURE,
+    is_gaussian_log,
+)
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
 from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
@@ -25,7 +28,10 @@ from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
     read_gaussian09_log_cs,
     read_gaussian16_log_cs,
 )
-from simpnmr.io.qc.backends.orca.detect import ORCA_SIGNATURE  # noqa
+from simpnmr.io.qc.backends.orca.detect import (
+    ORCA_SIGNATURE,  # noqa
+    is_orca_output,  # noqa
+)
 from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
 from simpnmr.io.qc.backends.orca.geom import (  # noqa
     read_orca5_output_xyz,
@@ -81,30 +87,18 @@ class QCStructure(ABC):
             UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_READERS: list[type[QCStructure]] = [
-            OrcaOutputStructure,
-            GaussianLogStructure,
-        ]
+        if is_orca_output(file_name):
+            return OrcaOutputStructure.read(file_name)
 
-        data = None
+        if is_gaussian_log(file_name):
+            return GaussianLogStructure.read(file_name)
 
-        with open(file_name, "r") as f:
-            for line in f:
-                for obj in SUPPORTED_READERS:
-                    if obj.COMMON_STR in line:
-                        # Load quantum chemical hyperfine data
-                        data = obj.read(file_name)
-                        break
-
-        if data is None:
-            raise UnsupportedFileError(
-                message="Unsupported QC file for geometry "
-                "reader (no known signature found)",
-                path=file_name,
-                kind="geom",
-            )
-
-        return data
+        raise UnsupportedFileError(
+            message="Unsupported QC file for geometry "
+            "reader (no known signature found)",
+            path=file_name,
+            kind="geom",
+        )
 
     "string name of filetype"
     FILETYPE: str
@@ -260,22 +254,30 @@ class QCCS(ABC):
             UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_CS_OBJ: list[type[QCCS]] = [
-            OrcaOutputCS,
-            OrcaPropertyCS,
-            Gaussian09LogCS,
-            Gaussian16LogCS,
-        ]
-
         data = None
 
+        # Stage 1: detect backend (preserve legacy semantics).
+        if is_orca_output(file_name):
+            supported: list[type[QCCS]] = [OrcaOutputCS, OrcaPropertyCS]
+        elif is_gaussian_log(file_name):
+            supported = [Gaussian09LogCS, Gaussian16LogCS]
+        else:
+            raise UnsupportedFileError(
+                message="Unsupported QC file for shielding "
+                "reader (no known signature found)",
+                path=file_name,
+                kind="shield",
+            )
+
+        # Stage 2: legacy per-reader matching within the detected backend.
         with open(file_name, "r") as f:
             for line in f:
-                for obj in SUPPORTED_CS_OBJ:
+                for obj in supported:
                     if obj.COMMON_STR in line:
-                        # Load quantum chemical hyperfine data
                         data = obj.read(file_name)
                         break
+                if data is not None:
+                    break
 
         if data is None:
             raise UnsupportedFileError(
@@ -514,26 +516,17 @@ class QCSpin(ABC):
 
     @staticmethod
     def guess_from_file(file_name: str) -> "QCSpin":
-        SUPPORTED_SPIN_OBJS: list[type["QCSpin"]] = [GaussianLogSpin, OrcaSpin]
+        if is_gaussian_log(file_name):
+            return GaussianLogSpin.read(file_name)
 
-        data = None
-        with open(file_name, "r") as f:
-            for line in f:
-                for obj in SUPPORTED_SPIN_OBJS:
-                    if obj.COMMON_STR in line:
-                        data = obj.read(file_name)
-                        break
-                if data is not None:
-                    break
-        if data is None:
-            raise UnsupportedFileError(
-                message="Unsupported QC file for spin reader "
-                "(no known signature found)",
-                path=file_name,
-                kind="spin",
-            )
+        if is_orca_output(file_name):
+            return OrcaSpin.read(file_name)
 
-        return data
+        raise UnsupportedFileError(
+            message="Unsupported QC file for spin reader (no known signature found)",
+            path=file_name,
+            kind="spin",
+        )
 
     FILETYPE: str
     COMMON_STR: str
@@ -634,22 +627,32 @@ class QCA(ABC):
             UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_A_OBJS: list[type[QCA]] = [
-            GaussianLogA,
-            Orca5OutputA,
-            Orca6OutputA,
-            Orca5PropertyA,
-        ]
-
         data = None
 
+        # Stage 1: detect backend (preserve legacy semantics).
+        if is_gaussian_log(file_name):
+            supported: list[type[QCA]] = [GaussianLogA]
+        elif is_orca_output(file_name):
+            supported = [Orca5OutputA, Orca6OutputA, Orca5PropertyA]
+        else:
+            raise UnsupportedFileError(
+                message=(
+                    "Unsupported QC file for hyperfine "
+                    "reader (no known signature found)"
+                ),
+                path=file_name,
+                kind="hfc",
+            )
+
+        # Stage 2: legacy per-reader matching within the detected backend.
         with open(file_name, "r") as f:
             for line in f:
-                for obj in SUPPORTED_A_OBJS:
+                for obj in supported:
                     if obj.COMMON_STR in line:
-                        # Load quantum chemical hyperfine data
                         data = obj.read(file_name)
                         break
+                if data is not None:
+                    break
 
         if data is None:
             raise UnsupportedFileError(
