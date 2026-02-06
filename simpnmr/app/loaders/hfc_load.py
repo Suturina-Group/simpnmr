@@ -22,6 +22,7 @@ from simpnmr.core.build.mol import (
     build_molecule_with_pdip,
 )
 from simpnmr.core.domain.mol import Molecule
+from simpnmr.io.csv.hfc import save_to_csv as save_hfc_csv
 from simpnmr.io.qc import readers as rdrs
 from simpnmr.tools.coords import xyz_fmt as xyzf
 
@@ -52,8 +53,9 @@ def load_base_molecule_from_hyperfines(config: Any, delimiter: str) -> Molecule:
         qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
 
         # Write raw calculation data to an output file for traceability.
-        qc_hyperfine_data.save_to_csv(
-            os.path.join(config.project_name, "dft_hyperfines.csv"),
+        save_hfc_csv(
+            qc_hyperfine_data,
+            file_name=os.path.join(config.project_name, "dft_hyperfines.csv"),
             verbose=True,
             delimiter=delimiter,
             comment=f"# Data taken from file {config.hyperfine_file}",

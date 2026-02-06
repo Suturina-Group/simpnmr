@@ -10,14 +10,12 @@ QC program outputs.
 
 # TODO: Refactor in progress — split this module by responsibility and layer
 
-import datetime
 import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
 import numpy.typing as npt
 
-from simpnmr import __version__
 from simpnmr.core.util.text import subtitle, title
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
@@ -662,66 +660,6 @@ class QCA(ABC):
             )
 
         return data
-
-    def save_to_csv(
-        self,
-        file_name: str = "dft_hyperfines.csv",
-        verbose: bool = True,
-        comment: str = "",
-        delimiter: str = ",",
-    ) -> None:
-        """Save hyperfine data to a CSV file.
-
-        Args:
-            file_name: Output CSV file name.
-            verbose: If True, prints the output file name.
-            comment: Optional additional comment line (including comment marker).
-            delimiter: Delimiter used in the CSV.
-        """
-
-        # Save hyperfine data to file
-        out = np.array(
-            [
-                "{}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}".format(
-                    label, iso, *tensor[0, :], *tensor[1, 1:], tensor[2, 2]
-                )
-                for iso, (label, tensor) in zip(self.a_iso.values(), self.a_dip.items())
-            ]
-        )
-
-        _comments = (
-            f"#This file was generated with SimpNMR v{__version__} on {{}}\n".format(
-                datetime.datetime.now().strftime("%H:%M:%S %d-%m-%Y ")
-            )
-        )
-
-        _comments += comment + "\n"
-
-        header = (
-            f"atom_label, "
-            f"Aiso ({self.a_units}), "
-            f"Adip_xx ({self.a_units}), "
-            f"Adip_xy ({self.a_units}), "
-            f"Adip_xz ({self.a_units}), "
-            f"Adip_yy ({self.a_units}), "
-            f"Adip_yz ({self.a_units}), "
-            f"Adip_zz ({self.a_units})"
-        )
-
-        # Save to file
-        np.savetxt(
-            file_name,
-            out,
-            delimiter=delimiter,
-            header=header,
-            fmt="%s",
-            comments=_comments,
-        )
-
-        if verbose:
-            logger.info("Raw DFT Hyperfine data written to %s", file_name)
-
-        return
 
     def __str__(self):
         """Return a human-readable representation of the parsed hyperfine data."""
