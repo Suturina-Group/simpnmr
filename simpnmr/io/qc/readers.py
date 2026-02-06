@@ -17,6 +17,7 @@ import numpy as np
 import numpy.typing as npt
 
 from simpnmr.core.util.text import subtitle, title
+from simpnmr.io.qc.backends.gaussian.detect import GAUSSIAN_SIGNATURE  # noqa
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
 from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
@@ -24,6 +25,7 @@ from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
     read_gaussian09_log_cs,
     read_gaussian16_log_cs,
 )
+from simpnmr.io.qc.backends.orca.detect import ORCA_SIGNATURE  # noqa
 from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
 from simpnmr.io.qc.backends.orca.geom import (  # noqa
     read_orca5_output_xyz,
@@ -181,7 +183,7 @@ class GaussianLogStructure(QCStructure):
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = "Gaussian(R)"
+    COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -199,7 +201,7 @@ class OrcaOutputStructure(QCStructure):
 
     FILETYPE = "Orca OUTPUT"
 
-    COMMON_STR = "* O   R   C   A *"
+    COMMON_STR = ORCA_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -404,7 +406,7 @@ class OrcaOutputCS(QCCS):
 
     FILETYPE = "Orca OUTPUT"
 
-    COMMON_STR = "* O   R   C   A *"
+    COMMON_STR = ORCA_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -569,7 +571,7 @@ class GaussianLogSpin(QCSpin):
     """
 
     FILETYPE = "Gaussian LOG"
-    COMMON_STR = "Gaussian(R)"
+    COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str) -> "GaussianLogSpin":
@@ -584,7 +586,7 @@ class OrcaSpin(QCSpin):
     """
 
     FILETYPE = "Orca OUTPUT"
-    COMMON_STR = "* O   R   C   A *"
+    COMMON_STR = ORCA_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str) -> "OrcaSpin":
@@ -783,7 +785,7 @@ class GaussianLogA(QCA):
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = "Gaussian(R)"
+    COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
