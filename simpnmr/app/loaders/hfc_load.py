@@ -23,7 +23,7 @@ from simpnmr.core.build.mol import (
 )
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.io.csv.hfc import save_to_csv as save_hfc_csv
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.tools.coords import xyz_fmt as xyzf
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 from simpnmr.core.build import mol
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.io.csv.mol import read_molecule_csv
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 
 
 def load_molecule_from_qca(

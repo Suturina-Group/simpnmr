@@ -37,7 +37,7 @@ from simpnmr.io.csv import fit
 from simpnmr.io.csv.mol import save_molecule_to_csv
 from simpnmr.io.csv.susc import save_susc
 from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.io.xyz import xyz_write
 
 # Visualisation

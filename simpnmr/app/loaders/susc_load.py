@@ -16,7 +16,7 @@ import numpy as np
 from simpnmr.core.build.susc import susc_from_orca_xt
 from simpnmr.core.domain.tensor import Susceptibility
 from simpnmr.io.csv.susc import read_susceptibilities_csv
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 
 logger = logging.getLogger(__name__)
 

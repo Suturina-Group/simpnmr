@@ -15,7 +15,7 @@ import numpy as np
 from simpnmr.app.loaders.labels_load import load_chem_labels_from_csv
 from simpnmr.app.params.options import CalcPdipRunOptions
 from simpnmr.core.domain.mol import Molecule
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.tools.coords import xyz_fmt as xyzf
 from simpnmr.viz.plots.hfc import plot_hyperfine, plot_hyperfine_spread
 from simpnmr.viz.style.theme import apply_profile

@@ -36,7 +36,7 @@ from simpnmr.io.csv import relax
 from simpnmr.io.csv.mol import save_molecule_to_csv
 from simpnmr.io.csv.spec import read_spectrum
 from simpnmr.io.csv.susc import save_susc
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.io.xyz import xyz_write
 
 # Tools

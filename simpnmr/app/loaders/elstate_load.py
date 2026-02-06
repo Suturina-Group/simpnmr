@@ -12,7 +12,7 @@ import os
 from typing import Optional
 
 from simpnmr.core.build.elstate import build_electronic_state
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 
 
 def load_electronic_state(

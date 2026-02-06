@@ -18,7 +18,7 @@ from simpnmr.io.xyz import xyz_write
 from simpnmr.tools.coords import xyz_fmt
 
 from ...cfg import config as inps
-from ...io.qc import readers as rdrs
+from ...io.qc import gateway as rdrs
 
 logger = logging.getLogger(__name__)
 

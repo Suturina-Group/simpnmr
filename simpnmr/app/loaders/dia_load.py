@@ -13,7 +13,7 @@ from typing import Optional
 import numpy as np
 
 from simpnmr.io.csv.csv_util import read_csv_safe
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.tools.coords import xyz_fmt as xyzf
 
 

@@ -27,7 +27,7 @@ from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.relaxation import gueron, sbm
 from simpnmr.core.util.strings import remove_numbers
 from simpnmr.io.csv import relax
-from simpnmr.io.qc import readers as rdrs
+from simpnmr.io.qc import gateway as rdrs
 from simpnmr.io.xyz import xyz_write
 
 logger = logging.getLogger(__name__)
