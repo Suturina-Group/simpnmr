@@ -10,6 +10,8 @@ implemented in `simpnmr.io.qc.readers`.
 from __future__ import annotations
 
 GAUSSIAN_SIGNATURE = "Gaussian(R)"
+GAUSSIAN_09_SIGNATURE = "Gaussian(R) 09 program"
+GAUSSIAN_16_SIGNATURE = "Gaussian(R) 16 program"
 
 
 def is_gaussian_log(file_name: str) -> bool:
@@ -28,6 +30,36 @@ def is_gaussian_log(file_name: str) -> bool:
     with open(file_name, "r") as f:
         for line in f:
             if GAUSSIAN_SIGNATURE in line:
+                return True
+
+    return False
+
+
+def is_gaussian_09(file_name: str) -> bool:
+    """Return whether the provided file looks like a Gaussian 09 log.
+
+    This mirrors the legacy reader behavior based on the
+    'Gaussian(R) 09 program' marker.
+    """
+
+    with open(file_name, "r") as f:
+        for line in f:
+            if GAUSSIAN_09_SIGNATURE in line:
+                return True
+
+    return False
+
+
+def is_gaussian_16(file_name: str) -> bool:
+    """Return whether the provided file looks like a Gaussian 16 log.
+
+    This mirrors the legacy reader behavior based on the
+    'Gaussian(R) 16 program' marker.
+    """
+
+    with open(file_name, "r") as f:
+        for line in f:
+            if GAUSSIAN_16_SIGNATURE in line:
                 return True
 
     return False

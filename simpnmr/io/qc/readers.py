@@ -18,7 +18,11 @@ import numpy.typing as npt
 
 from simpnmr.core.util.text import subtitle, title
 from simpnmr.io.qc.backends.gaussian.detect import (  # noqa
+    GAUSSIAN_09_SIGNATURE,
+    GAUSSIAN_16_SIGNATURE,
     GAUSSIAN_SIGNATURE,
+    is_gaussian_09,
+    is_gaussian_16,
     is_gaussian_log,
 )
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
@@ -29,8 +33,13 @@ from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
     read_gaussian16_log_cs,
 )
 from simpnmr.io.qc.backends.orca.detect import (
+    ORCA_A5_SIGNATURE,  # noqa
+    ORCA_A6_SIGNATURE,  # noqa
     ORCA_SIGNATURE,  # noqa
+    is_orca_a5_output,  # noqa
+    is_orca_a6_output,  # noqa
     is_orca_output,  # noqa
+    is_orca_property,  # noqa
 )
 from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
 from simpnmr.io.qc.backends.orca.geom import (  # noqa
@@ -242,26 +251,22 @@ class QCCS(ABC):
 
     @staticmethod
     def guess_from_file(file_name: str) -> "QCCS":
-        """Guess a compatible shielding reader and parse the file.
-
-        Args:
-            file_name: Path to the file to examine.
-
-        Returns:
-            QCCS: Parsed chemical shielding object.
-
-        Raises:
-            UnsupportedFileError: If no supported reader matches the file content.
-        """
-
-        data = None
-
-        # Stage 1: detect backend (preserve legacy semantics).
+        # Stage 1: detect backend.
         if is_orca_output(file_name):
-            supported: list[type[QCCS]] = [OrcaOutputCS, OrcaPropertyCS]
-        elif is_gaussian_log(file_name):
-            supported = [Gaussian09LogCS, Gaussian16LogCS]
-        else:
+            # ORCA: distinguish PROPERTY vs OUTPUT using the legacy marker.
+            if is_orca_property(file_name):
+                return OrcaPropertyCS.read(file_name)
+
+            return OrcaOutputCS.read(file_name)
+
+        if is_gaussian_log(file_name):
+            # Gaussian: distinguish 09 vs 16 using backend detect helpers.
+            if is_gaussian_16(file_name):
+                return Gaussian16LogCS.read(file_name)
+
+            if is_gaussian_09(file_name):
+                return Gaussian09LogCS.read(file_name)
+
             raise UnsupportedFileError(
                 message="Unsupported QC file for shielding "
                 "reader (no known signature found)",
@@ -269,25 +274,12 @@ class QCCS(ABC):
                 kind="shield",
             )
 
-        # Stage 2: legacy per-reader matching within the detected backend.
-        with open(file_name, "r") as f:
-            for line in f:
-                for obj in supported:
-                    if obj.COMMON_STR in line:
-                        data = obj.read(file_name)
-                        break
-                if data is not None:
-                    break
-
-        if data is None:
-            raise UnsupportedFileError(
-                message="Unsupported QC file for shielding "
-                "reader (no known signature found)",
-                path=file_name,
-                kind="shield",
-            )
-
-        return data
+        raise UnsupportedFileError(
+            message="Unsupported QC file for shielding "
+            "reader (no known signature found)",
+            path=file_name,
+            kind="shield",
+        )
 
     def __str__(self):
         """Return a human-readable representation of the parsed shielding data."""
@@ -471,7 +463,7 @@ class Gaussian16LogCS(QCCS):
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = "Gaussian(R) 16 program"
+    COMMON_STR = GAUSSIAN_16_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -492,7 +484,7 @@ class Gaussian09LogCS(QCCS):
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = "Gaussian(R) 09 program"
+    COMMON_STR = GAUSSIAN_09_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -627,14 +619,21 @@ class QCA(ABC):
             UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        data = None
-
-        # Stage 1: detect backend (preserve legacy semantics).
         if is_gaussian_log(file_name):
-            supported: list[type[QCA]] = [GaussianLogA]
-        elif is_orca_output(file_name):
-            supported = [Orca5OutputA, Orca6OutputA, Orca5PropertyA]
-        else:
+            return GaussianLogA.read(file_name)
+
+        if is_orca_output(file_name):
+            # ORCA: prefer explicit PROPERTY marker when present.
+            if is_orca_property(file_name):
+                return Orca5PropertyA.read(file_name)
+
+            # ORCA OUTPUT: distinguish 5 vs 6 using legacy banner markers.
+            if is_orca_a6_output(file_name):
+                return Orca6OutputA.read(file_name)
+
+            if is_orca_a5_output(file_name):
+                return Orca5OutputA.read(file_name)
+
             raise UnsupportedFileError(
                 message=(
                     "Unsupported QC file for hyperfine "
@@ -644,27 +643,13 @@ class QCA(ABC):
                 kind="hfc",
             )
 
-        # Stage 2: legacy per-reader matching within the detected backend.
-        with open(file_name, "r") as f:
-            for line in f:
-                for obj in supported:
-                    if obj.COMMON_STR in line:
-                        data = obj.read(file_name)
-                        break
-                if data is not None:
-                    break
-
-        if data is None:
-            raise UnsupportedFileError(
-                message=(
-                    "Unsupported QC file for hyperfine "
-                    "reader (no known signature found)"
-                ),
-                path=file_name,
-                kind="hfc",
-            )
-
-        return data
+        raise UnsupportedFileError(
+            message=(
+                "Unsupported QC file for hyperfine reader (no known signature found)"
+            ),
+            path=file_name,
+            kind="hfc",
+        )
 
     def __str__(self):
         """Return a human-readable representation of the parsed hyperfine data."""
@@ -821,9 +806,7 @@ class Orca5OutputA(QCA):
 
     FILETYPE = "Orca OUTPUT"
 
-    COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"
-    )
+    COMMON_STR = ORCA_A5_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -854,9 +837,7 @@ class Orca6OutputA(QCA):
 
     FILETYPE = "Orca OUTPUT"
 
-    COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#"
-    )
+    COMMON_STR = ORCA_A6_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
@@ -887,9 +868,7 @@ class Orca5PropertyA(QCA):
 
     FILETYPE = "Orca PROPERTY"
 
-    COMMON_STR = (
-        "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"
-    )
+    COMMON_STR = ORCA_A5_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
