@@ -556,6 +556,9 @@ def fit_isoaxrho_vt(
             np.diag(susc_ab_initio.eigvecs.T @ g_tensor @ susc_ab_initio.eigvecs)
         )
 
+        # Precompute g^2 invariants in the chi eigenframe for analytic chi(T) evaluation
+        g_sq = vt.compute_g_sq_components(g_rot_diag)
+
         # Compute the axial and rhombic parts of the effective Hamiltonian tensor (J)
         D_J, E_J = vt.calculate_E_D_components(eff_H_rot)
 
@@ -565,7 +568,7 @@ def fit_isoaxrho_vt(
         # Compute analytic Iso/Ax/Rho components
         for comp in fit_component:
             analytic_chi_ref = vt.compute_analytic_component(
-                comp, susc_ab_initio.temperature, g_rot_diag, D_J, E_J, spin
+                comp, susc_ab_initio.temperature, g_sq, D_J, E_J, spin
             )
             tip_ref = vt.compute_tip_correction(
                 getattr(susc_ab_initio, comp_to_attr[comp]),
@@ -705,6 +708,7 @@ def fit_isoaxrho_vt(
         with spec.context():
             plot_exp_vs_ab_initio(
                 params=chiT_fit_params_cmp,
+                g_sq=g_sq,
                 inv_t=ab_series["inv_t"],
                 ab_series=ab_series,
                 spec=spec,

@@ -326,15 +326,14 @@ def compute_chit_high_t_limit(
 def compute_analytic_component(
     chi_component: str,
     t_max: float,
-    g_tensor: np.ndarray,
+    g_sq: dict[str, float],
     D_J: float,
     E_J: float,
     spin: float,
 ) -> float:
-    # Compute g-tensor components
-    g_sq_iso = (g_tensor[0, 0] ** 2 + g_tensor[1, 1] ** 2 + g_tensor[2, 2] ** 2) / 3.0
-    g_sq_ax = 1.5 * (g_tensor[2, 2] ** 2 - g_sq_iso)
-    g_sq_rh = (g_tensor[0, 0] ** 2 - g_tensor[1, 1] ** 2) / 2.0
+    g_sq_iso = float(g_sq["g_sq_iso"])
+    g_sq_ax = float(g_sq["g_sq_ax"])
+    g_sq_rh = float(g_sq["g_sq_rh"])
 
     # Compute Spin coefficient
     f_S = (2 * spin - 1) * (2 * spin + 3)
@@ -363,6 +362,44 @@ def compute_analytic_component(
         )
 
     return analytic
+
+
+def compute_g_sq_components(g_tensor: np.ndarray) -> dict[str, float]:
+    """Compute g² invariants for susceptibility components.
+
+    This helper evaluates the squared g-tensor invariants corresponding to the
+    isotropic, axial, and rhombic susceptibility components. It assumes that
+    the g-tensor is expressed in its working principal-axis basis, i.e. the
+    diagonal elements correspond to (g_x, g_y, g_z).
+
+    The returned quantities are defined as:
+        g_sq_iso = (g_x² + g_y² + g_z²) / 3
+        g_sq_ax  = 3/2 · (g_z² − g_sq_iso)
+        g_sq_rh  = (g_x² − g_y²) / 2
+
+    These invariants are used in analytic high-temperature expansions of the
+    magnetic susceptibility.
+
+    Args:
+        g_tensor: 3×3 g-tensor matrix in the principal-axis representation.
+
+    Returns:
+        dict[str, float]:
+            A mapping with keys `g_sq_iso`, `g_sq_ax`, `g_sq_rh`.
+    """
+    g_x2 = float(g_tensor[0, 0] ** 2)
+    g_y2 = float(g_tensor[1, 1] ** 2)
+    g_z2 = float(g_tensor[2, 2] ** 2)
+
+    g_sq_iso = (g_x2 + g_y2 + g_z2) / 3.0
+    g_sq_ax = 1.5 * (g_z2 - g_sq_iso)
+    g_sq_rh = (g_x2 - g_y2) / 2.0
+
+    return {
+        "g_sq_iso": g_sq_iso,
+        "g_sq_ax": g_sq_ax,
+        "g_sq_rh": g_sq_rh,
+    }
 
 
 def calculate_E_D_components(

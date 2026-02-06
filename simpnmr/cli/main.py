@@ -15,6 +15,7 @@ from simpnmr.app.params.options import RuntimeSettings
 from simpnmr.app.params.settings import apply_runtime_settings
 from simpnmr.cfg import config as cfg
 from simpnmr.cli.set_logging import setup_logging
+from simpnmr.io.qc.errors import QCError
 
 logger = logging.getLogger(__name__)
 
@@ -626,6 +627,10 @@ def interface(argv=None):
 
     try:
         raise SystemExit(args.func(args, runtime))
+
+    except QCError as err:
+        logger.error("%s", err)
+        raise SystemExit(1) from None
 
     except ValueError as err:
         logger.error("%s", err)

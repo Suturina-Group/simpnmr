@@ -12,18 +12,42 @@ QC program outputs.
 
 import datetime
 import logging
-import sys
 from abc import ABC, abstractmethod
 
 import numpy as np
-import numpy.linalg as la
 import numpy.typing as npt
 
-from simpnmr.core.util.strings import remove_letters, remove_numbers
+from simpnmr import __version__
 from simpnmr.core.util.text import subtitle, title
+from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
+from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
+from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
+from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
+    read_gaussian09_log_cs,
+    read_gaussian16_log_cs,
+)
+from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
+from simpnmr.io.qc.backends.orca.geom import (  # noqa
+    read_orca5_output_xyz,
+    read_orca5_property_xyz,
+)
+from simpnmr.io.qc.backends.orca.gtensor import read_orca_g_tensor  # noqa
+from simpnmr.io.qc.backends.orca.ham import read_eff_hamiltonian_tensor  # noqa
+from simpnmr.io.qc.backends.orca.hfc import (  # noqa
+    read_orca5_output_a_tensors,
+    read_orca5_property_a_tensors,
+    read_orca6_output_a_tensors,
+)
+from simpnmr.io.qc.backends.orca.shield import (  # noqa
+    read_orca5_output_cs,
+    read_orca5_property_cs,
+)
+from simpnmr.io.qc.backends.orca.susc import read_orca_susceptibility  # noqa
+from simpnmr.io.qc.errors import (
+    ReaderContractError,
+    UnsupportedFileError,
+)
 from simpnmr.tools.coords import xyz_fmt as xyzf
-
-from ...__version__ import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -44,20 +68,20 @@ class QCStructure(ABC):
         return
 
     @staticmethod
-    def guess_from_file(file_name: str) -> "QCCS":
+    def guess_from_file(file_name: str) -> "QCStructure":
         """Guess a compatible structure reader and parse the file.
 
         Args:
             file_name: Path to the file to examine.
 
         Returns:
-            QCCS: Parsed structure object.
+            QCStructure: Parsed structure object.
 
         Raises:
-            SystemExit: If no supported reader matches the file content.
+            UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_READERS: list[QCA] = [
+        SUPPORTED_READERS: list[type[QCStructure]] = [
             OrcaOutputStructure,
             GaussianLogStructure,
         ]
@@ -73,7 +97,12 @@ class QCStructure(ABC):
                         break
 
         if data is None:
-            sys.exit(f"Cannot find data in {file_name}")
+            raise UnsupportedFileError(
+                message="Unsupported QC file for geometry "
+                "reader (no known signature found)",
+                path=file_name,
+                kind="geom",
+            )
 
         return data
 
@@ -120,10 +149,16 @@ class QCStructure(ABC):
         for attribute in attributes:
             try:
                 getattr(instance, attribute)
-            except AttributeError:
-                sys.exit(
-                    "ERROR: Attribute {} is missing from {}".format(attribute, cls)
-                )
+            except AttributeError as e:
+                raise ReaderContractError(
+                    message=(
+                        f"Reader contract violation: '{cls.__name__}' is missing "
+                        f"required attribute '{attribute}'"
+                    ),
+                    path=file_name,
+                    kind="geom",
+                    details={"class": cls.__name__, "attribute": attribute},
+                ) from e
 
         return instance
 
@@ -222,10 +257,10 @@ class QCCS(ABC):
             QCCS: Parsed chemical shielding object.
 
         Raises:
-            SystemExit: If no supported reader matches the file content.
+            UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_CS_OBJ: list[QCA] = [
+        SUPPORTED_CS_OBJ: list[type[QCCS]] = [
             OrcaOutputCS,
             OrcaPropertyCS,
             Gaussian09LogCS,
@@ -243,7 +278,12 @@ class QCCS(ABC):
                         break
 
         if data is None:
-            sys.exit(f"Cannot find data in {file_name}")
+            raise UnsupportedFileError(
+                message="Unsupported QC file for shielding "
+                "reader (no known signature found)",
+                path=file_name,
+                kind="shield",
+            )
 
         return data
 
@@ -332,10 +372,16 @@ class QCCS(ABC):
         for attribute in attributes:
             try:
                 getattr(instance, attribute)
-            except AttributeError:
-                sys.exit(
-                    "ERROR: Attribute {} is missing from {}".format(attribute, cls)
-                )
+            except AttributeError as e:
+                raise ReaderContractError(
+                    message=(
+                        f"Reader contract violation: '{cls.__name__}' is missing "
+                        f"required attribute '{attribute}'"
+                    ),
+                    path=file_name,
+                    kind="shield",
+                    details={"class": cls.__name__, "attribute": attribute},
+                ) from e
 
         return instance
 
@@ -480,7 +526,12 @@ class QCSpin(ABC):
                 if data is not None:
                     break
         if data is None:
-            sys.exit(f"Cannot find spin data in {file_name}")
+            raise UnsupportedFileError(
+                message="Unsupported QC file for spin reader "
+                "(no known signature found)",
+                path=file_name,
+                kind="spin",
+            )
 
         return data
 
@@ -496,8 +547,16 @@ class QCSpin(ABC):
         for attribute in ["FILETYPE", "COMMON_STR", "file_name", "S", "multiplicity"]:
             try:
                 getattr(instance, attribute)
-            except AttributeError:
-                sys.exit(f"Attribute {attribute} is missing from {cls}")
+            except AttributeError as e:
+                raise ReaderContractError(
+                    message=(
+                        f"Reader contract violation: '{cls.__name__}' is missing "
+                        f"required attribute '{attribute}'"
+                    ),
+                    path=file_name,
+                    kind="spin",
+                    details={"class": cls.__name__, "attribute": attribute},
+                ) from e
         return instance
 
     @classmethod
@@ -572,15 +631,17 @@ class QCA(ABC):
             QCA: Parsed hyperfine (A-tensor) object.
 
         Raises:
-            SystemExit: If no supported reader matches the file content.
+            UnsupportedFileError: If no supported reader matches the file content.
         """
 
-        SUPPORTED_A_OBJS: list[QCA] = [
+        SUPPORTED_A_OBJS: list[type[QCA]] = [
             GaussianLogA,
             Orca5OutputA,
             Orca6OutputA,
             Orca5PropertyA,
         ]
+
+        data = None
 
         with open(file_name, "r") as f:
             for line in f:
@@ -591,7 +652,14 @@ class QCA(ABC):
                         break
 
         if data is None:
-            sys.exit(f"Cannot find data in {file_name}")
+            raise UnsupportedFileError(
+                message=(
+                    "Unsupported QC file for hyperfine "
+                    "reader (no known signature found)"
+                ),
+                path=file_name,
+                kind="hfc",
+            )
 
         return data
 
@@ -743,10 +811,16 @@ class QCA(ABC):
         for attribute in attributes:
             try:
                 getattr(instance, attribute)
-            except AttributeError:
-                sys.exit(
-                    "ERROR: Attribute {} is missing from {}".format(attribute, cls)
-                )
+            except AttributeError as e:
+                raise ReaderContractError(
+                    message=(
+                        f"Reader contract violation: '{cls.__name__}' is missing "
+                        f"required attribute '{attribute}'"
+                    ),
+                    path=file_name,
+                    kind="hfc",
+                    details={"class": cls.__name__, "attribute": attribute},
+                ) from e
 
         return instance
 
@@ -795,146 +869,6 @@ class GaussianLogA(QCA):
         a_units = "MHz"
 
         return cls(file_name, labels, coords, a_iso, a_dip, a_units)
-
-
-def read_gaussian_log_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:
-    """Read atomic labels and coordinates from a Gaussian .log file.
-
-    Args:
-        file_name: Path to the Gaussian log file.
-
-    Returns:
-        A tuple `(labels, coords)` where:
-            * `labels` is an array of atomic symbols with length `n_atoms`.
-            * `coords` is an array of shape `(n_atoms, 3)` with coordinates in Å.
-    """
-
-    # Read number of atoms
-    with open(file_name, "r") as f:
-        for line in f:
-            if "NAtoms=" in line:
-                spl_line = line.split()
-                n_atoms = int(spl_line[spl_line.index("NAtoms=") + 1])
-                break
-
-    # Get coordinates
-    headers = ["Standard orientation:", "Input orientation:"]
-    with open(file_name, "r") as f:
-        for line in f:
-            if any([he in line for he in headers]):
-                coords = []
-                a_nums = []
-
-                # Skip header
-                for _ in range(4):
-                    line = next(f)
-
-                for _ in range(n_atoms):
-                    line = next(f)
-                    coords.append([float(coord) for coord in line.split()[3:]])
-                    a_nums.append(int(line.split()[1]))
-
-    f.close()
-
-    # Convert atomic numbers to atomic labels
-    labels = xyzf.num_to_lab(a_nums)
-
-    labels = np.asarray(labels)
-    coords = np.asarray(coords)
-
-    return labels, coords
-
-
-def read_gaussian_log_spin(file_name: str) -> int:
-    """Read the spin multiplicity (2S+1) from a Gaussian .log file.
-
-    Args:
-        file_name: Path to the Gaussian log file.
-
-    Returns:
-        Spin multiplicity (2S+1).
-    """
-
-    # Read number of atoms
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Multiplicity =" in line:
-                mult = int(line.split()[-1])
-
-    return mult
-
-
-def read_gaussian_log_a_tensors(file_name: str) -> tuple[npt.NDArray, npt.NDArray]:
-    """Extract isotropic and dipolar hyperfine (A) tensors from a Gaussian log.
-
-    Args:
-        file_name: Path to the Gaussian log file.
-
-    Returns:
-        A tuple `(a_iso, a_dip)` where:
-            * `a_iso` is an array of shape `(n_atoms,)` with isotropic values in MHz.
-            * `a_dip` is an array of shape `(n_atoms, 3, 3)` with dipolar
-            tensors in MHz.
-    """
-
-    # Read number of atoms
-    with open(file_name, "r") as f:
-        for line in f:
-            if "NAtoms=" in line:
-                spl_line = line.split()
-                n_atoms = int(spl_line[spl_line.index("NAtoms=") + 1])
-                break
-
-    a_iso = np.zeros(n_atoms)
-
-    # Read isotropic part
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Isotropic Fermi Contact Couplings" in line:
-                line = next(f)
-                for it in range(n_atoms):
-                    line = next(f)
-                    a_iso[it] = float(line.split()[3])  # MHz
-
-    a_dip = np.zeros([n_atoms, 3, 3])
-    # Read traceless tensor as eigenvalues and eigenvectors
-    track = 0
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Anisotropic Spin Dipole Couplings" in line:
-                track += 1
-                # Make sure in spin density part!
-            if "Anisotropic Spin Dipole Couplings" in line and track == 2:
-                line = next(f)
-                line = next(f)
-                line = next(f)
-                line = next(f)
-                for it in range(n_atoms):
-                    line = next(f)
-                    val_1 = float(line.split()[2])  # MHz
-                    vecs_1 = [float(val) for val in line.split()[-3:]]
-                    line = next(f)
-                    val_2 = float(line.split()[4])  # MHz
-                    vecs_2 = [float(val) for val in line.split()[-3:]]
-                    line = next(f)
-                    val_3 = float(line.split()[2])  # MHz
-                    vecs_3 = [float(val) for val in line.split()[-3:]]
-                    vals = np.array([val_1, val_2, val_3])
-                    vecs = np.array([vecs_1, vecs_2, vecs_3]).T
-
-                    # Transform back to coordinate frame in MHz
-                    a_dip[it, :, :] = vecs @ np.diag(vals) @ la.inv(vecs)
-                    line = next(f)
-
-    if track != 2:
-        logger.warning(
-            (
-                "Cannot find Dipolar Hyperfine Tensor in log file \n"
-                "Check prop=epr is in routecard!"
-            )
-        )
-
-    return a_iso, a_dip
 
 
 class Orca5OutputA(QCA):
@@ -1003,179 +937,6 @@ class Orca6OutputA(QCA):
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
 
 
-def read_orca5_output_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:
-    """Read the final Cartesian coordinates from an ORCA output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-
-    Returns:
-        A tuple `(labels, coords)` where:
-            * `labels` is an array of atomic symbols (no indices).
-            * `coords` is an array of shape `(n_atoms, 3)` in Å.
-    """
-
-    labels, coords = [], []
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
-                labels, coords = [], []
-                line = next(f)
-                line = next(f)
-                while len(line.split()):
-                    labels.append(line.split()[0])
-                    coords.append(line.split()[1:])
-                    line = next(f)
-
-    coords = [[float(trio[0]), float(trio[1]), float(trio[2])] for trio in coords]
-
-    labels = np.array(labels)
-    coords = np.array(coords)
-
-    return labels, coords
-
-
-def read_orca6_output_a_tensors(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, npt.NDArray]]:
-    """Extract hyperfine (A) tensors from an ORCA 6 output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-
-    Returns:
-        A tuple `(a_iso, a_dip)` where:
-            * `a_iso` maps atom labels to isotropic couplings in MHz.
-            * `a_dip` maps atom labels to 3x3 traceless dipolar tensors in MHz.
-    """
-
-    # Find how many nuclei have been calculated
-    with open(file_name, "r") as f:
-        for line in f:
-            if "ELECTRIC AND MAGNETIC HYPERFINE STRUCTURE" in line:
-                n_calcd = int(line.split()[5][1:])
-
-    a_iso = {}
-    a_dip = {}
-
-    # Read hyperfine data
-    with open(file_name, "r") as f:
-        for line in f:
-            if "ELECTRIC AND MAGNETIC HYPERFINE STRUCTURE" in line:
-                for _ in range(n_calcd):
-                    while "Nucleus" not in line:
-                        line = next(f)
-                    tmp = line.split()[1]
-                    label = "{}{}".format(remove_numbers(tmp), remove_letters(tmp))
-                    for _ in range(8):
-                        line = next(f)
-
-                    # Raw matrix in MHz
-                    row_1 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_2 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_3 = [float(val) for val in line.split()]
-
-                    full = np.array([row_1, row_2, row_3])
-
-                    a_iso[label] = 1 / 3 * np.trace(full)
-                    a_dip[label] = full - np.eye(3) * a_iso[label]
-
-    return a_iso, a_dip
-
-
-def read_orca5_output_a_tensors(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, npt.NDArray]]:
-    """Extract hyperfine (A) tensors from an ORCA 5 output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-
-    Returns:
-        A tuple `(a_iso, a_dip)` where:
-            * `a_iso` maps atom labels to isotropic couplings in MHz.
-            * `a_dip` maps atom labels to 3x3 traceless dipolar tensors in MHz.
-    """
-
-    # Find how many nuclei have been calculated
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Number of nuclei for epr/nmr" in line:
-                n_calcd = int(line.split()[-1])
-
-    a_iso = {}
-    a_dip = {}
-
-    # Read hyperfine data
-    with open(file_name, "r") as f:
-        for line in f:
-            if "ELECTRIC AND MAGNETIC HYPERFINE STRUCTURE" in line:
-                line = next(f)
-                line = next(f)
-                line = next(f)
-                for it in range(n_calcd):
-                    line = next(f)
-                    tmp = line.split()[1]
-                    label = "{}{}".format(remove_numbers(tmp), remove_letters(tmp))
-                    for _ in range(5):
-                        line = next(f)
-
-                    # Raw matrix in MHz
-                    row_1 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_2 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_3 = [float(val) for val in line.split()]
-
-                    for _ in range(5):
-                        line = next(f)
-                    a_iso[label] = float(line.split()[-1])
-
-                    for _ in range(9):
-                        line = next(f)
-
-                    full = np.array([row_1, row_2, row_3])
-
-                    a_dip[label] = full - np.eye(3) * a_iso[label]
-
-    return a_iso, a_dip
-
-
-def read_orca5_output_cs(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, npt.NDArray]]:
-    """Extract chemical shielding values from an ORCA output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-
-    Returns:
-        A tuple `(cs_iso, cs_aniso)` where:
-            * `cs_iso` maps atom labels to isotropic shielding in ppm.
-            * `cs_aniso` maps atom labels to anisotropic shielding in ppm.
-    """
-
-    cs_iso = {}
-    cs_aniso = {}
-    # Read Chemical Shielding data
-    with open(file_name, "r") as f:
-        for line in f:
-            if "CHEMICAL SHIELDING SUMMARY (ppm)" in line:
-                for _ in range(6):
-                    line = next(f)
-
-                while len(line.lstrip().rstrip()):
-                    label = "{}{}".format(line.split()[1], int(line.split()[0]))
-                    cs_iso[label] = float(line.split()[2])
-                    cs_aniso[label] = float(line.split()[3])
-                    line = next(f)
-
-    return cs_iso, cs_aniso
-
-
 class Orca5PropertyA(QCA):
     """
     A Tensor object for Orca PROPERTY files
@@ -1206,356 +967,3 @@ class Orca5PropertyA(QCA):
         a_units = "MHz"
 
         return cls(file_name, new_labels, coords, a_iso, a_dip, a_units)
-
-
-def read_orca5_property_xyz(file_name: str) -> tuple[npt.NDArray[np.str_], npt.NDArray]:
-    """Read the final Cartesian coordinates from an ORCA property file.
-
-    Args:
-        file_name: Path to the ORCA property file.
-
-    Returns:
-        A tuple `(labels, coords)` where:
-            * `labels` is an array of atom labels with indices.
-            * `coords` is an array of shape `(n_atoms, 3)` in Å.
-    """
-
-    labels, coords = [], []
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "!GEOMETRY!" in line:
-                line = next(f)
-                n_atoms = int(line.split()[-1])
-                for _ in range(2):
-                    line = next(f)
-                for _ in range(n_atoms):
-                    line = next(f)
-                    labels.append("{}{}".format(line.split()[1], line.split()[0]))
-                    coords.append(line.split()[2:])
-
-    coords = [[float(trio[0]), float(trio[1]), float(trio[2])] for trio in coords]
-
-    labels = np.array(labels)
-    coords = np.array(coords)
-
-    return labels, coords
-
-
-def read_orca5_property_a_tensors(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, np.ndarray]]:
-    """Read hyperfine coupling tensors from an ORCA property file.
-
-    Args:
-        file_name: Path to the ORCA property file.
-
-    Returns:
-        A tuple `(a_iso, a_dip)` where:
-            * `a_iso` maps atom labels to isotropic couplings in MHz.
-            * `a_dip` maps atom labels to 3x3 traceless dipolar tensors in MHz.
-    """
-
-    a_dip = {}
-    a_iso = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "EPRNMR_ATensor" in line:
-                while "Number of stored nuclei" not in line:
-                    line = next(f)
-                n_calcd = int(line.split()[4])
-                while "Nucleus:" not in line:
-                    line = next(f)
-                for _ in range(n_calcd):
-                    label = "{}{}".format(line.split()[2], line.split()[1])
-                    for _ in range(6):
-                        line = next(f)
-                    # Raw values
-                    row_1 = [float(val) for val in line.split()[1:]]
-                    line = next(f)
-                    row_2 = [float(val) for val in line.split()[1:]]
-                    line = next(f)
-                    row_3 = [float(val) for val in line.split()[1:]]
-                    a_dip[label] = np.array([row_1, row_2, row_3])
-                    for _ in range(9):
-                        line = next(f)
-                    # Isotropic value
-                    a_iso[label] = float(line.split()[-1])
-                    a_dip[label] -= np.eye(3) * a_iso[label]
-                    line = next(f)
-
-    return a_iso, a_dip
-
-
-def read_orca5_property_cs(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, np.ndarray]]:
-    """Read chemical shielding data from an ORCA property file.
-
-    Args:
-        file_name: Path to the ORCA property file.
-
-    Returns:
-        A tuple `(cs_iso, cs_aniso)` where:
-            * `cs_iso` maps atom labels to isotropic shielding in ppm.
-            * `cs_aniso` maps atom labels to anisotropic shielding in ppm.
-    """
-
-    cs_iso = {}
-    cs_aniso = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "EPRNMR_OrbitalShielding" in line:
-                while "Number of stored nuclei" not in line:
-                    line = next(f)
-                n_calcd = int(line.split()[4])
-                while "Nucleus:" not in line:
-                    line = next(f)
-                for _ in range(n_calcd):
-                    label = "{}{}".format(line.split()[2], line.split()[1])
-                    for _ in range(13):
-                        line = next(f)
-                    # Read eigenvalues and convert to Anisotropic CS
-                    evals = np.array([float(val) for val in line.split()[1:]])
-                    evals = sorted(evals)
-                    cs_aniso[label] = evals[2] - (evals[0] + evals[1]) / 2.0
-                    line = next(f)
-                    # Isotropic value
-                    cs_iso[label] = float(line.split()[-1])
-                    line = next(f)
-
-    return cs_iso, cs_aniso
-
-
-def read_gaussian09_log_cs(file_name):
-    """Read chemical shielding data from a Gaussian 09 log file.
-
-    Args:
-        file_name: Path to the Gaussian log file.
-
-    Returns:
-        A tuple `(cs_iso, cs_aniso)` where:
-            * `cs_iso` maps atom labels to isotropic shielding in ppm.
-            * `cs_aniso` maps atom labels to anisotropic shielding in ppm.
-    """
-
-    cs_iso = {}
-    cs_aniso = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Magnetic shielding tensor (ppm)" in line:
-                while "Number of stored nuclei" not in line:
-                    line = next(f)
-                n_calcd = int(line.split()[4])
-                while "Nucleus:" not in line:
-                    line = next(f)
-                for _ in range(n_calcd):
-                    label = "{}{}".format(line.split()[2], line.split()[1])
-                    for _ in range(13):
-                        line = next(f)
-                    # Read eigenvalues and convert to Anisotropic CS
-                    evals = np.array([float(val) for val in line.split()[1:]])
-                    evals = sorted(evals)
-                    cs_aniso[label] = evals[2] - (evals[0] + evals[1]) / 2.0
-                    line = next(f)
-                    # Isotropic value
-                    cs_iso[label] = float(line.split()[-1])
-                    line = next(f)
-
-    return cs_iso, cs_aniso
-
-
-def read_gaussian16_log_cs(file_name):
-    """Read chemical shielding data from a Gaussian 16 log file.
-
-    Args:
-        file_name: Path to the Gaussian log file.
-
-    Returns:
-        A tuple `(cs_iso, cs_aniso)` where:
-            * `cs_iso` maps atom labels to isotropic shielding in ppm.
-            * `cs_aniso` maps atom labels to anisotropic shielding in ppm.
-    """
-
-    cs_iso = {}
-    cs_aniso = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "Isotropic =" in line:
-                line = line.replace("=-", "= -")
-                cs_iso["{}{:d}".format(line.split()[1], int(line.split()[0]))] = float(
-                    line.split()[4]
-                )
-
-    return cs_iso, cs_aniso
-
-
-def read_orca_susceptibility(file_name: str, section: str) -> dict[float, np.ndarray]:
-    """Extract temperature-dependent molar magnetic susceptibility tensors.
-
-    Args:
-        file_name: Path to the ORCA output file.
-        section: Label of the QDPT section to read (e.g., "casscf" or "nevpt2").
-
-    Returns:
-        Dictionary mapping temperature in K to a 3x3 susceptibility tensor.
-    """
-
-    susceptibilities = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if f"QDPT WITH {section.upper()}" in line:
-                while (
-                    "TEMPERATURE DEPENDENT MOLAR MAGNETIC SUSCEPTIBILITY TENSOR"
-                    not in line
-                ):
-                    line = next(f)
-                # Move down until we reach the first temperature header line
-                while "TEMPERATURE/K" not in line:
-                    line = next(f)
-                while "TEMPERATURE/K" in line:
-                    _temp = float(line.split("TEMPERATURE/K:")[1])
-                    line = next(f)
-                    line = next(f)
-                    # Read tensor
-                    row_1 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_2 = [float(val) for val in line.split()]
-                    line = next(f)
-                    row_3 = [float(val) for val in line.split()]
-                    susceptibilities[_temp] = np.array([row_1, row_2, row_3])
-                    line = next(f)
-                    line = next(f)
-
-    return susceptibilities
-
-
-def read_orca_spin(file_name: str) -> float:
-    """Read the spin quantum number S from an ORCA output file.
-
-    This parses an input-style line in the output and supports both:
-        * `* xyz charge mult`
-        * `* xyzfile charge mult filename.xyz`
-
-    Args:
-        file_name: Path to the ORCA output file.
-
-    Returns:
-        Spin quantum number S, derived from the spin multiplicity (2S+1).
-
-    Raises:
-        RuntimeError: If a multiplicity cannot be determined from the file.
-    """
-    spin = None
-
-    with open(file_name, "r") as f:
-        for line in f:
-            # Normalise whitespace to make matching robust
-            compact = line.replace(" ", "").lower()
-            if "*xyz" in compact:
-                # Example lines:
-                #   * xyz 0 2
-                #   * xyzfile 0 2 ptbu3_opt_solv_optim.xyz
-                tokens = line.split()
-                # Collect all integer tokens (charge, multiplicity, etc.)
-                int_tokens = []
-                for tok in tokens:
-                    stripped = tok.lstrip("+-")
-                    if stripped.isdigit():
-                        int_tokens.append(int(tok))
-                if len(int_tokens) >= 2:
-                    mult = int_tokens[1]  # second integer is multiplicity
-                    spin = (mult - 1) / 2.0
-                    break
-
-    if spin is None:
-        raise RuntimeError(
-            f"Could not determine spin multiplicity from ORCA output '{file_name}'"
-        )
-
-    return spin
-
-
-def read_orca_g_tensor(file_name: str, section: str) -> np.ndarray | None:
-    """Extract the electronic g-tensor from an ORCA output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-        section: Label of the QDPT section to read (e.g., "casscf" or "nevpt2").
-
-    Returns:
-        A 3x3 g-tensor as a NumPy array if found, otherwise None.
-    """
-
-    g_tensor = None
-
-    try:
-        with open(file_name, "r") as f:
-            for line in f:
-                # Find the correct QDPT section
-                if f"QDPT WITH {section.upper()}" in line:
-                    # Go down to the G-matrix header
-                    for line in f:
-                        if "ELECTRONIC G-MATRIX FROM EFFECTIVE HAMILTONIAN" in line:
-                            break
-                    # Find "g-matrix:"
-                    for line in f:
-                        if "g-matrix:" in line:
-                            # Next three lines are the rows of the tensor
-                            row_1 = [float(val) for val in next(f).split()]
-                            row_2 = [float(val) for val in next(f).split()]
-                            row_3 = [float(val) for val in next(f).split()]
-                            g_tensor = np.array([row_1, row_2, row_3])
-                            break
-                    break
-    except Exception as e:
-        logger.warning(
-            "Failed to parse ORCA g-tensor — proceeding without g-tensor: %s",
-            e,
-        )
-
-    return g_tensor
-
-
-def read_eff_hamiltonian_tensor(file_name: str, section: str) -> np.ndarray | None:
-    """Extract the raw effective Hamiltonian tensor from an ORCA output file.
-
-    Args:
-        file_name: Path to the ORCA output file.
-        section: Label of the QDPT section to read (e.g., "casscf" or "nevpt2").
-
-    Returns:
-        A 3x3 effective Hamiltonian tensor in cm-1 as a NumPy array if found,
-        otherwise None.
-    """
-
-    eff_H_raw = None
-
-    with open(file_name, "r") as f:
-        for line in f:
-            # Find the correct QDPT section
-            if f"QDPT WITH {section.upper()}" in line:
-                # Go down to the G-matrix header
-                for line in f:
-                    if (
-                        "Effective Hamiltonian from projected relativistic states "
-                        "and relativistic energies:" in line
-                    ):
-                        break
-                # Find "Raw matrix"
-                for line in f:
-                    if "Raw matrix (cm-1):" in line:
-                        # Next three lines are the rows of the tensor
-                        row_1 = [float(val) for val in next(f).split()]
-                        row_2 = [float(val) for val in next(f).split()]
-                        row_3 = [float(val) for val in next(f).split()]
-                        eff_H_raw = np.array([row_1, row_2, row_3])
-                        break
-                break
-
-    return eff_H_raw

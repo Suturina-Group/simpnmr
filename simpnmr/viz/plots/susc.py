@@ -167,6 +167,10 @@ def plot_isoaxrho(
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
+        # Subtle grid for readability (major + minor)
+        ax.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.25)
+        ax.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.15)
+
         # # Add 10% padding on x-axis (inverse temperature)
         # x_min, x_max = ax.get_xlim()
         # x_range = x_max - x_min
@@ -234,6 +238,7 @@ def plot_isoaxrho(
 
 def plot_exp_vs_ab_initio(
     params: dict,
+    g_sq: dict[str, float],
     inv_t: np.ndarray,
     ab_series: dict,
     spec: PlotSpec,
@@ -258,13 +263,18 @@ def plot_exp_vs_ab_initio(
         "rho": r"\mathrm{rh}",
     }
 
+    comp_to_gsq_key = {
+        "iso": "g_sq_iso",
+        "ax": "g_sq_ax",
+        "rho": "g_sq_rh",
+    }
+
     glyphs = spec.glyphs
 
     for component in params.keys():
         inv_t_plot = inv_t * 1.0e3
 
         fig, ax = plt.subplots(1, 1, figsize=(6.8, 4.6))
-        palette = spec.palette
 
         p_exp = params[component]
         fit_y = p_exp.get("fit_y")
@@ -278,14 +288,30 @@ def plot_exp_vs_ab_initio(
             inv_t_plot,
             y_fit,
             lw=0,
-            color=palette.primary,
+            color=spec.palette.primary,
             marker=glyphs.marker,
             markeredgecolor=glyphs.mec,
             ms=glyphs.ms,
             label="pNMR",
         )
 
-        # Ab initio data (matched to the experimental grid upstream; may contain NaNs)
+        # g^2 series (scalar Y value on the pNMR x-grid)
+        gsq_key = comp_to_gsq_key.get(component)
+        if gsq_key is not None and gsq_key in g_sq:
+            gsq_val = float(g_sq[gsq_key])
+            y_gsq = np.full_like(inv_t_plot, gsq_val, dtype=float)
+            ax.plot(
+                inv_t_plot,
+                y_gsq,
+                lw=0,
+                color=spec.palette.muted,
+                marker=glyphs.marker,
+                markeredgecolor=glyphs.mec,
+                ms=glyphs.ms,
+                label=rf"$g^{{2}}_{{{_chiT_label_map.get(component, component)}}}$",
+            )
+
+        # Ab initio data (matched to the experimental grid upstream)
         y_ab = np.asarray(ab_series[component], dtype=float)
         m_ab = np.isfinite(y_ab)
         if np.any(m_ab):
@@ -295,7 +321,7 @@ def plot_exp_vs_ab_initio(
                 yerr=None,
                 lw=0,
                 elinewidth=glyphs.elinewidth,
-                color=palette.secondary,
+                color=spec.palette.secondary,
                 capsize=glyphs.capsize,
                 marker=glyphs.marker,
                 markeredgecolor=glyphs.mec,
@@ -310,6 +336,10 @@ def plot_exp_vs_ab_initio(
 
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+
+        # Subtle grid for readability (major + minor)
+        ax.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.25)
+        ax.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.15)
 
         # Add 10% padding on y-axis
         y_min, y_max = ax.get_ylim()
