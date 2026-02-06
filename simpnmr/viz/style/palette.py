@@ -22,41 +22,35 @@ class Palette:
     """
 
     # Core semantic roles
-    primary: str  # main theory / primary series
-    secondary: str  # secondary theory / comparison
-    experimental: str  # experimental data
-    highlight: str  # emphasis / selected series
-    muted: str  # de-emphasised / background series
+    primary: str
+    secondary: str
+    highlight: str
+    auxiliary: str
 
     # UI / reference elements
-    reference: str  # zero-lines, diagonals
-    grid: str  # grid lines
-    legend_edge: str  # legend frame edge
-    annotation_bg: str  # annotation / caption background
+    reference: str
+    grid: str
+    annotation_bg: str
 
 
 PALETTES: dict[PlotProfile, Palette] = {
     "paper": Palette(
-        primary="#1F4E79",  # deep navy blue (theory / main series)
-        secondary="#1E8449",  # muted green (secondary theory / comparison)
-        experimental="#111111",  # charcoal black (measured data)
-        highlight="#C0392B",  # vermillion red (emphasis / selected component)
-        muted="#808080",  # neutral grey (de-emphasised background data)
-        reference="#111111",  # charcoal black (zero lines, diagonals)
-        grid="#D9D9D9",  # light grey (non-dominant grid)
-        legend_edge="#111111",  # charcoal black (legend frame)
-        annotation_bg="#FFFFFF",  # white (annotation background)
+        primary="#111111",  # black
+        secondary="#28A228",  # green
+        highlight="#F22613",  # red
+        auxiliary="#3455DB",  # dark blue
+        reference="#AA2E00",  # dark orange
+        grid="#D9D9D9",  # light grey
+        annotation_bg="#FFFFFF",  # white
     ),
     "poster": Palette(
-        primary="#1F4E79",  # deep navy blue (theory / main series)
-        secondary="#1E8449",  # muted green (secondary theory / comparison)
-        experimental="#111111",  # charcoal black (measured data)
-        highlight="#C0392B",  # vermillion red (emphasis / selected component)
-        muted="#6E6E6E",  # neutral grey (de-emphasised background data)
-        reference="#111111",  # charcoal black (zero lines, diagonals)
-        grid="#CCCCCC",  # light grey (non-dominant grid)
-        legend_edge="#111111",  # charcoal black (legend frame)
-        annotation_bg="#FFFFFF",  # white (annotation background)
+        primary="#111111",  # black
+        secondary="#28A228",  # green
+        highlight="#F22613",  # red
+        auxiliary="#3455DB",  # dark blue
+        reference="#AA2E00",  # dark orange
+        grid="#D9D9D9",  # light grey
+        annotation_bg="#FFFFFF",  # white
     ),
 }
 
@@ -77,16 +71,16 @@ class ShiftColours:
 
 SHIFT_COLOURS: dict[PlotProfile, ShiftColours] = {
     "paper": ShiftColours(
-        total="#111111",  # total pNMR shift (charcoal black)
-        fc="#1F4E79",  # Fermi contact contribution (deep navy blue)
-        pc="#C0392B",  # pseudocontact contribution (vermillion red)
-        dia="#1E8449",  # diamagnetic contribution (muted green)
+        total="#111111",  # total pNMR shift (black)
+        fc="#3455DB",  # Fermi contact contribution (dark blue)
+        pc="#F22613",  # pseudocontact contribution (red)
+        dia="#28A228",  # diamagnetic contribution (green)
     ),
     "poster": ShiftColours(
-        total="#111111",  # total pNMR shift (charcoal black)
-        fc="#1F4E79",  # Fermi contact contribution (deep navy blue)
-        pc="#C0392B",  # pseudocontact contribution (vermillion red)
-        dia="#1E8449",  # diamagnetic contribution (muted green)
+        total="#111111",  # total pNMR shift (black)
+        fc="#3455DB",  # Fermi contact contribution (dark blue)
+        pc="#F22613",  # pseudocontact contribution (red)
+        dia="#28A228",  # diamagnetic contribution (green)
     ),
 }
 

@@ -646,59 +646,22 @@ def fit_isoaxrho_vt(
             g_tensor=g_tensor,
         )
 
-        exp_t = np.asarray(temps_fit, dtype=float)
-        inv_t_fit = np.asarray(inv_temps_fit, dtype=float)
-
         # Native ab initio temperature grid
+        exp_t = np.asarray(temps_fit, dtype=float)
         ab_inv_full = np.asarray(ab_series_full["inv_t"], dtype=float)
         ab_t_full = 1.0 / ab_inv_full
 
-        # Overlap window between experimental and ab initio temperature ranges
-        t_min = max(float(np.min(exp_t)), float(np.min(ab_t_full)))
-        t_max = min(float(np.max(exp_t)), float(np.max(ab_t_full)))
+        # Keep the ab initio series as a continuous curve, clipped to the experimental
+        # temperature window. If exp_t extends beyond the ab initio range, the series
+        # naturally stops at the ab initio limits.
+        exp_t_min = float(np.min(exp_t))
+        exp_t_max = float(np.max(exp_t))
 
-        # Temperature matching tolerance (K). Points farther away are dropped.
-        t_tol = 1.0
+        ab_mask = (ab_t_full >= exp_t_min) & (ab_t_full <= exp_t_max)
 
-        # Match ab initio values onto the experimental grid
-        ab_series = {"inv_t": inv_t_fit}
+        ab_series = {"inv_t": ab_inv_full[ab_mask]}
         for comp in fit_component:
-            y_full = np.asarray(ab_series_full[comp], dtype=float)
-            y_match = np.full(exp_t.size, np.nan, dtype=float)
-
-            for i, t in enumerate(exp_t):
-                if t < t_min or t > t_max:
-                    continue
-                j = int(np.argmin(np.abs(ab_t_full - t)))
-                if float(np.abs(ab_t_full[j] - t)) <= t_tol:
-                    y_match[i] = y_full[j]
-
-            ab_series[comp] = y_match
-
-        # Keep only temperatures where all components have matched ab initio values.
-        support = np.ones(exp_t.size, dtype=bool)
-        for comp in fit_component:
-            support &= np.isfinite(ab_series[comp])
-
-        inv_t_fit_cmp = inv_t_fit[support]
-
-        chiT_fit_params_cmp = {}
-        for comp in fit_component:
-            p = dict(chiT_fit_params[comp])
-            for k in ("fit_y", "fit_y_low", "fit_y_high"):
-                v = p.get(k)
-                if v is None:
-                    continue
-                a = np.asarray(v, dtype=float)
-                if a.shape[0] == support.shape[0]:
-                    p[k] = a[support]
-                else:
-                    p[k] = a
-            chiT_fit_params_cmp[comp] = p
-
-            ab_series[comp] = ab_series[comp][support]
-
-        ab_series["inv_t"] = inv_t_fit_cmp
+            ab_series[comp] = np.asarray(ab_series_full[comp], dtype=float)[ab_mask]
 
         # Normalise ab initio chiT series by the Curie prefactor for consistency
         curie_prefactor = vt.compute_curie_prefactor(spin)
@@ -707,9 +670,9 @@ def fit_isoaxrho_vt(
 
         with spec.context():
             plot_exp_vs_ab_initio(
-                params=chiT_fit_params_cmp,
+                params=chiT_fit_params,
                 g_sq=g_sq,
-                inv_t=ab_series["inv_t"],
+                inv_t=inv_temps_fit,
                 ab_series=ab_series,
                 spec=spec,
                 show=show_plots,

@@ -64,14 +64,14 @@ def plot_isoaxrho(
 
         inv_t_plot = inv_t * 1.0e3
 
-        # Experimental values with error bars (markers only)
+        # Experimental values with error bars
         ax.errorbar(
             inv_t_plot,
             vals[component],
             yerr=errs[component],
             lw=0,
             elinewidth=glyphs.elinewidth,
-            color=palette.experimental,
+            color=palette.primary,
             capsize=glyphs.capsize,
             marker=glyphs.marker,
             markeredgecolor=glyphs.mec,
@@ -79,7 +79,7 @@ def plot_isoaxrho(
             label="Exp.",
         )
 
-        # Optional: plot experimental values without TIP contribution
+        # Plot experimental values without TIP contribution
         tip = p.get("tip", 0.0)
         if np.isfinite(tip) and abs(float(tip)) > 0.0:
             ax.errorbar(
@@ -87,7 +87,7 @@ def plot_isoaxrho(
                 vals[component] - (tip / inv_t),
                 lw=0,
                 elinewidth=glyphs.elinewidth,
-                color=palette.muted,
+                color=palette.highlight,
                 alpha=glyphs.series_alpha_muted,
                 capsize=glyphs.capsize,
                 marker=glyphs.marker,
@@ -96,7 +96,7 @@ def plot_isoaxrho(
                 label="Exp. w/o TIP",
             )
 
-        # Optional: precomputed fit curve + precomputed uncertainty band
+        # Precomputed fit curve + precomputed uncertainty band
         caption_lines = []
         fit_y = p.get("fit_y")
         fit_y_low = p.get("fit_y_low")
@@ -107,7 +107,7 @@ def plot_isoaxrho(
                 fit_y,
                 linestyle="-",
                 linewidth=glyphs.fit_lw,
-                color=palette.reference,
+                color=palette.primary,
                 label="Slope/Intercept Fit",
             )
 
@@ -116,6 +116,7 @@ def plot_isoaxrho(
                 inv_t_plot,
                 fit_y_low,
                 fit_y_high,
+                color=spec.palette.primary,
                 alpha=glyphs.band_alpha,
                 linewidth=glyphs.band_lw,
             )
@@ -171,13 +172,6 @@ def plot_isoaxrho(
         ax.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.25)
         ax.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.15)
 
-        # # Add 10% padding on x-axis (inverse temperature)
-        # x_min, x_max = ax.get_xlim()
-        # x_range = x_max - x_min
-        # if np.isfinite(x_range) and x_range > 0:
-        #     pad = 0.10 * x_range
-        #     ax.set_xlim(x_min - pad, x_max + pad)
-
         # Secondary top axis for T(K): uses axis transform only
         def _inv_to_t(inv_plot: float | np.ndarray) -> float | np.ndarray:
             inv_arr = np.asarray(inv_plot, dtype=float)
@@ -211,7 +205,7 @@ def plot_isoaxrho(
                 bbox=dict(
                     boxstyle="round,pad=0.3",
                     fc=palette.annotation_bg,
-                    ec=palette.legend_edge,
+                    ec=palette.primary,
                     lw=1.0,
                 ),
             )
@@ -269,8 +263,6 @@ def plot_exp_vs_ab_initio(
         "rho": "g_sq_rh",
     }
 
-    glyphs = spec.glyphs
-
     for component in params.keys():
         inv_t_plot = inv_t * 1.0e3
 
@@ -287,11 +279,11 @@ def plot_exp_vs_ab_initio(
         ax.plot(
             inv_t_plot,
             y_fit,
-            lw=0,
-            color=spec.palette.primary,
-            marker=glyphs.marker,
-            markeredgecolor=glyphs.mec,
-            ms=glyphs.ms,
+            color=spec.palette.reference,
+            linestyle="-",
+            linewidth=spec.glyphs.aux_lw,
+            marker="s",
+            markersize=spec.glyphs.ms,
             label="pNMR",
         )
 
@@ -303,29 +295,27 @@ def plot_exp_vs_ab_initio(
             ax.plot(
                 inv_t_plot,
                 y_gsq,
-                lw=0,
-                color=spec.palette.muted,
-                marker=glyphs.marker,
-                markeredgecolor=glyphs.mec,
-                ms=glyphs.ms,
+                linestyle="-",
+                linewidth=spec.glyphs.aux_lw,
+                marker="^",
+                markersize=spec.glyphs.ms,
+                color=spec.palette.secondary,
                 label=rf"$g^{{2}}_{{{_chiT_label_map.get(component, component)}}}$",
             )
 
         # Ab initio data (matched to the experimental grid upstream)
+        x_ab = np.asarray(ab_series["inv_t"], dtype=float) * 1.0e3
         y_ab = np.asarray(ab_series[component], dtype=float)
         m_ab = np.isfinite(y_ab)
         if np.any(m_ab):
-            ax.errorbar(
-                inv_t_plot[m_ab],
+            ax.plot(
+                x_ab[m_ab],
                 y_ab[m_ab],
-                yerr=None,
-                lw=0,
-                elinewidth=glyphs.elinewidth,
-                color=spec.palette.secondary,
-                capsize=glyphs.capsize,
-                marker=glyphs.marker,
-                markeredgecolor=glyphs.mec,
-                ms=glyphs.ms,
+                linestyle="-",
+                linewidth=spec.glyphs.aux_lw,
+                marker="v",
+                markersize=spec.glyphs.ms * 0.8,
+                color=spec.palette.auxiliary,
                 label="Ab initio",
             )
 

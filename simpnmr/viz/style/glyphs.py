@@ -40,6 +40,7 @@ class GlyphScale:
     mec: str
     mew: float
     line_lw: float
+    aux_lw: float
     fit_lw: float
     elinewidth: float
     capsize: float
@@ -55,6 +56,7 @@ SCALES: dict[PlotProfile, GlyphScale] = {
         mec="none",
         mew=0.0,
         line_lw=1.2,
+        aux_lw=1.5,
         fit_lw=1.6,
         elinewidth=1.2,
         capsize=2.0,
@@ -68,6 +70,7 @@ SCALES: dict[PlotProfile, GlyphScale] = {
         mec="none",
         mew=0.0,
         line_lw=1.8,
+        aux_lw=2.1,
         fit_lw=2.3,
         elinewidth=1.9,
         capsize=3.2,

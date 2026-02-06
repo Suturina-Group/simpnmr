@@ -112,7 +112,7 @@ def plot_fitted_shifts(
             expt,
             lw=0,
             marker=markers[label],
-            color=palette.reference,
+            color=palette.primary,
             markersize=glyphs.ms,
         )
         if average:
@@ -124,7 +124,7 @@ def plot_fitted_shifts(
     ax.set_xlabel("Theoretical Shift (ppm)")
     ax.set_ylabel("Experimental Shift (ppm)")
 
-    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color=palette.reference, lw=0.75)
+    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color=palette.primary, lw=0.75)
 
     x_lim = ax.get_xlim()
     y_lim = ax.get_ylim()
@@ -336,18 +336,18 @@ def plot_shift_spread(
             (xvals + width * widthscaler),
             [exps[o] for o in _order],
             label="Exp.",
-            color=palette.experimental,
+            color=palette.primary,
             lw=0,
             marker="o",
             markerfacecolor="none",
-            markeredgecolor=palette.experimental,
+            markeredgecolor=palette.primary,
             markersize=(glyphs.ms if glyphs is not None else 7),
         )
         legend_markers = [
             lines.Line2D(
                 [0],
                 [0],
-                color=palette.experimental,
+                color=palette.primary,
                 lw=0,
                 marker="o",
                 markerfacecolor="None",
@@ -420,7 +420,7 @@ def plot_shift_spread(
         0.0,
         1,
         len(unique_chemlabels) + 1,
-        color=palette.reference,
+        color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
     # Add grey gridlinesand ticks on x axis
@@ -641,7 +641,7 @@ def plot_shift_contrib(
             (xvals + 0.5),
             [exps[o] for o in order],
             label="Exp.",
-            color=palette.experimental,
+            color=palette.primary,
             lw=0,
             marker="o",
             fillstyle="none",
@@ -652,7 +652,7 @@ def plot_shift_contrib(
         0.0,
         0,
         len(total.values()),
-        color=palette.reference,
+        color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
     ax.grid(axis="x", ls="--", which="minor")
@@ -734,7 +734,7 @@ def plot_shift_tdep(
             palette.secondary,
             palette.highlight,
             palette.primary,
-            palette.reference,
+            palette.primary,
         )
     else:
         colour_cycle = ("blue", "red", "green", "black")

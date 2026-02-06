@@ -128,7 +128,7 @@ def plot_hyperfine(
         0.5,
         len(labels) + 1.5,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
-        color=(palette.reference if palette is not None else "k"),
+        color=(palette.primary if palette is not None else "k"),
     )
 
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
@@ -316,7 +316,7 @@ def plot_hyperfine_spread(
         0.5,
         len(labels) + 1.5,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
-        color=(palette.reference if palette is not None else "k"),
+        color=(palette.primary if palette is not None else "k"),
     )
 
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())

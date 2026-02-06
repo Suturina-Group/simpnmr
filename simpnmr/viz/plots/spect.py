@@ -78,7 +78,7 @@ def plot_pred_spectrum(
     spec.skin_axes(ax)
 
     # Spectrum trace
-    ax.plot(x_grid, y_intensity, color=palette.reference, lw=glyphs.line_lw)
+    ax.plot(x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw)
 
     # Labels
     avg_shifts = {
@@ -101,7 +101,7 @@ def plot_pred_spectrum(
         closest_y,
         lw=0,
         marker="x",
-        color=palette.reference,
+        color=palette.primary,
         markersize=glyphs.ms,
     )
 
@@ -112,7 +112,7 @@ def plot_pred_spectrum(
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
-        color=palette.reference,
+        color=palette.primary,
         linewidth=max(0.8, 0.5 * glyphs.line_lw),
         alpha=0.7,
     )
@@ -158,7 +158,7 @@ def plot_pred_spectrum(
             [x_grid[peak_index], x_grid[peak_index], label_x],
             [y_intensity[peak_index], label_barrier, label_y],
             linestyle="--",
-            color=palette.reference,
+            color=palette.primary,
             linewidth=max(0.8, 0.5 * glyphs.line_lw),
             alpha=0.6,
         )
@@ -289,13 +289,13 @@ def plot_raw_deconv_pred(
     # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
 
     ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
-    ax[0].plot(x_grid, y_sim_intensity, lw=glyphs.line_lw, color=palette.reference)
+    ax[0].plot(x_grid, y_sim_intensity, lw=glyphs.line_lw, color=palette.primary)
     ax[0].plot(
         shifts,
         sim_peak_heights,
         lw=0,
         marker="x",
-        color=palette.reference,
+        color=palette.primary,
         markersize=glyphs.ms,
     )
 
@@ -307,7 +307,7 @@ def plot_raw_deconv_pred(
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
-        color=palette.reference,
+        color=palette.primary,
         linewidth=max(0.8, 0.5 * glyphs.line_lw),
         alpha=0.7,
     )
@@ -353,7 +353,7 @@ def plot_raw_deconv_pred(
             [peak_x, peak_x, label_x],
             [peak_y, label_barrier, labels_position_y],
             linestyle="--",
-            color=palette.reference,
+            color=palette.primary,
             linewidth=max(0.8, 0.5 * glyphs.line_lw),
             alpha=0.4,
         )
@@ -365,7 +365,7 @@ def plot_raw_deconv_pred(
     )
 
     # SUBPLOT NUMBER 2 - Deconvoluted (processed experimental) spectrum
-    ax[1].plot(x_grid, y_deconv_intensity, lw=glyphs.line_lw, color=palette.reference)
+    ax[1].plot(x_grid, y_deconv_intensity, lw=glyphs.line_lw, color=palette.primary)
     ax[1].set_title(
         "Paramagnetic Signals",
         loc="left",
@@ -378,7 +378,7 @@ def plot_raw_deconv_pred(
             experiment.spectrum[:, 0],
             experiment.spectrum[:, 1],
             lw=glyphs.line_lw,
-            color=palette.reference,
+            color=palette.primary,
         )
         ax[2].set_title(
             "Full Spectrum",
