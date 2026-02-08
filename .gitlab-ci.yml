@@ -23,9 +23,11 @@ pages:
   - pip install -e .
   - cd docs
   - pip install -r requirements.txt
-  - pip install anybadge ${PKG_NAME} --upgrade
+  - pip install -U anybadge
   - make html
   - mv build/html ../public
+  - echo "simpnmr.org" > ../public/CNAME
+  - echo "Created CNAME for GitLab Pages custom domain: simpnmr.org"
   - export VERSION=$(grep -oP '__version__ = "\K[^"]+' ../simpnmr/__version__.py)
   - rm -f ../public/docs.svg
   - anybadge -l Documentation -v $VERSION -f ../public/docs.svg --color green -o
