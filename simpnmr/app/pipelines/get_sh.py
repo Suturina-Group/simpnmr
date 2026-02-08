@@ -11,6 +11,7 @@ import logging
 
 from simpnmr.core.sh import math
 from simpnmr.io.csv.fit import read_chiT_regression_csv
+from simpnmr.io.csv.sh import write_sh_results_csv
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,11 @@ def run_get_sh(options) -> int:
 
     spin = float(options.spin)
 
+    D: float | None = None
+    E: float | None = None
+    D_err: float | None = None
+    E_err: float | None = None
+
     if spin != 0.5:
         D, E, D_err, E_err = math.solve_D_E(params, spin, g_nominal, g_err)
 
@@ -62,5 +68,17 @@ def run_get_sh(options) -> int:
             "ZFS parameters (D, E) are not defined for S = 1/2 "
             "and are therefore not reported."
         )
+
+    write_sh_results_csv(
+        file_name="spin_hamiltonian_from_chiT.csv",
+        solver_method=method_label,
+        spin=spin,
+        g_nominal=g_nominal,
+        g_err=g_err,
+        D=D,
+        E=E,
+        D_err=D_err,
+        E_err=E_err,
+    )
 
     return 0
