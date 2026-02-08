@@ -564,18 +564,21 @@ def fit_isoaxrho_vt(
 
         # Map VT component identifiers to Susceptibility attribute names
         comp_to_attr = {"iso": "iso", "ax": "axiality", "rho": "rhombicity"}
+        analytic_chi_vt: dict[str, float] = {}
 
-        # Compute analytic Iso/Ax/Rho components
         for comp in fit_component:
-            analytic_chi_ref = vt.compute_analytic_component(
-                comp, susc_ab_initio.temperature, g_sq, D_J, E_J, spin
+            analytic_val = float(
+                vt.compute_analytic_component(
+                    comp, susc_ab_initio.temperature, g_sq, D_J, E_J, spin
+                )
             )
+            analytic_chi_vt[comp] = analytic_val
+
             tip_ref = vt.compute_tip_correction(
                 getattr(susc_ab_initio, comp_to_attr[comp]),
-                analytic_chi_ref,
+                analytic_val,
                 spin,
             )
-            # Inject ab initio TIP into VT variables for this component
             susc_vt_variables[comp]["tip"] = ["fix", float(tip_ref)]
 
     # Initialize fitted chi errors to zero (if not available)
@@ -674,6 +677,7 @@ def fit_isoaxrho_vt(
                 g_sq=g_sq,
                 inv_t=inv_temps_fit,
                 ab_series=ab_series,
+                analytic_chi_vt=analytic_chi_vt,
                 spec=spec,
                 show=show_plots,
                 save=True,

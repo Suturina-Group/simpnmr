@@ -235,6 +235,7 @@ def plot_exp_vs_ab_initio(
     g_sq: dict[str, float],
     inv_t: np.ndarray,
     ab_series: dict,
+    analytic_chi_vt: dict[str, float],
     spec: PlotSpec,
     show: bool = True,
     save: bool = True,
@@ -276,15 +277,32 @@ def plot_exp_vs_ab_initio(
             )
         y_fit = np.asarray(fit_y, dtype=float)
 
+        # Fitted data using SimpNMR
         ax.plot(
             inv_t_plot,
             y_fit,
-            color=spec.palette.reference,
+            color=spec.palette.primary,
             linestyle="-",
             linewidth=spec.glyphs.aux_lw,
             marker="s",
             markersize=spec.glyphs.ms,
             label="pNMR",
+        )
+
+        vt_val = analytic_chi_vt.get(component)
+
+        if vt_val is not None and np.isfinite(float(vt_val)):
+            t_max = float(1.0 / np.nanmin(inv_t))
+            y_vt = np.full_like(inv_t_plot, float(vt_val) * t_max, dtype=float)
+
+        # VT 2nd order data
+        ax.plot(
+            inv_t_plot,
+            y_vt,
+            color=spec.palette.reference,
+            linestyle="-",
+            linewidth=spec.glyphs.aux_lw,
+            label="VT 2nd order",
         )
 
         # g^2 series (scalar Y value on the pNMR x-grid)
@@ -297,8 +315,6 @@ def plot_exp_vs_ab_initio(
                 y_gsq,
                 linestyle="-",
                 linewidth=spec.glyphs.aux_lw,
-                marker="^",
-                markersize=spec.glyphs.ms,
                 color=spec.palette.secondary,
                 label=rf"$g^{{2}}_{{{_chiT_label_map.get(component, component)}}}$",
             )
@@ -313,8 +329,6 @@ def plot_exp_vs_ab_initio(
                 y_ab[m_ab],
                 linestyle="-",
                 linewidth=spec.glyphs.aux_lw,
-                marker="v",
-                markersize=spec.glyphs.ms * 0.8,
                 color=spec.palette.auxiliary,
                 label="Ab initio",
             )
@@ -357,7 +371,7 @@ def plot_exp_vs_ab_initio(
         spec.skin_axes(ax)
         spec.skin_axes(top_ax)
 
-        ax.legend(loc="upper left", ncol=3)
+        ax.legend(loc="upper left", ncol=4)
 
         fig.tight_layout()
 
