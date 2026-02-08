@@ -9,7 +9,6 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
 # Extend sys.path so Sphinx can import the simpnmr package and its submodules.
-import datetime
 import os
 import sys
 
@@ -20,7 +19,7 @@ sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project metadata -------------------------------------------------------
 project = "simpnmr"
-copyright = "{:d}".format(datetime.date.today().year)
+copyright = ""
 
 # Title displayed in the HTML documentation header and browser tab.
 html_title = f"SimpNMR v{__version__}"
@@ -52,15 +51,21 @@ exclude_patterns = []
 
 
 # -- HTML output configuration ---------------------------------------------
-# PyData Sphinx Theme is used for a clean, modern documentation layout.
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
+# PyData Sphinx Theme is used for a clean, modern documentation layout.
 html_theme = "pydata_sphinx_theme"
 
+# Use "directory-style" URLs
+html_use_directory_uris = True
+
+# Canonical base URL for sitemap/canonical links.
+html_baseurl = "https://simpnmr.org/"
+
+# Remove footer metadata (copyright and Sphinx attribution)
+html_show_copyright = False
+html_show_sphinx = False
+
 # Theme-specific options controlling navigation behaviour and header links.
-# Disable the primary (left) sidebar entirely.
-# Keep the secondary (right) sidebar mini-map.
 html_theme_options = {
     "navigation_depth": 2,
     "show_nav_level": 1,
@@ -96,18 +101,8 @@ autodoc_default_options = {
 }
 
 # -- LaTeX / PDF output configuration --------------------------------------
+
 # Settings below control experimental PDF builds via LaTeX.
-# These options are not required for HTML documentation builds.
-#
-# Linux system dependencies required for building the PDF documentation
-# (example for Ubuntu/Debian-based systems):
-#
-#   sudo apt install \
-#     xindy \
-#     fonts-freefont-ttf \
-#     texlive-xetex \
-#     latexmk \
-#     texlive-latex-extra
 latex_engine = "xelatex"
 
 latex_elements = {
