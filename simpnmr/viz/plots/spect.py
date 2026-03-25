@@ -137,6 +137,7 @@ def plot_pred_spectrum(
         reverse_axis=True,
         connector_alpha=0.6,
         label_fontsize=str(spec.typography.label),
+        line_scale=0.4,
     )
 
     ax.set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)))
@@ -276,7 +277,7 @@ def plot_raw_deconv_pred(
     fig, ax = create_stacked_canvas(
         spec.profile,
         nrows=n_subplots,
-        variant="standard",
+        variant="vertical",
         window_title=window_title,
         layout="constrained",
         sharex=True,
@@ -286,7 +287,7 @@ def plot_raw_deconv_pred(
 
     # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
     ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
-    ax[0].plot(x_grid, y_sim_intensity, lw=glyphs.line_lw, color=palette.primary)
+    ax[0].plot(x_grid, y_sim_intensity, lw=0.8 * glyphs.line_lw, color=palette.primary)
     ax[0].plot(
         shifts,
         sim_peak_heights,
@@ -306,6 +307,7 @@ def plot_raw_deconv_pred(
         glyphs=glyphs,
         reverse_axis=True,
         label_fontsize=spec.typography.label - 2,
+        line_scale=0.8,
     )
 
     # Vertical left-side label
@@ -325,7 +327,7 @@ def plot_raw_deconv_pred(
     ax[1].plot(
         x_grid,
         y_deconv_intensity,
-        lw=glyphs.line_lw,
+        lw=0.8 * glyphs.line_lw,
         color=palette.primary,
         alpha=0.7,
     )
@@ -374,7 +376,7 @@ def plot_raw_deconv_pred(
         ax[1].plot(
             x_raw,
             y_raw,
-            lw=glyphs.line_lw,
+            lw=0.8 * glyphs.line_lw,
             color=palette.highlight,
             alpha=0.35,
         )
@@ -486,6 +488,7 @@ def _annotate_peaks_with_barrier(
     connector_alpha: float = 0.4,
     barrier_alpha: float = 0.7,
     label_fontsize: str | None = None,
+    line_scale: float = 1.0,
 ) -> None:
     """Annotate a spectrum with a horizontal barrier, vertical labels, and connectors.
 
@@ -538,7 +541,7 @@ def _annotate_peaks_with_barrier(
         np.max(shift_range),
         linestyle="-",
         color=palette.primary,
-        linewidth=max(0.8, 0.5 * glyphs.line_lw),
+        linewidth=max(0.2, 0.5 * line_scale * glyphs.line_lw),
         alpha=barrier_alpha,
     )
 
@@ -588,6 +591,6 @@ def _annotate_peaks_with_barrier(
             [py, label_barrier, labels_position_y],
             linestyle="--",
             color=palette.primary,
-            linewidth=0.5 * glyphs.line_lw,
+            linewidth=max(0.2, 0.5 * line_scale * glyphs.line_lw),
             alpha=connector_alpha,
         )

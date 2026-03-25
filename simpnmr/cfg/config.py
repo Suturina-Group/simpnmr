@@ -162,6 +162,7 @@ class FitSuscConfig(Config):
             "method",
             "groups",
             "search",
+            "area_weight",
         ],
         "nuclei": ["include", "include_groups"],
         "susc_fit": ["type", "variables", "input_units", "average_shifts"],
@@ -211,7 +212,8 @@ class FitSuscConfig(Config):
         self._assignment_search = ""
         self._assignment_n_attempts = None
         self._assignment_max_iter = None
-        self._assignment_r2_threshold = None
+        self._assignment_rmse_threshold = None
+        self._assignment_area_weight = 0.0
         self._nuclei_include = ""
         self._nuclei_include_groups = []
         self._susc_fit_type = ""
@@ -507,7 +509,7 @@ class FitSuscConfig(Config):
             self._assignment_search = ""
             self._assignment_n_attempts = None
             self._assignment_max_iter = None
-            self._assignment_r2_threshold = None
+            self._assignment_rmse_threshold = None
             return None
 
         if not isinstance(value, dict):
@@ -530,7 +532,8 @@ class FitSuscConfig(Config):
                 + "'. Allowed values are: 'fast', 'balanced', 'robust', 'custom'."
             )
 
-        unknown = set(value) - {"mode", "n_attempts", "max_iter", "r2_threshold"}
+        allowed_keys = {"mode", "n_attempts", "max_iter", "rmse_threshold"}
+        unknown = set(value) - allowed_keys
         if unknown:
             raise ValueError(
                 "assignment:search contains unknown key(s): "
@@ -543,19 +546,19 @@ class FitSuscConfig(Config):
                 unexpected.append("n_attempts")
             if "max_iter" in value:
                 unexpected.append("max_iter")
-            if "r2_threshold" in value:
-                unexpected.append("r2_threshold")
+            if "rmse_threshold" in value:
+                unexpected.append("rmse_threshold")
             if unexpected:
                 raise ValueError(
                     "assignment:search only allows n_attempts, max_iter, and "
-                    "r2_threshold when mode is 'custom'; unexpected key(s): "
+                    "rmse_threshold when mode is 'custom'; unexpected key(s): "
                     + ", ".join(unexpected)
                 )
 
         self._assignment_search = mode
         self.assignment_n_attempts = value.get("n_attempts")
         self.assignment_max_iter = value.get("max_iter")
-        self.assignment_r2_threshold = value.get("r2_threshold")
+        self.assignment_rmse_threshold = value.get("rmse_threshold")
         return None
 
     @property
@@ -603,13 +606,13 @@ class FitSuscConfig(Config):
         return None
 
     @property
-    def assignment_r2_threshold(self) -> float | None:
-        return self._assignment_r2_threshold
+    def assignment_rmse_threshold(self) -> float | None:
+        return self._assignment_rmse_threshold
 
-    @assignment_r2_threshold.setter
-    def assignment_r2_threshold(self, value: float | None):
+    @assignment_rmse_threshold.setter
+    def assignment_rmse_threshold(self, value: float | None):
         if value is None or value == "":
-            self._assignment_r2_threshold = None
+            self._assignment_rmse_threshold = None
             return None
         if isinstance(value, (list, tuple)):
             value = value[0]
@@ -617,9 +620,31 @@ class FitSuscConfig(Config):
             fvalue = float(value)
         except Exception as exc:
             raise ValueError(
-                f"Cannot convert assignment:r2_threshold={value} to float"
+                f"Cannot convert assignment:rmse_threshold={value} to float"
             ) from exc
-        self._assignment_r2_threshold = fvalue
+        self._assignment_rmse_threshold = fvalue
+        return None
+
+    @property
+    def assignment_area_weight(self) -> float:
+        return self._assignment_area_weight
+
+    @assignment_area_weight.setter
+    def assignment_area_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_area_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:area_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:area_weight must be non-negative")
+        self._assignment_area_weight = fvalue
         return None
 
     @property

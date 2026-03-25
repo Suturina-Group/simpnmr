@@ -130,14 +130,10 @@ def load_experiments_from_csv(
         (
             c
             for c in [
-                "R1",
-                "r1 (Hz)",
-                "R1 (Hz)",
-                "r1",
-                "R1 (s^-1)",
-                "r1 (s^-1)",
-                "1/T1",
-                "1/T1 (s^-1)",
+                "R1", "r1",
+                "R1 (s^-1)", "r1 (s^-1)",
+                "R1 (Hz)", "r1 (Hz)",
+                "1/T1", "1/T1 (s^-1)", "1/T1 (Hz)",
             ]
             if c in table.columns
         ),

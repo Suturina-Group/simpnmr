@@ -90,7 +90,8 @@ def fit_with_hungarian_assignment(
     average_labels: list[list[str]],
     n_attempts: int,
     max_iter: int,
-    r2_threshold: float,
+    rmse_threshold: float,
+    area_weight: float = 0.0,
 ) -> tuple[float, list[str]]:
     """Fit assignments with alternating Hungarian reassignment and chi refits.
 
@@ -105,7 +106,8 @@ def fit_with_hungarian_assignment(
 
     Args:
         molecule: Molecule containing nuclei and tensor data used for fitting.
-        susc_model: Susceptibility model instance to fit against the experiment.
+        susc_model: Susceptibility model instance to fit against the
+            experiment.
         experiment: Experiment containing observed shifts and current
             assignments.
         average_labels: Groups of labels whose predicted shifts are averaged
@@ -113,11 +115,18 @@ def fit_with_hungarian_assignment(
         n_attempts: Maximum number of restart attempts.
         max_iter: Maximum number of alternating fit-assignment iterations per
             attempt.
-        r2_threshold: Early-stop threshold for the best adjusted R^2 found across
-            attempts.
+        rmse_threshold: Early-stop threshold for RMSE (ppm). Stops early
+            if a converged attempt achieves RMSE below this value.
+            Set to 0.0 to disable early stopping.
+        area_weight: Weight for the area-consistency term in the cost matrix.
+            Each experimental signal area and each label's group size (number
+            of equivalent nuclei) are independently normalised to sum to 1,
+            then ``area_weight * (norm_area - norm_group_size)**2`` is added
+            to the shift-squared cost. Set to 0.0 (default) to use shifts
+            only.
 
     Returns:
-        The adjusted R^2 after restoring and re-fitting the best assignment,
+        The RMSE (ppm) after restoring and re-fitting the best assignment,
         together with that assignment.
 
     Raises:
@@ -129,10 +138,10 @@ def fit_with_hungarian_assignment(
         experiment.temperature,
     )
     logger.info(
-        "Parameters: n_attempts=%d, max_iter=%d, R² threshold=%.6f",
+        "Parameters: n_attempts=%d, max_iter=%d, RMSE threshold=%.6f",
         n_attempts,
         max_iter,
-        r2_threshold,
+        rmse_threshold,
     )
 
     def _apply_assignment(exp: Experiment, assignment: list[str]) -> None:
@@ -142,11 +151,11 @@ def fit_with_hungarian_assignment(
     def _current_assignment(exp: Experiment) -> list[str]:
         return [sig.assignment for sig in exp.signals]
 
-    best_r2 = -np.inf
+    best_rmse = np.inf
     best_assignment: list[str] | None = None
     attempt = 0
 
-    while best_r2 < r2_threshold and attempt < n_attempts:
+    while best_rmse > rmse_threshold and attempt < n_attempts:
         logger.debug(
             "Attempt %d out of maximum number of attempts %d: "
             "starting Hungarian optimisation",
@@ -177,10 +186,10 @@ def fit_with_hungarian_assignment(
                 average_labels=average_labels,
             )
             logger.debug(
-                "  Iteration %d/%d: R² = %.6f",
+                "  Iteration %d/%d: RMSE = %.6f",
                 iteration + 1,
                 max_iter,
-                trial_model.adj_r2,
+                trial_model.rmse,
             )
 
             # Predict paramagnetic shifts from fitted model
@@ -210,9 +219,42 @@ def fit_with_hungarian_assignment(
             n_sig = len(trial_experiment.signals)
             n_lbl = len(labels_ordered)
             cost = np.zeros((n_sig, n_lbl))
+
+            # Precompute area term if requested
+            if area_weight > 0.0:
+                exp_areas = np.array(
+                    [sig.area for sig in trial_experiment.signals], dtype=float
+                )
+                total_exp_area = exp_areas.sum()
+                norm_exp_areas = (
+                    exp_areas / total_exp_area if total_exp_area > 0 else exp_areas
+                )
+
+                group_sizes = np.array(
+                    [
+                        sum(
+                            1
+                            for n in molecule.nuclei
+                            if n.chem_label == cl
+                        )
+                        for cl in labels_ordered
+                    ],
+                    dtype=float,
+                )
+                total_group_size = group_sizes.sum()
+                norm_group_sizes = (
+                    group_sizes / total_group_size
+                    if total_group_size > 0
+                    else group_sizes
+                )
+
             for i, sig in enumerate(trial_experiment.signals):
                 for j, cl in enumerate(labels_ordered):
-                    cost[i, j] = abs(sig.shift - avg_pred[cl])
+                    cost[i, j] = (sig.shift - avg_pred[cl]) ** 2
+                    if area_weight > 0.0:
+                        cost[i, j] += area_weight * (
+                            norm_exp_areas[i] - norm_group_sizes[j]
+                        ) ** 2
 
             _, col_idx = linear_sum_assignment(cost)
             new_assignment = [labels_ordered[j] for j in col_idx]
@@ -230,15 +272,17 @@ def fit_with_hungarian_assignment(
             current_assignment = new_assignment
             _apply_assignment(trial_experiment, current_assignment)
 
-        # Only record and update best_r2 when the attempt converged.
+        # Only record and update best_rmse when the attempt converged.
         # If max_iter was hit without convergence, trial state is
         # unreliable so we discard this attempt entirely.
         if converged:
-            attempt_r2 = trial_model.adj_r2
-            if best_assignment is None or attempt_r2 > best_r2:
-                best_r2 = attempt_r2
+            attempt_rmse = trial_model.rmse
+            if best_assignment is None or attempt_rmse < best_rmse:
+                best_rmse = attempt_rmse
                 best_assignment = list(final_assignment)
-            logger.info("Attempt %d converged, R² = %.6f", attempt + 1, attempt_r2)
+            logger.info(
+                "Attempt %d converged, RMSE = %.6f", attempt + 1, attempt_rmse
+            )
         else:
             logger.info(
                 "Attempt %d did not converge within %d iterations, discarding",
@@ -266,4 +310,4 @@ def fit_with_hungarian_assignment(
         average_labels=average_labels,
     )
 
-    return susc_model.adj_r2, best_assignment
+    return susc_model.rmse, best_assignment

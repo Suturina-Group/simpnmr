@@ -30,10 +30,12 @@ from simpnmr.app.policies.linewidth import resolve_output_linewidths
 from simpnmr.app.policies.susc import resolve_susc_fit_variables
 
 # Core / domain
+from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.domain.tensor import Hyperfine
 from simpnmr.core.fitting import models
+from simpnmr.core.util.strings import remove_numbers
 from simpnmr.core.fitting.assign import (
     fit_with_hungarian_assignment,
     generate_assignment_permutations,
@@ -45,7 +47,11 @@ from simpnmr.io.csv.mol import save_molecule_to_csv
 from simpnmr.io.csv.susc import save_susc
 from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
 from simpnmr.io.xyz import xyz_write
+from simpnmr.core.fitting.r6_fit import fit_r6
 from simpnmr.viz.plots.fitted_shifts import plot_fitted_shifts
+from simpnmr.viz.plots.r6_fit import plot_r6_fit
+from simpnmr.viz.plots.spect import plot_raw_deconv_pred
+from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
 
 # Visualisation
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
@@ -281,11 +287,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             pool.close()
             pool.join()
 
-            # Find assignment with largest r2
+            # Find assignment with smallest RMSE
             # and use in subsequent (re)fitting
-            assignment = permed_assignments[np.nanargmax(results)]
-            opt_r2 = np.nanmax(results)
-            logger.info("Optimal assignment with adj R² = %.6f", opt_r2)
+            assignment = permed_assignments[np.nanargmin(results)]
+            opt_rmse = np.nanmin(results)
+            logger.info("Optimal assignment with RMSE = %.6f", opt_rmse)
 
             # and swap in new, permuted, assignments
             for it, new in enumerate(assignment):
@@ -301,7 +307,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 delimiter=delimiter,
                 comment=(
                     f"Optimal Assignment\n"
-                    f"r2 = {opt_r2:f}\n"
+                    f"rmse = {opt_rmse:f}\n"
                     f"T = {experiment.temperature:.2f} K"
                 ),
             )
@@ -311,28 +317,29 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 mode=config.assignment_search,
                 n_attempts=config.assignment_n_attempts,
                 max_iter=config.assignment_max_iter,
-                r2_threshold=config.assignment_r2_threshold,
+                rmse_threshold=config.assignment_rmse_threshold,
             )
             logger.info(
                 "Hungarian search policy resolved: mode=%s, n_attempts=%d, "
-                "max_iter=%d, r2_threshold=%.6f",
+                "max_iter=%d, rmse_threshold=%.6f",
                 search_settings.mode,
                 search_settings.n_attempts,
                 search_settings.max_iter,
-                search_settings.r2_threshold,
+                search_settings.rmse_threshold,
             )
 
             # Call Hungarian assignment function
-            opt_r2, assignment = fit_with_hungarian_assignment(
+            opt_rmse, assignment = fit_with_hungarian_assignment(
                 molecule=molecule,
                 susc_model=susc_model,
                 experiment=experiment,
                 average_labels=average_labels,
                 n_attempts=search_settings.n_attempts,
                 max_iter=search_settings.max_iter,
-                r2_threshold=search_settings.r2_threshold,
+                rmse_threshold=search_settings.rmse_threshold,
+                area_weight=config.assignment_area_weight,
             )
-            logger.info("Hungarian completed: best R² = %.6f", opt_r2)
+            logger.info("Hungarian completed: best RMSE = %.6f", opt_rmse)
 
             # Save assigned experiment to file
             save_experiment(
@@ -344,7 +351,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 delimiter=delimiter,
                 comment=(
                     f"# Optimal Assignment (Hungarian)\n"
-                    f"# r2 = {opt_r2:f}\n"
+                    f"# rmse = {opt_rmse:f}\n"
                     f"# T = {experiment.temperature:.2f} K"
                 ),
             )
@@ -418,6 +425,123 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     f"Predicted shift components at {experiment.temperature:.2f} K"
                 ),
                 order="descending",
+            )
+
+        # r^-6 distance-model fits (R1 and linewidth)
+        _width_fit_result = None
+        _r1_fit_result = None
+        for _obs in ("r1", "width"):
+            _has_data = any(
+                (sig.r1 is not None if _obs == "r1" else sig.width > 0.0)
+                for sig in experiment.signals
+            )
+            if not _has_data:
+                continue
+            try:
+                r6_result = fit_r6(molecule, experiment, observable=_obs)
+            except ValueError as err:
+                logger.warning("r^-6 fit (%s) skipped: %s", _obs, err)
+                continue
+            if _obs == "width":
+                _width_fit_result = r6_result
+            elif _obs == "r1":
+                _r1_fit_result = r6_result
+            with spec.context():
+                plot_r6_fit(
+                    r6_result,
+                    observable=_obs,
+                    spec=spec,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"r6_fit_{_obs}_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"r\u207b\u2076 Fit ({_obs}) "
+                        f"at {experiment.temperature:.2f} K"
+                    ),
+                )
+
+        # Shift vs linewidth bubble plot
+        with spec.context():
+            plot_shift_width_bubble(
+                experiment,
+                molecule,
+                spec=spec,
+                observable="width",
+                fit_result=_width_fit_result,
+                show=options.runtime.show_plots,
+                save=True,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"shift_width_bubble_{experiment.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=(
+                    f"Shift vs Linewidth at {experiment.temperature:.2f} K"
+                ),
+            )
+
+        # Shift vs R1 bubble plot (only when R1 data is present)
+        if _r1_fit_result is not None or any(
+            sig.r1 is not None for sig in experiment.signals
+        ):
+            with spec.context():
+                plot_shift_width_bubble(
+                    experiment,
+                    molecule,
+                    spec=spec,
+                    observable="r1",
+                    fit_result=_r1_fit_result,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"shift_r1_bubble_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Shift vs R1 at {experiment.temperature:.2f} K"
+                    ),
+                )
+
+        # Apply r^-6 predicted linewidths to molecule nuclei before spectrum plot
+        if _width_fit_result is not None:
+            _label_to_lw_loop = dict(
+                zip(_width_fit_result["labels"], _width_fit_result["pred"])
+            )
+            _isotope_loop = molecule.nuclei[0].isotope
+            _gamma_loop = NUCLEAR_GAMMAS[remove_numbers(_isotope_loop)]
+            _b0_loop = experiment.magnetic_field
+            for nuc in molecule.nuclei:
+                if nuc.chem_label in _label_to_lw_loop:
+                    lw_hz = _label_to_lw_loop[nuc.chem_label]
+                    nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
+
+        # Predicted + experimental deconvoluted spectrum overlay
+        with spec.context():
+            plot_raw_deconv_pred(
+                molecule=molecule,
+                isotope=molecule.nuclei[0].isotope,
+                shift_range=[
+                    np.min([nuc.shift.avg for nuc in molecule.nuclei]),
+                    np.max([nuc.shift.avg for nuc in molecule.nuclei]),
+                ],
+                experiment=experiment,
+                spec=spec,
+                save=True,
+                show=options.runtime.show_plots,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"pred_and_exp_spectrum_{experiment.temperature:.2f}_K",
+                ),
+                verbose=True,
+                window_title=(
+                    f"Predicted and Experimental Spectra"
+                    f" at {experiment.temperature:.2f} K"
+                ),
             )
 
     # Write shift data to file
@@ -518,6 +642,21 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 show_plots=options.runtime.show_plots,
             )
 
+    # Apply r^-6 predicted linewidths to the spectrum if available.
+    # Widths from fit_r6 are in Hz (same unit as signal.width); convert to
+    # ppm using the Larmor frequency of the last experiment.
+    if _width_fit_result is not None:
+        _label_to_lw = dict(
+            zip(_width_fit_result["labels"], _width_fit_result["pred"])
+        )
+        _isotope = mol.nuclei[0].isotope
+        _gamma = NUCLEAR_GAMMAS[remove_numbers(_isotope)]
+        _b0 = experiment.magnetic_field
+        for nuc in mol.nuclei:
+            if nuc.chem_label in _label_to_lw:
+                lw_hz = _label_to_lw[nuc.chem_label]
+                nuc.shift.lw = np.float64(lw_hz / (_gamma * _b0))
+
     with spec.context():
         plot_pred_spectrum(
             mol,
@@ -545,7 +684,7 @@ def _obtain_r2a(
     echo_r2: bool,
 ):
     """
-    Fit a susceptibility model for a proposed assignment and return adjusted R^2.
+    Fit a susceptibility model for a proposed assignment and return RMSE.
 
     This helper is designed to be run in parallel when searching over assignment
     permutations.
@@ -558,7 +697,7 @@ def _obtain_r2a(
         average_labels (list[list[str]]): Groups of labels to average during fitting.
 
     Returns:
-        float: Adjusted R^2 value for this assignment.
+        float: RMSE value for this assignment.
     """
 
     # and swap in new, permuted, assignments
@@ -570,6 +709,6 @@ def _obtain_r2a(
 
     # Print to screen if envvar enabled
     if echo_r2:
-        print(model.adj_r2)
+        print(model.rmse)
 
-    return model.adj_r2
+    return model.rmse

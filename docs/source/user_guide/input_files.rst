@@ -391,7 +391,7 @@ Used in susceptibility fitting workflows that require assignment handling.
           mode: custom   # One of: fast | balanced | robust | custom
           n_attempts: 10      # Optional, mode: custom only
           max_iter: 100       # Optional, mode: custom only
-          r2_threshold: 0.99  # Optional, mode: custom only
+          rmse_threshold: 0.5   # Optional, mode: custom only (ppm)
 
 The three supported strategies are:
 
@@ -416,11 +416,11 @@ The three supported strategies are:
     Search behaviour is controlled by the ``search`` mapping:
 
     - ``mode: fast`` uses ``n_attempts=1``, ``max_iter=20``,
-      ``r2_threshold=0.95``.
+      ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: balanced`` uses ``n_attempts=10``, ``max_iter=100``,
-      ``r2_threshold=0.99``.
+      ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: robust`` uses ``n_attempts=25``, ``max_iter=250``,
-      ``r2_threshold=0.995``.
+      ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: custom`` allows these three numeric controls to be provided
       explicitly under ``assignment:search``.
 
@@ -444,7 +444,7 @@ The three supported strategies are:
 
    The canonical Hungarian forms are ``search: {mode: balanced}`` for preset
    behaviour and ``search: {mode: custom, n_attempts: ..., max_iter: ...,
-   r2_threshold: ...}`` for fully explicit search control.
+   rmse_threshold: ...}`` for fully explicit search control.
 
    Assignment handling assumes that experimental data and assignments are
    ordered consistently by the user.

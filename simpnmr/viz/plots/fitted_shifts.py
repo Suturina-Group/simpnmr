@@ -186,6 +186,11 @@ def plot_fitted_shifts(
         else:
             model_lines.append(f"{label}: {val:.3f}")
 
+    dax = float(molecule.susc.axiality) * conv
+    drh = float(molecule.susc.rhombicity) * conv
+    model_lines.append(f"Δχ$_{{ax}}$: {dax:.3f}")
+    model_lines.append(f"Δχ$_{{rh}}$: {drh:.3f}")
+
     euler_lines = [
         f"α: {int(round(molecule.susc.alpha))}°",
         f"β: {int(round(molecule.susc.beta))}°",
