@@ -338,6 +338,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 max_iter=search_settings.max_iter,
                 rmse_threshold=search_settings.rmse_threshold,
                 area_weight=config.assignment_area_weight,
+                width_weight=config.assignment_width_weight,
+                r1_weight=config.assignment_r1_weight,
             )
             logger.info("Hungarian completed: best RMSE = %.6f", opt_rmse)
 

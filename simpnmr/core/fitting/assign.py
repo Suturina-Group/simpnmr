@@ -92,6 +92,8 @@ def fit_with_hungarian_assignment(
     max_iter: int,
     rmse_threshold: float,
     area_weight: float = 0.0,
+    width_weight: float = 0.0,
+    r1_weight: float = 0.0,
 ) -> tuple[float, list[str]]:
     """Fit assignments with alternating Hungarian reassignment and chi refits.
 
@@ -124,6 +126,15 @@ def fit_with_hungarian_assignment(
             then ``area_weight * (norm_area - norm_group_size)**2`` is added
             to the shift-squared cost. Set to 0.0 (default) to use shifts
             only.
+        width_weight: Weight for the linewidth-consistency term. Experimental
+            linewidths and per-label mean(1/r^6) values are each normalised to
+            sum to 1, then ``width_weight * (norm_width - norm_inv_r6)**2`` is
+            added to the cost. Requires ``molecule.paramagnetic_centre`` to be
+            set. Set to 0.0 (default) to skip.
+        r1_weight: Weight for the R1-consistency term, analogous to
+            ``width_weight`` but using experimental R1 values. Signals with
+            no R1 data (``None`` or ``NaN``) are excluded from this term.
+            Set to 0.0 (default) to skip.
 
     Returns:
         The RMSE (ppm) after restoring and re-fitting the best assignment,
@@ -248,12 +259,66 @@ def fit_with_hungarian_assignment(
                     else group_sizes
                 )
 
+            # Precompute mean(1/r^6) per label for width/R1 terms
+            norm_inv_r6 = None
+            if (width_weight > 0.0 or r1_weight > 0.0) and molecule.paramagnetic_centre is not None:
+                centre = np.asarray(molecule.paramagnetic_centre, dtype=float)
+                inv_r6_per_label = np.array(
+                    [
+                        np.mean(
+                            [
+                                1.0 / max(float(np.linalg.norm(n.coord - centre)), 1e-6) ** 6
+                                for n in molecule.nuclei
+                                if n.chem_label == cl
+                            ]
+                        )
+                        for cl in labels_ordered
+                    ],
+                    dtype=float,
+                )
+                total_inv_r6 = inv_r6_per_label.sum()
+                norm_inv_r6 = (
+                    inv_r6_per_label / total_inv_r6 if total_inv_r6 > 0 else inv_r6_per_label
+                )
+
+            # Precompute normalised experimental widths
+            norm_exp_widths = None
+            if width_weight > 0.0 and norm_inv_r6 is not None:
+                exp_widths = np.array(
+                    [sig.width for sig in trial_experiment.signals], dtype=float
+                )
+                total_width = exp_widths.sum()
+                norm_exp_widths = (
+                    exp_widths / total_width if total_width > 0 else exp_widths
+                )
+
+            # Precompute normalised experimental R1 values
+            norm_exp_r1 = None
+            if r1_weight > 0.0 and norm_inv_r6 is not None:
+                raw_r1 = np.array(
+                    [
+                        float(sig.r1) if sig.r1 is not None and not np.isnan(float(sig.r1)) else 0.0
+                        for sig in trial_experiment.signals
+                    ],
+                    dtype=float,
+                )
+                total_r1 = raw_r1.sum()
+                norm_exp_r1 = raw_r1 / total_r1 if total_r1 > 0 else raw_r1
+
             for i, sig in enumerate(trial_experiment.signals):
                 for j, cl in enumerate(labels_ordered):
                     cost[i, j] = (sig.shift - avg_pred[cl]) ** 2
                     if area_weight > 0.0:
                         cost[i, j] += area_weight * (
                             norm_exp_areas[i] - norm_group_sizes[j]
+                        ) ** 2
+                    if width_weight > 0.0 and norm_exp_widths is not None:
+                        cost[i, j] += width_weight * (
+                            norm_exp_widths[i] - norm_inv_r6[j]
+                        ) ** 2
+                    if r1_weight > 0.0 and norm_exp_r1 is not None:
+                        cost[i, j] += r1_weight * (
+                            norm_exp_r1[i] - norm_inv_r6[j]
                         ) ** 2
 
             _, col_idx = linear_sum_assignment(cost)

@@ -163,6 +163,8 @@ class FitSuscConfig(Config):
             "groups",
             "search",
             "area_weight",
+            "width_weight",
+            "r1_weight",
         ],
         "nuclei": ["include", "include_groups"],
         "susc_fit": ["type", "variables", "input_units", "average_shifts"],
@@ -214,6 +216,8 @@ class FitSuscConfig(Config):
         self._assignment_max_iter = None
         self._assignment_rmse_threshold = None
         self._assignment_area_weight = 0.0
+        self._assignment_width_weight = 0.0
+        self._assignment_r1_weight = 0.0
         self._nuclei_include = ""
         self._nuclei_include_groups = []
         self._susc_fit_type = ""
@@ -645,6 +649,50 @@ class FitSuscConfig(Config):
         if fvalue < 0.0:
             raise ValueError("assignment:area_weight must be non-negative")
         self._assignment_area_weight = fvalue
+        return None
+
+    @property
+    def assignment_width_weight(self) -> float:
+        return self._assignment_width_weight
+
+    @assignment_width_weight.setter
+    def assignment_width_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_width_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:width_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:width_weight must be non-negative")
+        self._assignment_width_weight = fvalue
+        return None
+
+    @property
+    def assignment_r1_weight(self) -> float:
+        return self._assignment_r1_weight
+
+    @assignment_r1_weight.setter
+    def assignment_r1_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_r1_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:r1_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:r1_weight must be non-negative")
+        self._assignment_r1_weight = fvalue
         return None
 
     @property

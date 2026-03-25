@@ -48,8 +48,8 @@ ASSIGNMENT_SEARCH_PRESETS: dict[str, AssignmentSearchSettings] = {
     ),
     "robust": AssignmentSearchSettings(
         mode="robust",
-        n_attempts=25,
-        max_iter=250,
+        n_attempts=200,
+        max_iter=500,
         rmse_threshold=0.0,
     ),
 }

@@ -393,6 +393,11 @@ Used in susceptibility fitting workflows that require assignment handling.
           max_iter: 100       # Optional, mode: custom only
           rmse_threshold: 0.5   # Optional, mode: custom only (ppm)
 
+        # Cost-matrix weighting terms [Optional, Hungarian only]
+        area_weight: 0.0    # Weight for signal area vs. group-size consistency
+        width_weight: 0.0   # Weight for linewidth vs. 1/r^6 consistency
+        r1_weight: 0.0      # Weight for R1 vs. 1/r^6 consistency
+
 The three supported strategies are:
 
 ``fixed``
@@ -419,13 +424,39 @@ The three supported strategies are:
       ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: balanced`` uses ``n_attempts=10``, ``max_iter=100``,
       ``rmse_threshold=0.0`` (early stopping disabled).
-    - ``mode: robust`` uses ``n_attempts=25``, ``max_iter=250``,
+    - ``mode: robust`` uses ``n_attempts=200``, ``max_iter=500``,
       ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: custom`` allows these three numeric controls to be provided
       explicitly under ``assignment:search``.
 
     If the ``search`` block is omitted, the policy layer resolves the default
     behaviour to the ``balanced`` mode.
+
+    The cost matrix used by the Hungarian algorithm can be augmented with
+    additional physically motivated terms via the following optional keys:
+
+    ``area_weight``
+        Adds a term based on the consistency between the normalised experimental
+        signal area and the normalised group size (number of equivalent nuclei
+        sharing the same chemical label). Both quantities are normalised to sum
+        to 1 across all signals/labels before comparison. This steers the
+        algorithm to match signals with large integrated areas to labels with
+        many equivalent nuclei. Default: ``0.0`` (disabled).
+
+    ``width_weight``
+        Adds a term based on the consistency between the normalised experimental
+        linewidth and the normalised mean ``1/r⁶`` for each label, where *r* is
+        the distance from each nucleus to the paramagnetic centre. Since
+        paramagnetic relaxation scales as ``1/r⁶``, signals with larger
+        linewidths are steered toward labels closer to the metal. Both
+        quantities are normalised to sum to 1. Requires
+        ``hyperfine.paramagnetic_centre`` to be set. Default: ``0.0``
+        (disabled).
+
+    ``r1_weight``
+        Analogous to ``width_weight`` but uses experimental ``R1`` values
+        instead of linewidths. Signals without R1 data are treated as zero.
+        Default: ``0.0`` (disabled).
 
     This method scales polynomially with the number of signals and is therefore
     preferred over ``permute`` for large or heavily degenerate assignment
@@ -440,11 +471,14 @@ The three supported strategies are:
    For ``permute``, the ``groups`` key must be explicitly defined.
 
    For ``hungarian``, the ``groups`` key is not supported. Hungarian assignment
-   is controlled only through the optional ``search`` mapping.
+   is controlled through the optional ``search`` mapping and the optional
+   cost-matrix weighting keys (``area_weight``, ``width_weight``,
+   ``r1_weight``).
 
    The canonical Hungarian forms are ``search: {mode: balanced}`` for preset
    behaviour and ``search: {mode: custom, n_attempts: ..., max_iter: ...,
-   rmse_threshold: ...}`` for fully explicit search control.
+   rmse_threshold: ...}`` for fully explicit search control. All weighting
+   terms default to ``0.0`` and can be combined freely.
 
    Assignment handling assumes that experimental data and assignments are
    ordered consistently by the user.
