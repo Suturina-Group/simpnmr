@@ -1261,7 +1261,7 @@ class PredictConfig(FitSuscConfig):
             "paramagnetic_centre",
         ],
         "experiment": ["files", "spectrum_files", "exp_reference"],
-        "nuclei": ["include"],
+        "nuclei": ["include", "include_groups"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
