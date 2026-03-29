@@ -524,28 +524,27 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
 
         # Predicted + experimental deconvoluted spectrum overlay
-        with spec.context():
-            plot_raw_deconv_pred(
-                molecule=molecule,
-                isotope=molecule.nuclei[0].isotope,
-                shift_range=[
-                    np.min([nuc.shift.avg for nuc in molecule.nuclei]),
-                    np.max([nuc.shift.avg for nuc in molecule.nuclei]),
-                ],
-                experiment=experiment,
-                spec=spec,
-                save=True,
-                show=options.runtime.show_plots,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"pred_and_exp_spectrum_{experiment.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    f"Predicted and Experimental Spectra"
-                    f" at {experiment.temperature:.2f} K"
-                ),
-            )
+        _avgs = [nuc.shift.avg for nuc in molecule.nuclei if nuc.shift.avg is not None]
+        if _avgs and experiment.signals:
+            with spec.context():
+                plot_raw_deconv_pred(
+                    molecule=molecule,
+                    isotope=molecule.nuclei[0].isotope,
+                    shift_range=[np.min(_avgs), np.max(_avgs)],
+                    experiment=experiment,
+                    spec=spec,
+                    save=True,
+                    show=options.runtime.show_plots,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"pred_and_exp_spectrum_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Predicted and Experimental Spectra"
+                        f" at {experiment.temperature:.2f} K"
+                    ),
+                )
 
     # Write shift data to file
     _comment_base = f"Hyperfines from file {config.hyperfine_file}\n"

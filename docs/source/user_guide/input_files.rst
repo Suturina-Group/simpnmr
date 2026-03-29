@@ -298,11 +298,18 @@ Optional. Used in workflows that include relaxation-based shift broadening or we
       T1e: 0.2e-12 # Required parameter
       T2e: 0.2e-12 # Required parameter
       tR: 140e-12 # Required parameter
+      min_linewidth_hz: 5.0 # Optional minimum linewidth floor (Hz); added to the
+                            # calculated R2/π linewidth before converting to ppm
 
 .. note::
 
    Relaxation models modify the weighting or broadening of predicted shifts but do
    not alter the underlying susceptibility or hyperfine tensors.
+
+   ``min_linewidth_hz`` sets a floor on the predicted linewidth. The value (in Hz)
+   is added to the SBM/Curie-calculated R₂/π linewidth before conversion to ppm,
+   accounting for contributions such as field inhomogeneity or natural linewidth
+   that are not captured by the relaxation model. Defaults to 0.0 (no floor).
 
    When a relaxation model is specified, all required relaxation parameters must
    be provided. When relaxation is enabled, ``hyperfine:paramagnetic_centre``

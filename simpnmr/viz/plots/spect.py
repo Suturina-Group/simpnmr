@@ -24,7 +24,7 @@ from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.util.arrays import find_index_of_nearest
 from simpnmr.core.util.strings import remove_numbers
 from simpnmr.io.csv.spec import write_spectrum
-from simpnmr.viz.layout.canvas import create_canvas, create_stacked_canvas
+from simpnmr.viz.layout.canvas import create_stacked_canvas
 from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.style.theme import PlotSpec
 from simpnmr.viz.utils.fmt import isotope_format
@@ -100,18 +100,6 @@ def plot_pred_spectrum(
     glyphs = spec.glyphs
     palette = spec.palette
 
-    # Make plot
-    fig, ax = create_canvas(
-        spec.profile,
-        variant="standard",
-        window_title=window_title,
-        layout="constrained",
-    )
-    spec.skin_axes(ax)
-
-    # Spectrum trace
-    ax.plot(x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75)
-
     # Labels
     avg_shifts = {
         nucleus.chem_math_label: nucleus.shift.avg
@@ -123,6 +111,26 @@ def plot_pred_spectrum(
     sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
     sorted_labels = [label for label, _ in sorted_shifts_labels]
     sorted_shifts = [shift for _, shift in sorted_shifts_labels]
+
+    # Scale figure width and label density with number of peaks
+    n_peaks = len(sorted_labels)
+    base_width = 3.54  # inches (standard)
+    fig_width = max(base_width, base_width * n_peaks / 8)
+    base_height = 2.40
+    label_mindist = max(0.005, 0.03 / max(1, n_peaks / 8))
+    label_fontsize = max(4, round(spec.typography.label * min(1.0, 8 / max(1, n_peaks))))
+
+    # Make plot
+    fig, ax = plt.subplots(
+        1, 1,
+        figsize=(fig_width, base_height),
+        num=window_title,
+        layout="constrained",
+    )
+    spec.skin_axes(ax)
+
+    # Spectrum trace
+    ax.plot(x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75)
 
     _annotate_peaks_with_barrier(
         ax,
@@ -136,7 +144,8 @@ def plot_pred_spectrum(
         glyphs=glyphs,
         reverse_axis=True,
         connector_alpha=0.6,
-        label_fontsize=str(spec.typography.label),
+        label_fontsize=str(label_fontsize),
+        label_mindist_scale=label_mindist,
         line_scale=0.4,
     )
 
@@ -306,7 +315,7 @@ def plot_raw_deconv_pred(
         palette=palette,
         glyphs=glyphs,
         reverse_axis=True,
-        label_fontsize=spec.typography.label - 2,
+        label_fontsize=round(spec.typography.label * 0.6),
         line_scale=0.8,
     )
 
@@ -431,7 +440,7 @@ def plot_raw_deconv_pred(
         palette=palette,
         glyphs=glyphs,
         reverse_axis=True,
-        label_fontsize=spec.typography.label - 2,
+        label_fontsize=round(spec.typography.label * 0.6),
     )
 
     # Vertical left-side label (instead of a top title)
@@ -533,64 +542,95 @@ def _annotate_peaks_with_barrier(
         y_intensity[find_index_of_nearest(x_grid, sh)] for sh in peak_x_sorted
     ]
 
-    # Horizontal barrier line
+    # Horizontal barrier and label positions in data coordinates
     label_barrier = barrier_scale * float(np.max(y_intensity))
+    labels_position_y = labels_above_barrier_scale * label_barrier
+    _y_top = labels_position_y * 1.5
+    _lw_connector = max(0.2, 0.2 * line_scale * glyphs.line_lw)
+    _lw_barrier = max(0.2, 0.5 * line_scale * glyphs.line_lw)
+    _fs = label_fontsize or str(spec.typography.label)
+
+    # Draw the static barrier line
     ax.hlines(
         label_barrier,
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
         color=palette.primary,
-        linewidth=max(0.2, 0.5 * line_scale * glyphs.line_lw),
+        linewidth=_lw_barrier,
         alpha=barrier_alpha,
     )
+    ax.set_ylim(bottom=None, top=_y_top)
 
-    # Vertical position for peak text-labels
-    labels_position_y = labels_above_barrier_scale * label_barrier
+    # Container for dynamic annotation artists (cleared on each redraw)
+    _annotation_artists = []
 
-    # Minimum acceptable distance between labels
-    label_mindist = label_mindist_scale * (np.max(shift_range) - np.min(shift_range))
+    def _redraw_labels(ax_):
+        """Redraw labels and connectors for peaks visible in current x range."""
+        for artist in _annotation_artists:
+            try:
+                artist.remove()
+            except Exception:
+                pass
+        _annotation_artists.clear()
 
-    # Initial distance matrix
-    adj_label_xvals = copy.copy(peak_x_sorted)
-    distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
-    np.fill_diagonal(distance, np.inf)
+        xmin, xmax = ax_.get_xlim()
+        # Clamp y-top
+        _, ymax = ax_.get_ylim()
+        if ymax < _y_top:
+            ax_.set_ylim(top=_y_top)
 
-    # Resolve label overlaps
-    while len(np.where(abs(distance) < label_mindist)[0]):
-        [xlocs, ylocs] = np.where(abs(distance) < label_mindist)
-        for x, y in zip(xlocs, ylocs):
-            if y > x:
-                adj_label_xvals[x] -= label_mindist / 2
-                adj_label_xvals[y] += label_mindist / 2
+        # Select only peaks visible in current x window
+        visible = [
+            (px, py, lab)
+            for px, py, lab in zip(peak_x_sorted, peak_y_sorted, labels_sorted)
+            if min(xmin, xmax) <= px <= max(xmin, xmax)
+        ]
+        if not visible:
+            ax_.figure.canvas.draw_idle()
+            return
 
-        distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
-        np.fill_diagonal(distance, np.inf)
+        vis_px, vis_py, vis_labs = zip(*visible)
+        vis_px = list(vis_px)
 
-    # Enforce monotonic label-x ordering relative to the peak ordering.
-    # This prevents connector lines from crossing when overlap resolution pushes
-    # labels past each other.
-    adj_label_xvals = sorted(adj_label_xvals, reverse=reverse_axis)
+        # Resolve label overlaps within the visible window
+        xrange = abs(xmax - xmin)
+        mindist = label_mindist_scale * xrange
+        adj = list(vis_px)
+        dist = np.subtract.outer(adj, adj)
+        np.fill_diagonal(dist, np.inf)
+        for _ in range(200):
+            overlap = np.where(abs(dist) < mindist)
+            if not len(overlap[0]):
+                break
+            for xi, yi in zip(*overlap):
+                if yi > xi:
+                    adj[xi] -= mindist / 2
+                    adj[yi] += mindist / 2
+            dist = np.subtract.outer(adj, adj)
+            np.fill_diagonal(dist, np.inf)
+        adj = sorted(adj, reverse=reverse_axis)
 
-    # Add labels and connector lines
-    for px, py, lx, lab in zip(
-        peak_x_sorted, peak_y_sorted, adj_label_xvals, labels_sorted
-    ):
-        ax.text(
-            lx,
-            labels_position_y,
-            lab,
-            fontsize=label_fontsize or str(spec.typography.label),
-            rotation="vertical",
-            va="bottom",
-            ha="center",
-        )
+        for px, py, lx, lab in zip(vis_px, vis_py, adj, vis_labs):
+            t = ax_.text(
+                lx, labels_position_y, lab,
+                fontsize=_fs, rotation="vertical",
+                va="bottom", ha="center",
+                clip_on=False,
+            )
+            ln, = ax_.plot(
+                [px, px, lx],
+                [py, label_barrier, labels_position_y],
+                linestyle="--",
+                color=palette.primary,
+                linewidth=_lw_connector,
+                alpha=connector_alpha,
+                clip_on=False,
+            )
+            _annotation_artists.extend([t, ln])
 
-        ax.plot(
-            [px, px, lx],
-            [py, label_barrier, labels_position_y],
-            linestyle="--",
-            color=palette.primary,
-            linewidth=max(0.2, 0.5 * line_scale * glyphs.line_lw),
-            alpha=connector_alpha,
-        )
+    ax.callbacks.connect("xlim_changed", _redraw_labels)
+    ax.callbacks.connect("ylim_changed", _redraw_labels)
+
+    # Initial draw
+    _redraw_labels(ax)

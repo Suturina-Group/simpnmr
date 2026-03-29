@@ -714,12 +714,12 @@ def _apply_relaxation_linewidths(
         for chem_label, rate_list in r2_by_chem_label.items()
     }
 
+    min_lw_hz = getattr(config, "relaxation_min_linewidth_hz", 0.0) or 0.0
+
     for nuc in base_molecule.nuclei:
         if nuc.chem_label in avg_lw_by_chem_label:
-            nuc.shift.lw = (
-                avg_lw_by_chem_label[nuc.chem_label]
-                / (abs(omega_I_dict[nuc.label]) / (2 * np.pi))
-                * 1e6
-            )
+            larmor_hz = abs(omega_I_dict[nuc.label]) / (2 * np.pi)
+            lw_hz = avg_lw_by_chem_label[nuc.chem_label] + min_lw_hz
+            nuc.shift.lw = lw_hz / larmor_hz * 1e6
 
     return

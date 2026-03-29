@@ -1277,6 +1277,7 @@ class PredictConfig(FitSuscConfig):
             "T1e",
             "T2e",
             "tR",
+            "min_linewidth_hz",
         ],
     }
 
@@ -1291,6 +1292,7 @@ class PredictConfig(FitSuscConfig):
         self._relaxation_T1e = None
         self._relaxation_T2e = None
         self._relaxation_tR = None
+        self._relaxation_min_linewidth_hz = 0.0
 
         super().__init__(**kwargs)
 
@@ -1466,6 +1468,20 @@ class PredictConfig(FitSuscConfig):
         except Exception:
             raise ValueError(f"Cannot convert tR value {value} to float")
         return None
+
+    @property
+    def relaxation_min_linewidth_hz(self) -> float:
+        return self._relaxation_min_linewidth_hz
+
+    @relaxation_min_linewidth_hz.setter
+    def relaxation_min_linewidth_hz(self, value):
+        if value is None:
+            self._relaxation_min_linewidth_hz = 0.0
+        else:
+            v = float(value)
+            if v < 0:
+                raise ValueError("min_linewidth_hz must be non-negative")
+            self._relaxation_min_linewidth_hz = v
 
     @classmethod
     def from_file(cls, file_name: str) -> "PredictConfig":

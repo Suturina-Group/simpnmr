@@ -141,6 +141,9 @@ class Experiment:
         """
         return [signal.assignment for signal in self.signals]
 
+    def __contains__(self, item):
+        return any(signal.assignment == item for signal in self.signals)
+
     def __getitem__(self, item):
         # This is probably slow
         lookup = {signal.assignment: signal for signal in self.signals}
