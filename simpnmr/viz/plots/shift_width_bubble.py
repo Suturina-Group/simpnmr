@@ -66,10 +66,18 @@ def plot_shift_width_bubble(
     Returns:
         A tuple ``(fig, axes)`` where ``axes`` is the list of subplots.
     """
-    # --- Build group-size lookup from molecule nuclei ---
+    # --- Build group-size and predicted-shift lookups from molecule nuclei ---
     cl_to_size: dict[str, int] = {}
+    cl_to_pred_shift: dict[str, float] = {}
     for nuc in molecule.nuclei:
         cl_to_size[nuc.chem_label] = cl_to_size.get(nuc.chem_label, 0) + 1
+        # Average predicted shift across equivalent nuclei sharing the same label
+        prev = cl_to_pred_shift.get(nuc.chem_label)
+        cl_to_pred_shift[nuc.chem_label] = (
+            float(nuc.shift.avg)
+            if prev is None
+            else (prev + float(nuc.shift.avg)) / 2
+        )
 
     # --- Collect per-signal data ---
     label_to_pred = (
@@ -87,6 +95,7 @@ def plot_shift_width_bubble(
         records.append(
             {
                 "shift": sig.shift,
+                "pred_shift": cl_to_pred_shift.get(cl, sig.shift),
                 "y": float(y),
                 "label": cl,
                 "group_size": cl_to_size.get(cl, 0),
@@ -128,6 +137,7 @@ def plot_shift_width_bubble(
 
         subset = [r for r in records if r["group_size"] == gs]
         shifts = [r["shift"] for r in subset]
+        pred_shifts = [r["pred_shift"] for r in subset]
         ys = [r["y"] for r in subset]
         labels = [r["label"] for r in subset]
         preds = [r["pred"] for r in subset]
@@ -156,15 +166,16 @@ def plot_shift_width_bubble(
                 color=palette.primary,
             )
 
-        # Predicted overlay
+        # Predicted overlay (open circles at predicted shift, predicted y)
         has_pred = [p is not None for p in preds]
         if any(has_pred):
-            pred_shifts = [x for x, hp in zip(shifts, has_pred) if hp]
+            pred_xs = [ps for ps, hp in zip(pred_shifts, has_pred) if hp]
             pred_ys = [p for p in preds if p is not None]
+            exp_xs = [x for x, hp in zip(shifts, has_pred) if hp]
             exp_ys = [y for y, hp in zip(ys, has_pred) if hp]
 
             ax.scatter(
-                pred_shifts,
+                pred_xs,
                 pred_ys,
                 s=_MARKER_SIZE,
                 facecolors="none",
@@ -174,9 +185,9 @@ def plot_shift_width_bubble(
                 label=r"Predicted ($r^{-6}$)",
             )
 
-            for xs, ye, yp in zip(pred_shifts, exp_ys, pred_ys):
+            for xe, ye, xp, yp in zip(exp_xs, exp_ys, pred_xs, pred_ys):
                 ax.plot(
-                    [xs, xs],
+                    [xe, xp],
                     [ye, yp],
                     color=palette.primary,
                     lw=0.5,

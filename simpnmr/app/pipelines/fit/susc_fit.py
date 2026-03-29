@@ -388,6 +388,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ),
                 verbose=True,
                 window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
+                spin=spin,
             )
 
         with spec.context():

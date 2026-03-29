@@ -486,6 +486,7 @@ def _apply_relaxation_linewidths(
         if isinstance(config.nuclei_include, list)
         else [config.nuclei_include]
     )
+    nuclei_labels = [lbl for lbl in nuclei_labels if lbl]
 
     # Use all nuclei in the molecule that match the requested element(s)
     nuclei_coords = {

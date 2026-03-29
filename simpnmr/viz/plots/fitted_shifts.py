@@ -19,6 +19,7 @@ from simpnmr.core.const import ptable
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.fitting import models
+from simpnmr.core.fitting.vt import compute_curie_prefactor
 from simpnmr.viz.layout.canvas import create_header_plot_canvas
 from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.layout.label import resolve_label_layout
@@ -65,6 +66,7 @@ def plot_fitted_shifts(
     window_title: str = "Fitted Shifts",
     susc_units: str = "A3",
     verbose: bool = True,
+    spin: float | None = None,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plots theoretical vs experimental shifts for a fitted susceptibility model.
 
@@ -186,10 +188,18 @@ def plot_fitted_shifts(
         else:
             model_lines.append(f"{label}: {val:.3f}")
 
-    dax = float(molecule.susc.axiality) * conv
-    drh = float(molecule.susc.rhombicity) * conv
-    model_lines.append(f"Δχ$_{{ax}}$: {dax:.3f}")
-    model_lines.append(f"Δχ$_{{rh}}$: {drh:.3f}")
+    if spin is not None:
+        norm_factor = compute_curie_prefactor(spin)  # Å³·K
+        T = float(molecule.susc.temperature)
+        dax_red = float(molecule.susc.axiality) * T / norm_factor
+        drh_red = float(molecule.susc.rhombicity) * T / norm_factor
+        model_lines.append(f"Δχ$_{{ax}}$·T (red.): {dax_red:.4f}")
+        model_lines.append(f"Δχ$_{{rh}}$·T (red.): {drh_red:.4f}")
+    else:
+        dax = float(molecule.susc.axiality) * conv
+        drh = float(molecule.susc.rhombicity) * conv
+        model_lines.append(f"Δχ$_{{ax}}$: {dax:.3f}")
+        model_lines.append(f"Δχ$_{{rh}}$: {drh:.3f}")
 
     euler_lines = [
         f"α: {int(round(molecule.susc.alpha))}°",

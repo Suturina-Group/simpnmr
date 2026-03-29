@@ -102,12 +102,14 @@ def plot_shift_spread(
         exps = {
             nuc.chem_math_label: experiment[nuc.chem_label].shift
             for nuc in molecule.nuclei
+            if nuc.chem_label in experiment
         }
 
         # Remove diamagnetic part of experiment if not included in terms list
         if "d" not in terms:
             for nuc in molecule.nuclei:
-                exps[nuc.chem_math_label] -= nuc.shift.dia
+                if nuc.chem_label in experiment:
+                    exps[nuc.chem_math_label] -= nuc.shift.dia
 
         # Order by low to high experimental shift
         # and store order as list of chemical math labels
