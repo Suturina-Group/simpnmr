@@ -54,6 +54,7 @@ from simpnmr.io.qc.backends.orca.geom import read_orca5_output_xyz  # TODO: remo
 from simpnmr.io.xyz import xyz_write
 
 # Visualisation
+from simpnmr.viz.plots.corr_time import plot_corr_time_contrib
 from simpnmr.viz.plots.orb_dep import plot_orbital_shift_distance_dependence
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spect import plot_pred_spectrum, plot_raw_deconv_pred
@@ -291,6 +292,137 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
 
         # Apply relaxation linewidth (relaxation-aware when inputs are available).
         _apply_relaxation_linewidths(config, molecule, experiment)
+
+        # Plot R1 decomposition if relaxation was computed
+        if molecule.relaxation is not None and molecule.relaxation.r1 is not None:
+            r1_channels = molecule.relaxation.r1
+            # Build chem_label -> math_label mapping for axis labels
+            _cl_to_ml = {
+                nuc.chem_label: nuc.chem_math_label
+                for nuc in molecule.nuclei
+                if nuc.chem_label and nuc.chem_math_label
+            }
+            # Average per-atom R1 channels into per-chem-label values
+            _cl_total: dict[str, list] = {}
+            _cl_dipolar: dict[str, list] = {}
+            _cl_contact: dict[str, list] = {}
+            _cl_curie: dict[str, list] = {}
+            for nuc in molecule.nuclei:
+                cl = nuc.chem_label
+                if r1_channels.total and nuc.label in r1_channels.total:
+                    _cl_total.setdefault(cl, []).append(r1_channels.total[nuc.label])
+                if r1_channels.dipolar and nuc.label in r1_channels.dipolar:
+                    _cl_dipolar.setdefault(cl, []).append(r1_channels.dipolar[nuc.label])
+                if r1_channels.contact and nuc.label in r1_channels.contact:
+                    _cl_contact.setdefault(cl, []).append(r1_channels.contact[nuc.label])
+                if r1_channels.curie and nuc.label in r1_channels.curie:
+                    _cl_curie.setdefault(cl, []).append(r1_channels.curie[nuc.label])
+
+            _chem_labels = sorted(_cl_total.keys())
+            _theory_r1 = np.array([np.mean(_cl_total[cl]) for cl in _chem_labels])
+            _theory_dipolar = (
+                np.array([np.mean(_cl_dipolar.get(cl, [0.0])) for cl in _chem_labels])
+                if _cl_dipolar else None
+            )
+            _theory_contact = (
+                np.array([np.mean(_cl_contact.get(cl, [0.0])) for cl in _chem_labels])
+                if _cl_contact else None
+            )
+            _theory_curie = (
+                np.array([np.mean(_cl_curie.get(cl, [0.0])) for cl in _chem_labels])
+                if _cl_curie else None
+            )
+            # Use experimental R1 if available, otherwise use total theory as placeholder
+            _exp_r1_dict = {
+                sig.assignment: float(sig.r1)
+                for sig in experiment.signals
+                if sig.r1 is not None and not np.isnan(float(sig.r1))
+            } if experiment is not None else {}
+            _exp_r1 = (
+                np.array([_exp_r1_dict[cl] for cl in _chem_labels if cl in _exp_r1_dict])
+                if _exp_r1_dict and all(cl in _exp_r1_dict for cl in _chem_labels)
+                else None
+            )
+
+            with spec.context():
+                plot_corr_time_contrib(
+                    theory_r1=_theory_r1,
+                    theory_r1_dipolar=_theory_dipolar,
+                    theory_r1_contact=_theory_contact,
+                    theory_r1_curie=_theory_curie,
+                    exp_r1=_exp_r1,
+                    chem_labels=[_cl_to_ml.get(cl, cl) for cl in _chem_labels],
+                    spec=spec,
+                    save=True,
+                    show=options.runtime.show_plots,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"pred_r1_decomposition_{susc.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                )
+
+        # Plot linewidth (R2/π) decomposition if relaxation was computed
+        if molecule.relaxation is not None and molecule.relaxation.r2 is not None:
+            r2_channels = molecule.relaxation.r2
+            _cl_total_r2: dict[str, list] = {}
+            _cl_dipolar_r2: dict[str, list] = {}
+            _cl_contact_r2: dict[str, list] = {}
+            _cl_curie_r2: dict[str, list] = {}
+            for nuc in molecule.nuclei:
+                cl = nuc.chem_label
+                if r2_channels.total and nuc.label in r2_channels.total:
+                    _cl_total_r2.setdefault(cl, []).append(r2_channels.total[nuc.label] / np.pi)
+                if r2_channels.dipolar and nuc.label in r2_channels.dipolar:
+                    _cl_dipolar_r2.setdefault(cl, []).append(r2_channels.dipolar[nuc.label] / np.pi)
+                if r2_channels.contact and nuc.label in r2_channels.contact:
+                    _cl_contact_r2.setdefault(cl, []).append(r2_channels.contact[nuc.label] / np.pi)
+                if r2_channels.curie and nuc.label in r2_channels.curie:
+                    _cl_curie_r2.setdefault(cl, []).append(r2_channels.curie[nuc.label] / np.pi)
+
+            _chem_labels_r2 = sorted(_cl_total_r2.keys())
+            _theory_lw = np.array([np.mean(_cl_total_r2[cl]) for cl in _chem_labels_r2])
+            _theory_lw_dipolar = (
+                np.array([np.mean(_cl_dipolar_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                if _cl_dipolar_r2 else None
+            )
+            _theory_lw_contact = (
+                np.array([np.mean(_cl_contact_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                if _cl_contact_r2 else None
+            )
+            _theory_lw_curie = (
+                np.array([np.mean(_cl_curie_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                if _cl_curie_r2 else None
+            )
+            _exp_lw_dict = {
+                sig.assignment: float(sig.width)
+                for sig in experiment.signals
+                if sig.width is not None
+            } if experiment is not None else {}
+            _exp_lw = (
+                np.array([_exp_lw_dict[cl] for cl in _chem_labels_r2])
+                if _exp_lw_dict and all(cl in _exp_lw_dict for cl in _chem_labels_r2)
+                else None
+            )
+
+            with spec.context():
+                plot_corr_time_contrib(
+                    theory_r1=_theory_lw,
+                    theory_r1_dipolar=_theory_lw_dipolar,
+                    theory_r1_contact=_theory_lw_contact,
+                    theory_r1_curie=_theory_lw_curie,
+                    exp_r1=_exp_lw,
+                    chem_labels=[_cl_to_ml.get(cl, cl) for cl in _chem_labels_r2],
+                    spec=spec,
+                    ylabel=r"Linewidth (Hz)",
+                    save=True,
+                    show=options.runtime.show_plots,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"pred_linewidth_decomposition_{susc.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                )
 
         # Calculate shifts using new susceptibility tensor and rotated hyperfines
         molecule.calculate_shifts()

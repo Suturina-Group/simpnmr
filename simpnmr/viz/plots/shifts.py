@@ -245,7 +245,7 @@ def plot_shift_spread(
 
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
     ax.set_xticks(xvals[::1] + 0.5)
-    ax.set_xticklabels(_order, rotation=45)
+    ax.set_xticklabels(_order, rotation=90)
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
     ax.grid(axis="x", ls="--", which="minor")
@@ -474,7 +474,7 @@ def plot_shift_contrib(
     ax.set_xlim([-0.5, xvals[-1] + 1.5])
 
     ax.set_xticks(xvals + 0.5)
-    ax.set_xticklabels(order, rotation=45)
+    ax.set_xticklabels(order, rotation=90)
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
     ax.yaxis.set_major_locator(ticker.AutoLocator())
