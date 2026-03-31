@@ -46,13 +46,13 @@ class TypographyScale:
 SCALES: dict[PlotProfile, TypographyScale] = {
     # Default for most figures, designed for publication-style PDFs.
     "paper": TypographyScale(
-        base=8,
-        axis_label=9,
-        tick_label=8,
-        legend=8,
-        title=10,
-        annotation=7,
-        label=8,
+        base=6,
+        axis_label=7,
+        tick_label=6,
+        legend=6,
+        title=8,
+        annotation=5,
+        label=6,
     ),
     # For wide figures, posters, and slides.
     "poster": TypographyScale(

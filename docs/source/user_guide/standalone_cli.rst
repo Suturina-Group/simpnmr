@@ -47,6 +47,67 @@ The command produces PCS values on a three-dimensional grid, suitable for
 visualisation or further analysis.
 
 
+``xyz_to_chemlabel``
+--------------------
+
+The ``xyz_to_chemlabel`` command extracts per-atom chemical labels from a
+Chemcraft-annotated XYZ file and writes them to a CSV file ready for use as a
+``chem_labels`` file in SimpNMR.
+
+**Required input**
+
+- A Chemcraft-style XYZ file with optional quoted labels in the fifth column
+
+**Typical usage**
+
+::
+
+   xyz_to_chemlabel structure.xyz
+
+Produces ``chemlabels.csv`` with ``atom_label`` and ``chem_label`` columns.
+An optional ``--math_placeholder`` flag adds a third ``chem_math_label``
+column pre-populated with LaTeX-wrapped labels (e.g. ``$tBu1$``).
+
+
+``label_groups``
+-----------------
+
+The ``label_groups`` command automatically identifies methyl (CH\ :sub:`3`\)
+and *tert*-butyl (C(CH\ :sub:`3`\)\ :sub:`3`\) groups in an XYZ structure
+file using distance-based bond detection, and assigns group labels to each
+atom.
+
+This is useful for generating ``chem_labels`` CSV files when equivalent proton
+groups (e.g. *tert*-butyl protons) should be treated as a single resonance in
+the spectrum.
+
+**Required input**
+
+- An XYZ file (standard or Chemcraft format)
+
+**Typical usage**
+
+::
+
+   label_groups molecule.xyz
+
+**Outputs**
+
+- ``<input>_labeled.xyz`` — original XYZ with group tags appended in quotes,
+  e.g. ``H   1.23  4.56  7.89  "tBu2"``
+- ``<input>_labels.csv`` — ``atom_label,chem_label`` CSV for all C and H
+  atoms, ready to use as ``chem_labels.file`` in a SimpNMR YAML
+
+**Group naming**
+
+- *tert*-butyl groups are labelled ``tBu1``, ``tBu2``, … (sorted by central
+  carbon index)
+- Standalone methyl groups are labelled ``Me1``, ``Me2``, …
+
+All atoms belonging to the same group receive the same ``chem_label``, so
+their shifts are averaged during prediction.
+
+
 ``get_sh``
 ----------
 

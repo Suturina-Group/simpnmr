@@ -50,6 +50,7 @@ setuptools.setup(
             "plot_A_funcs = simpnmr.tools.hfc_plot_batch:main",
             "plot_chi_funcs = simpnmr.tools.susc_plot_batch:main",
             "xyz_to_chemlabel = simpnmr.tools.coords.chemcraft:main",
+            "label_groups = simpnmr.tools.coords.label_groups:main",
         ]
     },
 )
