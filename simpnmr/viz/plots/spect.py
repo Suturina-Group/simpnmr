@@ -7,11 +7,11 @@ Provides utilities to build 1D spectra from per-nucleus shifts and to compare
 predicted spectra with deconvoluted and raw experimental spectra.
 """
 
-import copy
 import logging
 import os
 from collections.abc import Mapping
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
@@ -294,6 +294,9 @@ def plot_raw_deconv_pred(
     for axis in ax:
         spec.skin_axes(axis)
 
+    # Pre-compute top-panel barrier so cross-panel connectors can reference it
+    _sim_barrier = 1.1 * float(np.max(y_sim_intensity))
+
     # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
     ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
     ax[0].plot(x_grid, y_sim_intensity, lw=0.8 * glyphs.line_lw, color=palette.primary)
@@ -418,30 +421,74 @@ def plot_raw_deconv_pred(
             mapped.append(latex_label_map.get(tok, tok))
         return ",".join(mapped)
 
-    pm_sorted = sorted(
-        [
-            (signal.shift, _map_assignment_to_latex(signal.assignment))
-            for signal in experiment.signals
-        ],
-        key=lambda x: x[0],
-        reverse=True,
+    # Bottom panel: Z-shaped connectors linking each experimental peak to the
+    # predicted position with the same label.
+    # Path: (exp_x, peak_y) -> vertical -> (exp_x, barrier)
+    #                       -> horizontal -> (pred_x, barrier)
+    # The top panel's connector then continues from pred_x up to the label.
+    _barrier_scale = 1.1
+    _label_barrier_exp = _barrier_scale * float(
+        np.max(y_deconv_intensity) if np.max(y_deconv_intensity) > 0 else 1.0
     )
-    pm_shifts = [sh for sh, _ in pm_sorted]
-    pm_labels = [lab for _, lab in pm_sorted]
+    _y_top_exp = _label_barrier_exp * 1.5
+    _lw_conn = max(0.2, 0.16 * glyphs.line_lw)
+    _lw_barrier = max(0.2, 0.4 * glyphs.line_lw)
 
-    _annotate_peaks_with_barrier(
-        ax[1],
-        x_grid=x_grid,
-        y_intensity=y_deconv_intensity,
-        peak_x=pm_shifts,
-        labels=pm_labels,
-        shift_range=shift_range,
-        spec=spec,
-        palette=palette,
-        glyphs=glyphs,
-        reverse_axis=True,
-        label_fontsize=round(spec.typography.label * 0.6),
+    ax[1].hlines(
+        _label_barrier_exp,
+        np.min(shift_range),
+        np.max(shift_range),
+        linestyle="-",
+        color=palette.primary,
+        linewidth=_lw_barrier,
+        alpha=0.7,
     )
+    ax[1].set_ylim(bottom=None, top=_y_top_exp)
+
+    # Build lookup: LaTeX label -> predicted shift
+    _label_to_pred = dict(zip(labels, shifts))
+
+    for signal in experiment.signals:
+        latex_lab = _map_assignment_to_latex(signal.assignment)
+        pred_x = _label_to_pred.get(latex_lab)
+        if pred_x is None:
+            continue
+        exp_x = signal.shift
+        peak_y = y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+        # Vertical from exp peak up to bottom-panel barrier
+        ax[1].plot(
+            [exp_x, exp_x],
+            [peak_y, _label_barrier_exp],
+            linestyle="--",
+            color=palette.primary,
+            linewidth=_lw_conn,
+            alpha=0.4,
+            clip_on=False,
+        )
+        # Diagonal from bottom-panel barrier to top-panel x-axis at pred_x
+        con = mpatches.ConnectionPatch(
+            xyA=(exp_x, _label_barrier_exp),
+            xyB=(pred_x, 0),
+            coordsA="data",
+            coordsB="data",
+            axesA=ax[1],
+            axesB=ax[0],
+            linestyle="--",
+            color=palette.primary,
+            linewidth=_lw_conn,
+            alpha=0.4,
+        )
+        fig.add_artist(con)
+        # Vertical in top panel from x-axis up to barrier
+        ax[0].plot(
+            [pred_x, pred_x],
+            [0, _sim_barrier],
+            linestyle="--",
+            color=palette.primary,
+            linewidth=_lw_conn,
+            alpha=0.4,
+            clip_on=False,
+        )
 
     # Vertical left-side label (instead of a top title)
     ax[1].text(

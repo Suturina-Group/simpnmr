@@ -182,6 +182,10 @@ class FitSuscConfig(Config):
             "ab_initio_file",
             "ab_initio_format",
         ],
+        "fit_relaxation": [
+            "tau_e_range",
+            "tau_r_range",
+        ],
     }
 
     KEYWORD_PARTNERS = {
@@ -237,6 +241,8 @@ class FitSuscConfig(Config):
         self._susc_vt_variables = None
         self._susc_vt_ab_initio_file = None
         self._susc_vt_ab_initio_format = None
+        self._fit_relaxation_tau_e_range = None
+        self._fit_relaxation_tau_r_range = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -1118,6 +1124,56 @@ class FitSuscConfig(Config):
             raise ValueError(f"Unknown susc_vt:ab_initio_format {fmt}")
         self._susc_vt_ab_initio_format = fmt
         return None
+
+    @property
+    def fit_relaxation_tau_e_range(self) -> list[float] | None:
+        """τe plot range [min, max] in seconds, or None for defaults."""
+        return self._fit_relaxation_tau_e_range
+
+    @fit_relaxation_tau_e_range.setter
+    def fit_relaxation_tau_e_range(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_e_range = None
+            return
+        if isinstance(value, str):
+            import yaml as _yaml
+            value = _yaml.safe_load(value)
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ValueError(
+                "fit_relaxation:tau_e_range must be [min, max]"
+            )
+        lo, hi = float(value[0]), float(value[1])
+        if lo <= 0 or hi <= 0 or lo >= hi:
+            raise ValueError(
+                "fit_relaxation:tau_e_range values must be positive "
+                "and min < max"
+            )
+        self._fit_relaxation_tau_e_range = [lo, hi]
+
+    @property
+    def fit_relaxation_tau_r_range(self) -> list[float] | None:
+        """τR plot range [min, max] in seconds, or None for defaults."""
+        return self._fit_relaxation_tau_r_range
+
+    @fit_relaxation_tau_r_range.setter
+    def fit_relaxation_tau_r_range(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_range = None
+            return
+        if isinstance(value, str):
+            import yaml as _yaml
+            value = _yaml.safe_load(value)
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ValueError(
+                "fit_relaxation:tau_r_range must be [min, max]"
+            )
+        lo, hi = float(value[0]), float(value[1])
+        if lo <= 0 or hi <= 0 or lo >= hi:
+            raise ValueError(
+                "fit_relaxation:tau_r_range values must be positive "
+                "and min < max"
+            )
+        self._fit_relaxation_tau_r_range = [lo, hi]
 
     @classmethod
     def from_file(cls, file_name) -> "FitSuscConfig":

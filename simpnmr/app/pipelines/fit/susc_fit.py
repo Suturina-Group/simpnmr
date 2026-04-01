@@ -31,6 +31,7 @@ from simpnmr.app.policies.susc import resolve_susc_fit_variables
 
 # Core / domain
 from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.domain.tensor import Hyperfine
@@ -43,13 +44,18 @@ from simpnmr.core.fitting.assign import (
 from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
 
 # IO layer
+from simpnmr.io.csv.fit import save_r6_fit
 from simpnmr.io.csv.mol import save_molecule_to_csv
 from simpnmr.io.csv.susc import save_susc
 from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
 from simpnmr.io.xyz import xyz_write
 from simpnmr.core.fitting.r6_fit import fit_r6
 from simpnmr.viz.plots.fitted_shifts import plot_fitted_shifts
-from simpnmr.viz.plots.r6_fit import plot_r6_fit
+from simpnmr.viz.plots.r6_fit import (
+    plot_r6_fit,
+    plot_tau_space,
+    plot_tau_space_combined,
+)
 from simpnmr.viz.plots.spect import plot_raw_deconv_pred
 from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
 
@@ -449,6 +455,18 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 _width_fit_result = r6_result
             elif _obs == "r1":
                 _r1_fit_result = r6_result
+            save_r6_fit(
+                r6_result,
+                observable=_obs,
+                temperature=experiment.temperature,
+                magnetic_field=experiment.magnetic_field,
+                isotope=experiment.isotope,
+                file_name=os.path.join(
+                    config.project_name,
+                    f"r6_fit_{_obs}_{experiment.temperature:.2f}_K.csv",
+                ),
+                verbose=True,
+            )
             with spec.context():
                 plot_r6_fit(
                     r6_result,
@@ -463,6 +481,78 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     verbose=True,
                     window_title=(
                         f"r\u207b\u2076 Fit ({_obs}) "
+                        f"at {experiment.temperature:.2f} K"
+                    ),
+                )
+            # τ-space plot: which (τe, τR) pairs are consistent with p1
+            _isotope_r6 = experiment.isotope
+            _gamma_I_r6 = (
+                NUCLEAR_GAMMAS[remove_numbers(_isotope_r6)]
+                * 2 * np.pi * 1e6
+            )
+            _omega_I_r6 = -_gamma_I_r6 * experiment.magnetic_field
+            _omega_S_r6 = (
+                -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
+            )
+            _relaxation_model = getattr(
+                config, "relaxation_model", "sbm curie"
+            )
+            with spec.context():
+                plot_tau_space(
+                    r6_result,
+                    observable=_obs,
+                    omega_I=_omega_I_r6,
+                    omega_S=_omega_S_r6,
+                    gamma_I=_gamma_I_r6,
+                    spin=spin,
+                    orbit=config.orbit,
+                    total_momentum_J=config.total_momentum_J,
+                    temperature=experiment.temperature,
+                    relaxation_model=_relaxation_model,
+                    spec=spec,
+                    tau_e_range=config.fit_relaxation_tau_e_range,
+                    tau_r_range=config.fit_relaxation_tau_r_range,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"r6_tau_space_{_obs}"
+                        f"_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"\u03c4 space ({_obs}) "
+                        f"at {experiment.temperature:.2f} K"
+                    ),
+                )
+
+        # Combined τ-space plot when both R1 and width fits succeeded
+        if _r1_fit_result is not None and _width_fit_result is not None:
+            with spec.context():
+                plot_tau_space_combined(
+                    r1_fit_result=_r1_fit_result,
+                    width_fit_result=_width_fit_result,
+                    omega_I=_omega_I_r6,
+                    omega_S=_omega_S_r6,
+                    gamma_I=_gamma_I_r6,
+                    spin=spin,
+                    orbit=config.orbit,
+                    total_momentum_J=config.total_momentum_J,
+                    temperature=experiment.temperature,
+                    relaxation_model=_relaxation_model,
+                    spec=spec,
+                    tau_e_range=config.fit_relaxation_tau_e_range,
+                    tau_r_range=config.fit_relaxation_tau_r_range,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        "r6_tau_space_combined"
+                        f"_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"τ space (combined) "
                         f"at {experiment.temperature:.2f} K"
                     ),
                 )
