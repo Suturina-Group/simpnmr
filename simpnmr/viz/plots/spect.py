@@ -220,14 +220,29 @@ def plot_raw_deconv_pred(
     # Always use two subplots: Simulation (top) and Experiment (bottom)
     n_subplots = 2
 
-    # Use the union of simulation and experimental peak ranges to avoid clipping.
-    exp_min = min(s.shift for s in experiment.signals)
-    exp_max = max(s.shift for s in experiment.signals)
-    range_min = min(shift_range[0], exp_min)
-    range_max = max(shift_range[1], exp_max)
+    # Chem-labels that belong to the requested isotope (for signal filtering)
+    _iso_chem_labels = {
+        nuc.chem_label
+        for nuc in molecule.nuclei
+        if nuc.isotope == isotope
+    }
 
-    # Add extra 10% padding for better visibility
-    pad = 0.1 * max(abs(exp_min), abs(exp_max))
+    # Only consider signals assigned to the target isotope
+    _iso_signals = [
+        s for s in experiment.signals
+        if s.assignment in _iso_chem_labels
+    ]
+
+    # Use the union of simulation and experimental peak ranges to avoid clipping.
+    if _iso_signals:
+        exp_min = min(s.shift for s in _iso_signals)
+        exp_max = max(s.shift for s in _iso_signals)
+        range_min = min(shift_range[0], exp_min)
+        range_max = max(shift_range[1], exp_max)
+        pad = 0.1 * max(abs(exp_min), abs(exp_max))
+    else:
+        range_min, range_max = shift_range[0], shift_range[1]
+        pad = 0.1 * max(abs(range_min), abs(range_max))
     shift_range = [range_min - pad, range_max + pad]
 
     # Construct common ppm axis for all spectra (x-axis)
@@ -264,8 +279,8 @@ def plot_raw_deconv_pred(
     # Construct deconvoluted (processed experimental) spectrum intensities (y-axis)
     y_deconv_intensity = np.zeros_like(x_grid)
 
-    # Accumulate deconvoluted spectrum intensities
-    for signal in experiment.signals:
+    # Accumulate deconvoluted spectrum intensities (isotope-filtered signals only)
+    for signal in _iso_signals:
         # Convert experimental linewidth from Hz to ppm
         exp_width_ppm = signal.width / (
             get_nuclear_gamma(isotope) * experiment.magnetic_field
@@ -448,7 +463,7 @@ def plot_raw_deconv_pred(
     # Build lookup: LaTeX label -> predicted shift
     _label_to_pred = dict(zip(labels, shifts))
 
-    for signal in experiment.signals:
+    for signal in _iso_signals:
         latex_lab = _map_assignment_to_latex(signal.assignment)
         pred_x = _label_to_pred.get(latex_lab)
         if pred_x is None:

@@ -136,6 +136,7 @@ def fit_r6(
     experiment: Experiment,
     observable: str = "r1",
     tau_e: float | None = None,
+    isotope_filter: str | None = None,
 ) -> dict:
     """Fit linewidth or R1 to the model ``p1 / r**6 + p2``.
 
@@ -151,6 +152,11 @@ def fit_r6(
     ``tau_e = T1e = T2e`` (s).  Only nuclei with non-zero A_iso contribute;
     the subtraction is silently skipped when all A_iso are zero (e.g. pdip).
 
+    When ``isotope_filter`` is given, only signals whose assigned chem_label
+    belongs to that isotope (as recorded on the molecule's nuclei) are
+    included.  This allows separate per-isotope fits when the experiment
+    contains mixed-nucleus data (e.g. both ¹H and ¹³C signals).
+
     Args:
         molecule: Molecule with nuclei, coordinates, and
             ``paramagnetic_centre`` set.
@@ -161,6 +167,9 @@ def fit_r6(
         tau_e: Electronic correlation time T1e = T2e (s) used to subtract the
             Fermi-contact relaxation contribution before fitting.  If ``None``
             no contact subtraction is performed.
+        isotope_filter: If given, restrict the fit to signals whose chem_label
+            corresponds to this isotope (e.g. ``"1H"``).  ``None`` includes
+            all signals.
 
     Returns:
         A dict with keys:
@@ -199,6 +208,12 @@ def fit_r6(
     for nuc in molecule.nuclei:
         cl_to_nuclei.setdefault(nuc.chem_label, []).append(nuc)
 
+    # Build chem_label -> isotope mapping for optional filtering
+    _cl_to_iso: dict[str, str] = {}
+    for nuc in molecule.nuclei:
+        if nuc.chem_label not in _cl_to_iso:
+            _cl_to_iso[nuc.chem_label] = nuc.isotope
+
     labels: list[str] = []
     r6_inv_vals: list[float] = []
     obs_vals: list[float] = []
@@ -209,6 +224,18 @@ def fit_r6(
 
         if obs is None:
             logger.debug("Skipping signal '%s': %s is None", cl, observable)
+            continue
+
+        if (
+            isotope_filter is not None
+            and _cl_to_iso.get(cl) != isotope_filter
+        ):
+            logger.debug(
+                "Skipping signal '%s': isotope %s != filter %s",
+                cl,
+                _cl_to_iso.get(cl),
+                isotope_filter,
+            )
             continue
 
         nuclei_in_group = cl_to_nuclei.get(cl)

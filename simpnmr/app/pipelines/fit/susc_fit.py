@@ -247,9 +247,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     if not config.diamagnetic_file:
         _terms.pop(_terms.index("d"))
 
-    # Accumulators for multi-temperature τ-space plots
-    _r6_records_r1: list[dict] = []
-    _r6_records_width: list[dict] = []
+    # Accumulators for multi-temperature τ-space plots, keyed by isotope
+    _r6_records_r1: dict[str, list[dict]] = {}
+    _r6_records_width: dict[str, list[dict]] = {}
 
     # Run fit for all experiments
     for molecule, susc_model, experiment in zip(
@@ -458,166 +458,165 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 order="descending",
             )
 
-        # r^-6 distance-model fits (R1 and linewidth)
+        # r^-6 distance-model fits (R1 and linewidth) — one fit per isotope
         _width_fit_result = None
         _r1_fit_result = None
-        for _obs in ("r1", "width"):
-            _has_data = any(
-                (sig.r1 is not None if _obs == "r1" else sig.width > 0.0)
-                for sig in experiment.signals
-            )
-            if not _has_data:
-                continue
-            try:
-                r6_result = fit_r6(
-                    molecule,
-                    experiment,
+        _relaxation_model = getattr(config, "relaxation_model", "sbm curie")
+        _omega_S_r6 = -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
+
+        # Unique isotopes present in the molecule (insertion-ordered)
+        _isotopes_mol = list(
+            dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+        )
+
+        for _iso_r6 in _isotopes_mol:
+            _gamma_I_r6 = get_nuclear_gamma(_iso_r6) * 2 * np.pi * 1e6
+            _omega_I_r6 = -_gamma_I_r6 * experiment.magnetic_field
+
+            for _obs in ("r1", "width"):
+                _has_data = any(
+                    (
+                        sig.r1 is not None
+                        if _obs == "r1"
+                        else sig.width > 0.0
+                    )
+                    for sig in experiment.signals
+                )
+                if not _has_data:
+                    continue
+                try:
+                    r6_result = fit_r6(
+                        molecule,
+                        experiment,
+                        observable=_obs,
+                        tau_e=config.fit_relaxation_tau_e,
+                        isotope_filter=_iso_r6,
+                    )
+                except ValueError as err:
+                    logger.warning(
+                        "r^-6 fit (%s, %s) skipped: %s",
+                        _obs, _iso_r6, err,
+                    )
+                    continue
+
+                # Store last result for the linewidth/r1 bubble plots
+                # (those plots don't separate by isotope, so last wins)
+                if _obs == "width":
+                    _width_fit_result = r6_result
+                elif _obs == "r1":
+                    _r1_fit_result = r6_result
+
+                _r6_rec = {
+                    "fit_result": r6_result,
+                    "temperature": experiment.temperature,
+                    "omega_I": _omega_I_r6,
+                    "omega_S": _omega_S_r6,
+                    "gamma_I": _gamma_I_r6,
+                }
+                if _obs == "r1":
+                    _r6_records_r1.setdefault(_iso_r6, []).append(_r6_rec)
+                else:
+                    _r6_records_width.setdefault(_iso_r6, []).append(_r6_rec)
+
+                save_r6_fit(
+                    r6_result,
                     observable=_obs,
+                    temperature=experiment.temperature,
+                    magnetic_field=experiment.magnetic_field,
+                    isotope=_iso_r6,
+                    file_name=os.path.join(
+                        config.project_name,
+                        f"r6_fit_{_obs}_{_iso_r6}_"
+                        f"{experiment.temperature:.2f}_K.csv",
+                    ),
+                    verbose=True,
                     tau_e=config.fit_relaxation_tau_e,
                 )
-            except ValueError as err:
-                logger.warning("r^-6 fit (%s) skipped: %s", _obs, err)
-                continue
-            if _obs == "width":
-                _width_fit_result = r6_result
-            elif _obs == "r1":
-                _r1_fit_result = r6_result
-            # Derive isotope per chem_label from nucleus defaults/overrides.
-            # This correctly handles mixed-isotope experiments (e.g. 1H + 13C
-            # in the same file) because each nucleus already carries its own
-            # isotope from DEFAULT_ISOTOPES or the chem_labels CSV column.
-            _cl_to_iso: dict[str, str] = {}
-            for _nuc in molecule.nuclei:
-                if _nuc.chem_label not in _cl_to_iso:
-                    _cl_to_iso[_nuc.chem_label] = _nuc.isotope
-            _fitted_cl = r6_result["labels"]
-            _isotopes_in_fit = [
-                _cl_to_iso[cl] for cl in _fitted_cl if cl in _cl_to_iso
-            ]
-            if not _isotopes_in_fit:
-                raise ValueError(
-                    f"r^-6 fit ({_obs}): no isotope found for fitted"
-                    " chem_labels — check chem_labels file."
-                )
-            elif len(set(_isotopes_in_fit)) > 1:
-                from collections import Counter as _Counter
-                _isotope_r6 = _Counter(_isotopes_in_fit).most_common(1)[0][0]
-                logger.warning(
-                    "r^-6 fit (%s): mixed isotopes %s; using most common: %s",
-                    _obs,
-                    set(_isotopes_in_fit),
-                    _isotope_r6,
-                )
-            else:
-                _isotope_r6 = _isotopes_in_fit[0]
-            _gamma_I_r6 = get_nuclear_gamma(_isotope_r6) * 2 * np.pi * 1e6
-            _omega_I_r6 = -_gamma_I_r6 * experiment.magnetic_field
-            _omega_S_r6 = (
-                -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
-            )
-            _r6_rec = {
-                "fit_result": r6_result,
-                "temperature": experiment.temperature,
-                "omega_I": _omega_I_r6,
-                "omega_S": _omega_S_r6,
-                "gamma_I": _gamma_I_r6,
-            }
-            if _obs == "r1":
-                _r6_records_r1.append(_r6_rec)
-            else:
-                _r6_records_width.append(_r6_rec)
-            save_r6_fit(
-                r6_result,
-                observable=_obs,
-                temperature=experiment.temperature,
-                magnetic_field=experiment.magnetic_field,
-                isotope=_isotope_r6,
-                file_name=os.path.join(
-                    config.project_name,
-                    f"r6_fit_{_obs}_{experiment.temperature:.2f}_K.csv",
-                ),
-                verbose=True,
-                tau_e=config.fit_relaxation_tau_e,
-            )
-            with spec.context():
-                plot_r6_fit(
-                    r6_result,
-                    observable=_obs,
-                    spec=spec,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"r6_fit_{_obs}_{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"r\u207b\u2076 Fit ({_obs}) "
-                        f"at {experiment.temperature:.2f} K"
-                    ),
-                )
-            _relaxation_model = getattr(
-                config, "relaxation_model", "sbm curie"
-            )
-            with spec.context():
-                plot_tau_space(
-                    r6_result,
-                    observable=_obs,
-                    omega_I=_omega_I_r6,
-                    omega_S=_omega_S_r6,
-                    gamma_I=_gamma_I_r6,
-                    spin=spin,
-                    orbit=config.orbit,
-                    total_momentum_J=config.total_momentum_J,
-                    temperature=experiment.temperature,
-                    relaxation_model=_relaxation_model,
-                    spec=spec,
-                    tau_e_range=config.fit_relaxation_tau_e_range,
-                    tau_r_range=config.fit_relaxation_tau_r_range,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"r6_tau_space_{_obs}"
-                        f"_{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"\u03c4 space ({_obs}) "
-                        f"at {experiment.temperature:.2f} K"
-                    ),
-                )
+                with spec.context():
+                    plot_r6_fit(
+                        r6_result,
+                        observable=_obs,
+                        spec=spec,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"r6_fit_{_obs}_{_iso_r6}_"
+                            f"{experiment.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"r\u207b\u2076 Fit ({_obs}, {_iso_r6})"
+                            f" at {experiment.temperature:.2f} K"
+                        ),
+                    )
+                with spec.context():
+                    plot_tau_space(
+                        r6_result,
+                        observable=_obs,
+                        omega_I=_omega_I_r6,
+                        omega_S=_omega_S_r6,
+                        gamma_I=_gamma_I_r6,
+                        spin=spin,
+                        orbit=config.orbit,
+                        total_momentum_J=config.total_momentum_J,
+                        temperature=experiment.temperature,
+                        relaxation_model=_relaxation_model,
+                        spec=spec,
+                        tau_e_range=config.fit_relaxation_tau_e_range,
+                        tau_r_range=config.fit_relaxation_tau_r_range,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"r6_tau_space_{_obs}_{_iso_r6}_"
+                            f"{experiment.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"\u03c4 space ({_obs}, {_iso_r6})"
+                            f" at {experiment.temperature:.2f} K"
+                        ),
+                    )
 
-        # Combined τ-space plot when both R1 and width fits succeeded
-        if _r1_fit_result is not None and _width_fit_result is not None:
-            with spec.context():
-                plot_tau_space_combined(
-                    r1_fit_result=_r1_fit_result,
-                    width_fit_result=_width_fit_result,
-                    omega_I=_omega_I_r6,
-                    omega_S=_omega_S_r6,
-                    gamma_I=_gamma_I_r6,
-                    spin=spin,
-                    orbit=config.orbit,
-                    total_momentum_J=config.total_momentum_J,
-                    temperature=experiment.temperature,
-                    relaxation_model=_relaxation_model,
-                    spec=spec,
-                    tau_e_range=config.fit_relaxation_tau_e_range,
-                    tau_r_range=config.fit_relaxation_tau_r_range,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        "r6_tau_space_combined"
-                        f"_{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"τ space (combined) "
-                        f"at {experiment.temperature:.2f} K"
-                    ),
-                )
+            # Combined τ-space plot per isotope when both obs succeeded
+            _r1_rec_iso = (
+                _r6_records_r1.get(_iso_r6) or []
+            )
+            _lw_rec_iso = (
+                _r6_records_width.get(_iso_r6) or []
+            )
+            _r1_iso = _r1_rec_iso[-1]["fit_result"] if _r1_rec_iso else None
+            _lw_iso = _lw_rec_iso[-1]["fit_result"] if _lw_rec_iso else None
+            if _r1_iso is not None and _lw_iso is not None:
+                with spec.context():
+                    plot_tau_space_combined(
+                        r1_fit_result=_r1_iso,
+                        width_fit_result=_lw_iso,
+                        omega_I=_omega_I_r6,
+                        omega_S=_omega_S_r6,
+                        gamma_I=_gamma_I_r6,
+                        spin=spin,
+                        orbit=config.orbit,
+                        total_momentum_J=config.total_momentum_J,
+                        temperature=experiment.temperature,
+                        relaxation_model=_relaxation_model,
+                        spec=spec,
+                        tau_e_range=config.fit_relaxation_tau_e_range,
+                        tau_r_range=config.fit_relaxation_tau_r_range,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"r6_tau_space_combined_{_iso_r6}_"
+                            f"{experiment.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"\u03c4 space (combined, {_iso_r6})"
+                            f" at {experiment.temperature:.2f} K"
+                        ),
+                    )
 
         # Shift vs linewidth bubble plot
         with spec.context():
@@ -667,41 +666,51 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             _label_to_lw_loop = dict(
                 zip(_width_fit_result["labels"], _width_fit_result["pred"])
             )
-            _isotope_loop = molecule.nuclei[0].isotope
-            _gamma_loop = get_nuclear_gamma(_isotope_loop)
             _b0_loop = experiment.magnetic_field
             for nuc in molecule.nuclei:
                 if nuc.chem_label in _label_to_lw_loop:
                     lw_hz = _label_to_lw_loop[nuc.chem_label]
+                    _gamma_loop = get_nuclear_gamma(nuc.isotope)
                     nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
 
-        # Predicted + experimental deconvoluted spectrum overlay
+        # Predicted + experimental deconvoluted spectrum overlay — one per isotope
         _avgs = [
             nuc.shift.avg
             for nuc in molecule.nuclei
             if nuc.shift.avg is not None
         ]
         if _avgs and experiment.signals:
-            with spec.context():
-                plot_raw_deconv_pred(
-                    molecule=molecule,
-                    isotope=molecule.nuclei[0].isotope,
-                    shift_range=[np.min(_avgs), np.max(_avgs)],
-                    experiment=experiment,
-                    spec=spec,
-                    save=True,
-                    show=options.runtime.show_plots,
-                    save_name=os.path.join(
-                        config.project_name,
-                        "pred_and_exp_spectrum_"
-                        f"{experiment.temperature:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Predicted and Experimental Spectra"
-                        f" at {experiment.temperature:.2f} K"
-                    ),
-                )
+            _isotopes_present = list(
+                dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+            )
+            for _iso in _isotopes_present:
+                _avgs_iso = [
+                    nuc.shift.avg
+                    for nuc in molecule.nuclei
+                    if nuc.isotope == _iso and nuc.shift.avg is not None
+                ]
+                if not _avgs_iso:
+                    continue
+                with spec.context():
+                    plot_raw_deconv_pred(
+                        molecule=molecule,
+                        isotope=_iso,
+                        shift_range=[np.min(_avgs_iso), np.max(_avgs_iso)],
+                        experiment=experiment,
+                        spec=spec,
+                        save=True,
+                        show=options.runtime.show_plots,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"pred_and_exp_spectrum_{_iso}_"
+                            f"{experiment.temperature:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Predicted and Experimental Spectra ({_iso})"
+                            f" at {experiment.temperature:.2f} K"
+                        ),
+                    )
 
     # Write shift data to file
     _comment_base = f"Hyperfines from file {config.hyperfine_file}\n"
@@ -783,35 +792,36 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
             logger.info("PCS isosurface written to %s", file_name)
 
-    # Multi-temperature τ-space plots (only when >1 experiment)
+    # Multi-temperature τ-space plots (only when >1 experiment) — per isotope
     _relaxation_model_mt = getattr(config, "relaxation_model", "sbm curie")
-    for _obs_mt, _records_mt in (
+    for _obs_mt, _records_by_iso in (
         ("r1", _r6_records_r1),
         ("width", _r6_records_width),
     ):
-        if len(_records_mt) > 1:
-            with spec.context():
-                plot_tau_space_multitemp(
-                    records=_records_mt,
-                    observable=_obs_mt,
-                    spin=spin,
-                    orbit=config.orbit,
-                    total_momentum_J=config.total_momentum_J,
-                    relaxation_model=_relaxation_model_mt,
-                    spec=spec,
-                    tau_e_range=config.fit_relaxation_tau_e_range,
-                    tau_r_range=config.fit_relaxation_tau_r_range,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"r6_tau_space_multitemp_{_obs_mt}",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"\u03c4 space multi-T ({_obs_mt})"
-                    ),
-                )
+        for _iso_mt, _records_mt in _records_by_iso.items():
+            if len(_records_mt) > 1:
+                with spec.context():
+                    plot_tau_space_multitemp(
+                        records=_records_mt,
+                        observable=_obs_mt,
+                        spin=spin,
+                        orbit=config.orbit,
+                        total_momentum_J=config.total_momentum_J,
+                        relaxation_model=_relaxation_model_mt,
+                        spec=spec,
+                        tau_e_range=config.fit_relaxation_tau_e_range,
+                        tau_r_range=config.fit_relaxation_tau_r_range,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"r6_tau_space_multitemp_{_obs_mt}_{_iso_mt}",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"\u03c4 space multi-T ({_obs_mt}, {_iso_mt})"
+                        ),
+                    )
 
     mol = molecules[-1]
 
@@ -849,28 +859,42 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         _label_to_lw = dict(
             zip(_width_fit_result["labels"], _width_fit_result["pred"])
         )
-        _isotope = mol.nuclei[0].isotope
-        _gamma = get_nuclear_gamma(_isotope)
         _b0 = experiment.magnetic_field
         for nuc in mol.nuclei:
             if nuc.chem_label in _label_to_lw:
                 lw_hz = _label_to_lw[nuc.chem_label]
+                _gamma = get_nuclear_gamma(nuc.isotope)
                 nuc.shift.lw = np.float64(lw_hz / (_gamma * _b0))
 
-    with spec.context():
-        plot_pred_spectrum(
-            mol,
-            isotope=mol.nuclei[0].isotope,
-            shift_range=shift_range,
-            spec=spec,
-            effective_linewidths_by_label=linewidth_output.values_by_label,
-            save=True,
-            show=options.runtime.show_plots,
-            save_name=os.path.join(
-                config.project_name,
-                f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
-            ),
-        )
+    _isotopes_final = list(
+        dict.fromkeys(nuc.isotope for nuc in mol.nuclei)
+    )
+    for _iso_final in _isotopes_final:
+        _avgs_iso_final = [
+            nuc.shift.avg
+            for nuc in mol.nuclei
+            if nuc.isotope == _iso_final and nuc.shift.avg is not None
+        ]
+        if not _avgs_iso_final:
+            continue
+        with spec.context():
+            plot_pred_spectrum(
+                mol,
+                isotope=_iso_final,
+                shift_range=[
+                    np.min(_avgs_iso_final),
+                    np.max(_avgs_iso_final),
+                ],
+                spec=spec,
+                effective_linewidths_by_label=linewidth_output.values_by_label,
+                save=True,
+                show=options.runtime.show_plots,
+                save_name=os.path.join(
+                    config.project_name,
+                    f"pred_spectrum_{_iso_final}_"
+                    f"{mol.susc.temperature:.2f}_K",
+                ),
+            )
 
     return 0
 

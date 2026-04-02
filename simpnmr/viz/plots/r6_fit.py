@@ -321,22 +321,26 @@ def plot_tau_space(
     levels_hi = [log_hi] if actual_min <= log_hi <= actual_max else []
 
     if levels_central:
-        ax.contour(
+        cs_c = ax.contour(
             TAU_E_2D, TAU_R_2D, log_ratio_plot,
             levels=levels_central,
             colors=["black"],
             linewidths=[1.6],
             linestyles=["-"],
         )
+        for coll in cs_c.collections:
+            coll.set_clip_on(True)
     if levels_lo or levels_hi:
         ci_levels = levels_lo + levels_hi
-        ax.contour(
+        cs_ci = ax.contour(
             TAU_E_2D, TAU_R_2D, log_ratio_plot,
             levels=sorted(ci_levels),
             colors=["white"] * len(ci_levels),
             linewidths=[1.2] * len(ci_levels),
             linestyles=["--"] * len(ci_levels),
         )
+        for coll in cs_ci.collections:
+            coll.set_clip_on(True)
     if not levels_central:
         logger.warning(
             "Central contour (p1_calc = p1_fit) not visible: "
@@ -512,18 +516,22 @@ def plot_tau_space_combined(
     lo_r1, hi_r1 = _ci_levels(r1_fit_result)
     lo_lw, hi_lw = _ci_levels(width_fit_result)
 
-    ax.contourf(
-        TAU_E_2D, TAU_R_2D, lr_r1,
-        levels=[lo_r1, hi_r1],
-        colors=[palette.primary],
-        alpha=0.25,
-    )
-    ax.contourf(
-        TAU_E_2D, TAU_R_2D, lr_lw,
-        levels=[lo_lw, hi_lw],
-        colors=[palette.highlight],
-        alpha=0.25,
-    )
+    for _cf in [
+        ax.contourf(
+            TAU_E_2D, TAU_R_2D, lr_r1,
+            levels=[lo_r1, hi_r1],
+            colors=[palette.primary],
+            alpha=0.25,
+        ),
+        ax.contourf(
+            TAU_E_2D, TAU_R_2D, lr_lw,
+            levels=[lo_lw, hi_lw],
+            colors=[palette.highlight],
+            alpha=0.25,
+        ),
+    ]:
+        for coll in _cf.collections:
+            coll.set_clip_on(True)
 
     # Central contours
     for lr, color, label in [
@@ -540,6 +548,8 @@ def plot_tau_space_combined(
                 linewidths=[1.6],
             )
             cs.collections[0].set_label(label)
+            for coll in cs.collections:
+                coll.set_clip_on(True)
         else:
             logger.warning(
                 "Central contour for '%s' not visible in grid.", label
@@ -720,12 +730,14 @@ def plot_tau_space_multitemp(
             log_lo = np.log10(max(1.0 - rel, 1e-6))
             log_hi = np.log10(1.0 + rel)
             if lo_val <= log_lo <= hi_val or lo_val <= log_hi <= hi_val:
-                ax.contourf(
+                cf = ax.contourf(
                     TAU_E_2D, TAU_R_2D, lr,
                     levels=[log_lo, log_hi],
                     colors=[color],
                     alpha=0.20,
                 )
+                for coll in cf.collections:
+                    coll.set_clip_on(True)
 
         # Central contour
         if lo_val <= 0.0 <= hi_val:
@@ -736,6 +748,8 @@ def plot_tau_space_multitemp(
                 linewidths=[1.6],
             )
             cs.collections[0].set_label(f"{T:.0f} K")
+            for coll in cs.collections:
+                coll.set_clip_on(True)
         else:
             logger.warning(
                 "Central contour for T=%.1f K not visible in grid "
