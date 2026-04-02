@@ -185,6 +185,7 @@ class FitSuscConfig(Config):
         "fit_relaxation": [
             "tau_e_range",
             "tau_r_range",
+            "tau_e",
         ],
     }
 
@@ -243,6 +244,7 @@ class FitSuscConfig(Config):
         self._susc_vt_ab_initio_format = None
         self._fit_relaxation_tau_e_range = None
         self._fit_relaxation_tau_r_range = None
+        self._fit_relaxation_tau_e = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -1174,6 +1176,21 @@ class FitSuscConfig(Config):
                 "and min < max"
             )
         self._fit_relaxation_tau_r_range = [lo, hi]
+
+    @property
+    def fit_relaxation_tau_e(self) -> float | None:
+        """Fixed τe (s) for contact-contribution subtraction before r^-6 fit."""
+        return self._fit_relaxation_tau_e
+
+    @fit_relaxation_tau_e.setter
+    def fit_relaxation_tau_e(self, value):
+        if value is None:
+            self._fit_relaxation_tau_e = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_e must be positive")
+        self._fit_relaxation_tau_e = v
 
     @classmethod
     def from_file(cls, file_name) -> "FitSuscConfig":

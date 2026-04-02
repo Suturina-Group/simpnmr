@@ -151,6 +151,28 @@ Used in workflows that group nuclei by chemical labels.
    Chemical labels are used to group nuclei for averaging and assignment purposes.
    This block is optional for pNMR prediction, but is mandatory for susceptibility fitting.
 
+.. note::
+
+   **chem_labels CSV format**
+
+   The CSV file must contain at minimum the columns ``atom_label`` and ``chem_label``.
+   Two additional columns are optional:
+
+   - ``chem_math_label`` — a LaTeX-formatted label used in plot annotations
+     (e.g. ``$tBu_1$``). Falls back to ``chem_label`` if omitted.
+   - ``isotope`` — NMR isotope string for the atom group (e.g. ``1H``, ``13C``).
+     When absent or empty, the most abundant NMR-active isotope for the element
+     is used automatically (H → ``1H``, C → ``13C``, N → ``15N``, etc.).
+     Providing this column is only necessary when a non-default isotope is
+     required (e.g. ``2H`` for deuterium).
+
+   Example::
+
+       atom_label,chem_label,chem_math_label,isotope
+       H1,tBu1,$tBu_1$,1H
+       H2,tBu1,$tBu_1$,1H
+       C1,qC,$qC$,13C
+
 Nuclei
 ^^^^^^
 
@@ -212,6 +234,20 @@ Used in fitting workflows that require experimental shift data.
    Spectrum files are auxiliary inputs and may only be used when corresponding
    experimental peak files are also provided. Supplying spectrum files without
    experimental peak data is not supported.
+
+.. note::
+
+   **Experiment CSV format**
+
+   Each experiment CSV file must contain comment-line metadata at the top::
+
+       # temperature 298.15
+       # magnetic_field 11.75
+
+   The ``# isotope`` metadata line is no longer read or required. Isotope
+   information is instead derived per-nucleus from the ``chem_labels`` file
+   (see the ``isotope`` column described under *Chemical Labels*), which
+   correctly handles experiments containing signals from more than one isotope.
 
 .. note::
 
@@ -615,6 +651,60 @@ Optional. Used in susceptibility fitting workflows that model temperature depend
    Temperature-dependent fitting extends the base susceptibility fitting model.
    When TIP parameters are fixed from ab initio data, the corresponding file and
    format must be provided explicitly.
+
+Relaxation Fit Options
+^^^^^^^^^^^^^^^^^^^^^^
+
+Controls the r\ :sup:`-6` distance-model fits for R1 and linewidth that are
+run automatically as part of the susceptibility fitting workflow.
+
+**Applicability:**
+Optional. Used in susceptibility fitting workflows when R1 or linewidth data
+are present in the experiment files.
+
+.. code-block:: yaml
+
+    # fit_relaxation block schema (reference):
+    fit_relaxation:
+        # Fixed τe for Fermi-contact subtraction [Optional]
+        tau_e: 5.0e-13  # s — T1e = T2e used to subtract contact contribution
+
+        # τe axis range for τ-space heatmap plots [Optional]
+        tau_e_range: [1.0e-14, 1.0e-11]  # [min, max] in s
+
+        # τR axis range for τ-space heatmap plots [Optional]
+        tau_r_range: [1.0e-10, 1.0e-7]   # [min, max] in s
+
+.. note::
+
+   **Contact contribution subtraction**
+
+   Observed R1 and linewidth contain both the distance-dependent dipolar/Curie
+   contribution and a distance-independent Fermi-contact contribution.  Only
+   the dipolar/Curie part scales as ``r⁻⁶``; fitting without removing the
+   contact part biases the slope ``p1``.
+
+   When ``tau_e`` is provided, the SBM contact relaxation rate is computed for
+   each chem_label group using the isotropic hyperfine coupling ``A_iso`` from
+   the loaded hyperfine tensors and subtracted before the ``r⁻⁶`` fit.  For
+   linewidth the contact R2 (s\ :sup:`-1`\) is converted to ppm via
+   ``R2 / (π |γI| B0)``.
+
+   The contact-subtracted observable, the raw observable, and the per-signal
+   contact contribution are all written to the output CSV.
+
+   If ``tau_e`` is omitted (default) no subtraction is performed and the fit
+   is identical to the previous behaviour.  The ``p2`` intercept term then
+   absorbs both diamagnetic and contact baseline contributions.
+
+.. note::
+
+   **τ-space heatmap axis ranges**
+
+   ``tau_e_range`` and ``tau_r_range`` set the axis limits of the 2D τ-space
+   heatmap that maps which (τe, τR) pairs are consistent with the fitted ``p1``
+   within the 95 % confidence interval.  If omitted, default ranges are used.
+   Values must be positive and ordered ``[min, max]``.
 
 .. rubric:: Notes on optional command-line controls
 

@@ -14,8 +14,9 @@ DEFAULT_ISOTOPES = {
     "Si": "29Si",
     "B": "10B",
     "Li": "6Li",
+    "F": "19F",
 }
 
-OTHER_ISOTOPES = ["2H"]
+OTHER_ISOTOPES = ["2H", "14N"]
 
 SUPPORTED_ISOTOPES = list(DEFAULT_ISOTOPES.values()) + OTHER_ISOTOPES

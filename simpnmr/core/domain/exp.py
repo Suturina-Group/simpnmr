@@ -94,10 +94,9 @@ class Experiment:
     Args:
         temperature: Experiment temperature in Kelvin.
         magnetic_field: Spectrometer magnetic field in Tesla.
-        isotope: Isotope label (e.g., ``"13C"``).
         signals: List of assigned signals.
-        spectrum: Optional experimental spectrum as an ``(N, 2)`` array where the
-            first column is ppm and the second column is intensity.
+        spectrum: Optional experimental spectrum as an ``(N, 2)`` array where
+            the first column is ppm and the second column is intensity.
         exp_reference: Optional experimental reference position in ppm used for
             spectrum normalization/overlay.
 
@@ -105,7 +104,6 @@ class Experiment:
         temperature: Experiment temperature in Kelvin.
         signals: List of assigned signals.
         magnetic_field: Spectrometer magnetic field in Tesla.
-        isotope: Isotope label.
         spectrum: Experimental spectrum as an ``(N, 2)`` array or ``None``.
         exp_reference: Experimental reference position in ppm or ``None``.
     """
@@ -114,7 +112,6 @@ class Experiment:
         self,
         temperature: float,
         magnetic_field: float,
-        isotope: str,
         signals: list[Signal],
         spectrum: ArrayLike = None,
         exp_reference: Optional[float] = None,
@@ -122,7 +119,6 @@ class Experiment:
         self._signals = signals
         self.temperature = temperature
         self.magnetic_field = magnetic_field
-        self.isotope = isotope.title()
         self.exp_reference = exp_reference
 
         if spectrum is not None:

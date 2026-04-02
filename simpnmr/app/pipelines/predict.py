@@ -10,7 +10,6 @@ writes tables and plots for selected temperatures.
 import copy
 import logging
 import os
-import re
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +34,7 @@ from simpnmr.app.policies.relax import resolve_relaxation_conditions
 from simpnmr.app.policies.susc import resolve_susceptibility_source
 
 # Core / domain
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.domain.mol import Molecule
@@ -43,7 +42,6 @@ from simpnmr.core.relaxation.eval import evaluate_relaxation_rates
 
 # Tools
 from simpnmr.core.util import transform as tfm
-from simpnmr.core.util.strings import remove_numbers
 
 # IO layer
 from simpnmr.io.csv.mol import save_molecule_to_csv
@@ -162,7 +160,9 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
 
     # Load chemical labels
     if len(config.chem_labels_file):
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(
+            config.chem_labels_file
+        )
         if has_missing_selected_chem_labels(base_molecule, al_to_cl):
             logger.warning(
                 "Chemical labels file does not define labels for all selected nuclei; "
@@ -213,12 +213,6 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     susc.temperature,
                     exp.temperature,
                     susc.temperature,
-                )
-            if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
-                logger.warning(
-                    "Experimental isotope (%s) not requested in input file (%s)",
-                    exp.isotope,
-                    config.nuclei_include,
                 )
     else:
         experiments = [None] * len(suscs)
@@ -642,7 +636,7 @@ def _apply_relaxation_linewidths(
             nuc.label: float(
                 angstrom_to_mhz(
                     1.0 / 3.0 * np.trace(nuc.A.fc),
-                    nuclear_gamma=NUCLEAR_GAMMAS[remove_numbers(nuc.label)],
+                    nuclear_gamma=get_nuclear_gamma(nuc.isotope),
                 )
             )
             for nuc in base_molecule.nuclei
@@ -653,7 +647,7 @@ def _apply_relaxation_linewidths(
         A_iso_dict = {label: val_mhz * 1e6 for label, val_mhz in A_iso_dict_MHz.items()}
 
     gamma_I_dict = {
-        label: NUCLEAR_GAMMAS[remove_numbers(label)] * 2 * np.pi * 1e6
+        label: get_nuclear_gamma(label) * 2 * np.pi * 1e6
         for label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}

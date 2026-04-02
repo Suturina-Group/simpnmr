@@ -912,6 +912,7 @@ class Molecule:
         self,
         al_to_cl: dict[str, str],
         al_to_cml: dict[str, str] | None = None,
+        al_to_isotope: dict[str, str] | None = None,
     ) -> None:
         """Apply chemical label mappings to nuclei.
 
@@ -921,6 +922,10 @@ class Molecule:
         Args:
             al_to_cl: Mapping atom_label -> chem_label.
             al_to_cml: Optional mapping atom_label -> chem_math_label.
+            al_to_isotope: Optional mapping atom_label -> isotope string
+                (e.g. ``"1H"``).  When provided, overrides the nucleus
+                default isotope.  Invalid or unsupported entries are logged
+                and skipped.
 
         Returns:
             None.
@@ -943,5 +948,20 @@ class Molecule:
             for nuc in self.nuclei:
                 if not len(nuc.chem_math_label):
                     nuc.chem_math_label = nuc.chem_label
+
+        # Apply per-nucleus isotopes (if provided)
+        if al_to_isotope is not None:
+            for nuc in self.nuclei:
+                iso = al_to_isotope.get(nuc.label)
+                if iso is not None:
+                    try:
+                        nuc.isotope = iso
+                    except ValueError as exc:
+                        logger.warning(
+                            "Cannot set isotope '%s' for nucleus '%s': %s",
+                            iso,
+                            nuc.label,
+                            exc,
+                        )
 
         return

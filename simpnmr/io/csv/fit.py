@@ -94,6 +94,7 @@ def save_r6_fit(
     isotope: str,
     file_name: str = "r6_fit.csv",
     verbose: bool = True,
+    tau_e: float | None = None,
 ) -> None:
     """Write r^-6 fit parameters (p1, p2) and per-label data to CSV.
 
@@ -106,14 +107,22 @@ def save_r6_fit(
         isotope: Isotope label (e.g. ``"1H"``).
         file_name: Output CSV path.
         verbose: Log path when ``True``.
+        tau_e: Electronic correlation time used for contact subtraction (s),
+            or ``None`` if no subtraction was performed.
     """
     obs_unit = "s^-1" if observable == "r1" else "ppm"
     p1_unit = f"{obs_unit}.Ang^6"
+    contact_note = (
+        f"contact_subtracted=yes  tau_e={tau_e:.3g} s"
+        if tau_e is not None
+        else "contact_subtracted=no"
+    )
     comment = [
         f"r^-6 fit: observable={observable}",
         f"isotope={isotope}",
         f"temperature={temperature:.2f} K",
         f"magnetic_field={magnetic_field:.4f} T",
+        contact_note,
         f"p1={result['p1']:.6g}  p1_err={result['p1_err']:.6g}"
         f"  units={p1_unit}",
         f"p2={result['p2']:.6g}  p2_err={result['p2_err']:.6g}"
@@ -127,6 +136,8 @@ def save_r6_fit(
             "label": result["labels"],
             "r_eff_ang": result["r_eff"],
             "mean_r6_inv": r6_inv,
+            "observed_raw": result["obs_raw"],
+            "contact": result["contact"],
             "observed": result["obs"],
             "predicted": result["pred"],
         }

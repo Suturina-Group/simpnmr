@@ -63,7 +63,7 @@ def load_hyperfine_data(
             converter=None,
         )
 
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(chem_labels)
         molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         all_molecules[source_name] = molecule

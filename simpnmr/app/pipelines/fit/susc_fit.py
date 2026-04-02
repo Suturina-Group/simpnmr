@@ -3,7 +3,7 @@
 
 """Fit susceptibility tensors to experimental shift data.
 
-Loads inputs, fits a selected susceptibility model, and writes outputs and plots.
+Loads inputs, fits a selected susceptibility model, writes outputs and plots.
 """
 
 import copy
@@ -30,7 +30,7 @@ from simpnmr.app.policies.linewidth import resolve_output_linewidths
 from simpnmr.app.policies.susc import resolve_susc_fit_variables
 
 # Core / domain
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
@@ -55,6 +55,7 @@ from simpnmr.viz.plots.r6_fit import (
     plot_r6_fit,
     plot_tau_space,
     plot_tau_space_combined,
+    plot_tau_space_multitemp,
 )
 from simpnmr.viz.plots.spect import plot_raw_deconv_pred
 from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
@@ -71,8 +72,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     """Fit susceptibility tensor(s) defined by a YAML configuration file.
 
     The pipeline builds a Molecule from the requested hyperfine source, loads
-    experimental data, fits the chosen susceptibility model, generates plots, and
-    writes outputs into the project directory.
+    experimental data, fits the chosen susceptibility model, generates plots,
+    and writes outputs into the project directory.
 
     Args:
         config: FitSuscConfig loaded from YAML.
@@ -125,13 +126,15 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     # Add chemical labels
     if len(config.chem_labels_file):
         try:
-            al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+            al_to_cl, al_to_cml, al_to_isotope = load_chem_labels_from_csv(
+                config.chem_labels_file
+            )
             if has_missing_selected_chem_labels(base_molecule, al_to_cl):
                 logger.warning(
                     "Chemical labels file does not define labels for all selected "
                     "nuclei; missing labels will use atom labels."
                 )
-            base_molecule.apply_chem_labels(al_to_cl, al_to_cml)
+            base_molecule.apply_chem_labels(al_to_cl, al_to_cml, al_to_isotope)
         except ValueError as err:
             raise ValueError(f"{err}\nCheck chem_labels and hyperfine files.")
         except KeyError as err:
@@ -140,10 +143,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
         # Save xyz file with chemical labels for chemcraft
         xyz_write.save_chemcraft_xyz(
-            file_name=os.path.join(config.project_name, "chemcraft_structure.xyz"),
+            file_name=os.path.join(
+                config.project_name, "chemcraft_structure.xyz"
+            ),
             labels=base_molecule.labels,
             coords=base_molecule.coords,
-            chem_labels={nuc.label: nuc.chem_label for nuc in base_molecule.nuclei},
+            chem_labels={
+                nuc.label: nuc.chem_label for nuc in base_molecule.nuclei
+            },
         )
 
     # Save xyz file with chemical labels for chemcraft
@@ -222,7 +229,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 {nuc.chem_label for nuc in base_molecule.nuclei}
             )
         average_labels = [
-            [nuc.label for nuc in base_molecule.nuclei if nuc.chem_label == _cl]
+            [
+                nuc.label
+                for nuc in base_molecule.nuclei
+                if nuc.chem_label == _cl
+            ]
             for _cl in config.susc_fit_average_shifts
         ]
     else:
@@ -236,8 +247,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     if not config.diamagnetic_file:
         _terms.pop(_terms.index("d"))
 
+    # Accumulators for multi-temperature τ-space plots
+    _r6_records_r1: list[dict] = []
+    _r6_records_width: list[dict] = []
+
     # Run fit for all experiments
-    for molecule, susc_model, experiment in zip(molecules, susc_models, experiments):
+    for molecule, susc_model, experiment in zip(
+        molecules, susc_models, experiments
+    ):
         # If permuting assignments, then first
         # run all assignment permutations to find best one
         if config.assignment_method == "permute":
@@ -252,7 +269,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 experiment=experiment, groups=config.assignment_groups
             )
 
-            logger.info("There are %s possible permutations", len(permed_assignments))
+            logger.info(
+                "There are %s possible permutations", len(permed_assignments)
+            )
 
             # For each permutation, fit tensor and store r2_adjusted
 
@@ -393,7 +412,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     f"shifts_{experiment.temperature:.2f}_K",
                 ),
                 verbose=True,
-                window_title=f"Fitted shifts at {experiment.temperature:.2f} K",
+                window_title=(
+                    f"Fitted shifts at {experiment.temperature:.2f} K"
+                ),
                 spin=spin,
             )
 
@@ -431,7 +452,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ),
                 verbose=True,
                 window_title=(
-                    f"Predicted shift components at {experiment.temperature:.2f} K"
+                    "Predicted shift components at "
+                    f"{experiment.temperature:.2f} K"
                 ),
                 order="descending",
             )
@@ -447,7 +469,12 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             if not _has_data:
                 continue
             try:
-                r6_result = fit_r6(molecule, experiment, observable=_obs)
+                r6_result = fit_r6(
+                    molecule,
+                    experiment,
+                    observable=_obs,
+                    tau_e=config.fit_relaxation_tau_e,
+                )
             except ValueError as err:
                 logger.warning("r^-6 fit (%s) skipped: %s", _obs, err)
                 continue
@@ -455,17 +482,62 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 _width_fit_result = r6_result
             elif _obs == "r1":
                 _r1_fit_result = r6_result
+            # Derive isotope per chem_label from nucleus defaults/overrides.
+            # This correctly handles mixed-isotope experiments (e.g. 1H + 13C
+            # in the same file) because each nucleus already carries its own
+            # isotope from DEFAULT_ISOTOPES or the chem_labels CSV column.
+            _cl_to_iso: dict[str, str] = {}
+            for _nuc in molecule.nuclei:
+                if _nuc.chem_label not in _cl_to_iso:
+                    _cl_to_iso[_nuc.chem_label] = _nuc.isotope
+            _fitted_cl = r6_result["labels"]
+            _isotopes_in_fit = [
+                _cl_to_iso[cl] for cl in _fitted_cl if cl in _cl_to_iso
+            ]
+            if not _isotopes_in_fit:
+                raise ValueError(
+                    f"r^-6 fit ({_obs}): no isotope found for fitted"
+                    " chem_labels — check chem_labels file."
+                )
+            elif len(set(_isotopes_in_fit)) > 1:
+                from collections import Counter as _Counter
+                _isotope_r6 = _Counter(_isotopes_in_fit).most_common(1)[0][0]
+                logger.warning(
+                    "r^-6 fit (%s): mixed isotopes %s; using most common: %s",
+                    _obs,
+                    set(_isotopes_in_fit),
+                    _isotope_r6,
+                )
+            else:
+                _isotope_r6 = _isotopes_in_fit[0]
+            _gamma_I_r6 = get_nuclear_gamma(_isotope_r6) * 2 * np.pi * 1e6
+            _omega_I_r6 = -_gamma_I_r6 * experiment.magnetic_field
+            _omega_S_r6 = (
+                -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
+            )
+            _r6_rec = {
+                "fit_result": r6_result,
+                "temperature": experiment.temperature,
+                "omega_I": _omega_I_r6,
+                "omega_S": _omega_S_r6,
+                "gamma_I": _gamma_I_r6,
+            }
+            if _obs == "r1":
+                _r6_records_r1.append(_r6_rec)
+            else:
+                _r6_records_width.append(_r6_rec)
             save_r6_fit(
                 r6_result,
                 observable=_obs,
                 temperature=experiment.temperature,
                 magnetic_field=experiment.magnetic_field,
-                isotope=experiment.isotope,
+                isotope=_isotope_r6,
                 file_name=os.path.join(
                     config.project_name,
                     f"r6_fit_{_obs}_{experiment.temperature:.2f}_K.csv",
                 ),
                 verbose=True,
+                tau_e=config.fit_relaxation_tau_e,
             )
             with spec.context():
                 plot_r6_fit(
@@ -484,16 +556,6 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         f"at {experiment.temperature:.2f} K"
                     ),
                 )
-            # τ-space plot: which (τe, τR) pairs are consistent with p1
-            _isotope_r6 = experiment.isotope
-            _gamma_I_r6 = (
-                NUCLEAR_GAMMAS[remove_numbers(_isotope_r6)]
-                * 2 * np.pi * 1e6
-            )
-            _omega_I_r6 = -_gamma_I_r6 * experiment.magnetic_field
-            _omega_S_r6 = (
-                -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
-            )
             _relaxation_model = getattr(
                 config, "relaxation_model", "sbm curie"
             )
@@ -600,13 +662,13 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     ),
                 )
 
-        # Apply r^-6 predicted linewidths to molecule nuclei before spectrum plot
+        # Apply r^-6 predicted linewidths to molecule nuclei before spectrum
         if _width_fit_result is not None:
             _label_to_lw_loop = dict(
                 zip(_width_fit_result["labels"], _width_fit_result["pred"])
             )
             _isotope_loop = molecule.nuclei[0].isotope
-            _gamma_loop = NUCLEAR_GAMMAS[remove_numbers(_isotope_loop)]
+            _gamma_loop = get_nuclear_gamma(_isotope_loop)
             _b0_loop = experiment.magnetic_field
             for nuc in molecule.nuclei:
                 if nuc.chem_label in _label_to_lw_loop:
@@ -614,7 +676,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
 
         # Predicted + experimental deconvoluted spectrum overlay
-        _avgs = [nuc.shift.avg for nuc in molecule.nuclei if nuc.shift.avg is not None]
+        _avgs = [
+            nuc.shift.avg
+            for nuc in molecule.nuclei
+            if nuc.shift.avg is not None
+        ]
         if _avgs and experiment.signals:
             with spec.context():
                 plot_raw_deconv_pred(
@@ -627,7 +693,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     show=options.runtime.show_plots,
                     save_name=os.path.join(
                         config.project_name,
-                        f"pred_and_exp_spectrum_{experiment.temperature:.2f}_K",
+                        "pred_and_exp_spectrum_"
+                        f"{experiment.temperature:.2f}_K",
                     ),
                     verbose=True,
                     window_title=(
@@ -639,7 +706,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     # Write shift data to file
     _comment_base = f"Hyperfines from file {config.hyperfine_file}\n"
     if len(config.diamagnetic_file):
-        _comment_base += f"Diamagnetic shifts from file {config.diamagnetic_file}\n"
+        _comment_base += (
+            f"Diamagnetic shifts from file {config.diamagnetic_file}\n"
+        )
     if len(config.diamagnetic_ref_file):
         _comment_base += (
             f"Diamagnetic reference from file {config.diamagnetic_ref_file}\n"
@@ -651,7 +720,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
-                f"hyperfines_and_fitted_shifts_{molecule.susc.temperature:.2f}_K.csv",
+                "hyperfines_and_fitted_shifts_"
+                f"{molecule.susc.temperature:.2f}_K.csv",
             ),
             delimiter=delimiter,
             comment=comment,
@@ -677,12 +747,16 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             center_atom = molecule.labels[0]
             center_idx = np.where(labels_arr == center_atom)[0]
             if center_idx.size == 0:
-                raise ValueError(f"Center atom {center_atom} not found in labels")
+                raise ValueError(
+                    f"Center atom {center_atom} not found in labels"
+                )
 
             coords_bohr = coords_arr * 1.88973
             coords_bohr = coords_bohr - coords_bohr[center_idx[0]]
 
-            values, origin_bohr, step_bohr, grid_shape = compute_pcs_isosurface(
+            (
+                values, origin_bohr, step_bohr, grid_shape
+            ) = compute_pcs_isosurface(
                 chi_dtensor=molecule.susc.dtensor,
                 labels=labels_arr,
                 center_atom=center_atom,
@@ -696,7 +770,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
             write_pcs_cube(
                 file_name=file_name,
-                comment=f"PCS Isosurface (T = {molecule.susc.temperature:.2f} K)",
+                comment=(
+                    f"PCS Isosurface (T = {molecule.susc.temperature:.2f} K)"
+                ),
                 labels=labels_arr,
                 coords_bohr=coords_bohr,
                 origin_bohr=origin_bohr,
@@ -706,6 +782,36 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             )
 
             logger.info("PCS isosurface written to %s", file_name)
+
+    # Multi-temperature τ-space plots (only when >1 experiment)
+    _relaxation_model_mt = getattr(config, "relaxation_model", "sbm curie")
+    for _obs_mt, _records_mt in (
+        ("r1", _r6_records_r1),
+        ("width", _r6_records_width),
+    ):
+        if len(_records_mt) > 1:
+            with spec.context():
+                plot_tau_space_multitemp(
+                    records=_records_mt,
+                    observable=_obs_mt,
+                    spin=spin,
+                    orbit=config.orbit,
+                    total_momentum_J=config.total_momentum_J,
+                    relaxation_model=_relaxation_model_mt,
+                    spec=spec,
+                    tau_e_range=config.fit_relaxation_tau_e_range,
+                    tau_r_range=config.fit_relaxation_tau_r_range,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"r6_tau_space_multitemp_{_obs_mt}",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"\u03c4 space multi-T ({_obs_mt})"
+                    ),
+                )
 
     mol = molecules[-1]
 
@@ -723,7 +829,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     linewidth_output = resolve_output_linewidths(mol, shift_range)
 
     if spin is not None:
-        temps_fit = np.array([mol.susc.temperature for mol in molecules], dtype=float)
+        temps_fit = np.array(
+            [mol.susc.temperature for mol in molecules], dtype=float
+        )
         if temps_fit.size > 1:
             fit_vt(
                 config=config,
@@ -742,7 +850,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             zip(_width_fit_result["labels"], _width_fit_result["pred"])
         )
         _isotope = mol.nuclei[0].isotope
-        _gamma = NUCLEAR_GAMMAS[remove_numbers(_isotope)]
+        _gamma = get_nuclear_gamma(_isotope)
         _b0 = experiment.magnetic_field
         for nuc in mol.nuclei:
             if nuc.chem_label in _label_to_lw:
@@ -778,15 +886,16 @@ def _obtain_r2a(
     """
     Fit a susceptibility model for a proposed assignment and return RMSE.
 
-    This helper is designed to be run in parallel when searching over assignment
-    permutations.
+    This helper is designed to be run in parallel when searching over
+    assignment permutations.
 
     Args:
         molecule (Molecule): Molecule instance used for shift prediction.
         assignment (list[str]): Proposed assignment list (one per signal).
         model (models.SusceptibilityModel): Model instance to fit.
         experiment (Experiment): Experiment data to fit against.
-        average_labels (list[list[str]]): Groups of labels to average during fitting.
+        average_labels (list[list[str]]): Groups of labels to average during
+            fitting.
 
     Returns:
         float: RMSE value for this assignment.

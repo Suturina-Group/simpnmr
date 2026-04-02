@@ -21,26 +21,24 @@ from simpnmr.io.text.parse import find_first_group
 logger = logging.getLogger(__name__)
 
 
-def read_exp_metadata(file_name: str) -> tuple[float, float, str]:
+def read_exp_metadata(file_name: str) -> tuple[float, float]:
     """Reads metadata from an experiment CSV file.
 
-    Metadata is stored as single comment lines beginning with ``#`` and formatted as
-    ``name value``. Supported keys are ``temperature``, ``magnetic_field``, and
-    ``isotope``.
+    Metadata is stored as single comment lines beginning with ``#`` and
+    formatted as ``name value``. Supported keys are ``temperature`` and
+    ``magnetic_field``.
 
     Args:
-        file_name: Path to the experiment file.`
+        file_name: Path to the experiment file.
 
     Returns:
-        A tuple ``(temperature, magnetic_field, isotope)`` where temperature is in K,
-        magnetic field is in T, and isotope is formatted like ``"1H"`` or ``"13C"``.
+        A tuple ``(temperature, magnetic_field)`` where temperature is in K
+        and magnetic field is in T.
 
     Raises:
         IndexError: If a required metadata line is missing.
         ValueError: If a numeric metadata value cannot be parsed.
     """
-
-    temperature, magnetic_field, isotope = None, None, None
 
     temperature = float(
         find_first_group(file_name, r"# *temperature (\d*\.*\d*)", re.IGNORECASE)
@@ -50,11 +48,7 @@ def read_exp_metadata(file_name: str) -> tuple[float, float, str]:
         find_first_group(file_name, r"# *magnetic_field (\d*\.*\d*)", re.IGNORECASE)
     )
 
-    isotope = str(
-        find_first_group(file_name, r"# *isotope (\d{0,3}[A-Za-z]{0,2})", re.IGNORECASE)
-    )
-
-    return temperature, magnetic_field, isotope
+    return temperature, magnetic_field
 
 
 def assemble_experiments_table(frames):
@@ -90,16 +84,15 @@ def load_experiments_from_csv(
         df = read_csv_safe(file_name)
         df = df.replace(r"^\s*$", pd.NA, regex=True).dropna(how="all")
 
-        temperature, magnetic_field, isotope = read_exp_metadata(file_name)
+        temperature, magnetic_field = read_exp_metadata(file_name)
         df["temperature"] = temperature
         df["magnetic_field"] = magnetic_field
-        df["isotope"] = isotope
 
         frames.append(df)
 
     table = assemble_experiments_table(frames)
 
-    # Build one Experiment per (temperature, magnetic_field, isotope) block.
+    # Build one Experiment per (temperature, magnetic_field) block.
     def _pick_col(df_, candidates: list[str]) -> str:
         """Pick a required column from a dataframe using tolerant header matching."""
         # Map normalized column names -> actual column names.
@@ -140,8 +133,8 @@ def load_experiments_from_csv(
         None,
     )
 
-    for (temperature, magnetic_field, isotope), group in table.groupby(
-        ["temperature", "magnetic_field", "isotope"]
+    for (temperature, magnetic_field), group in table.groupby(
+        ["temperature", "magnetic_field"]
     ):
         signals: list[Signal] = []
         for _, row in group.iterrows():
@@ -167,7 +160,6 @@ def load_experiments_from_csv(
             Experiment(
                 float(temperature),
                 float(magnetic_field),
-                str(isotope),
                 signals,
             )
         )

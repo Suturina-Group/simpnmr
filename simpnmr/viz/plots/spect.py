@@ -17,12 +17,12 @@ import matplotlib.ticker as ticker
 import numpy as np
 from numpy.typing import ArrayLike
 
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.util.arrays import find_index_of_nearest
-from simpnmr.core.util.strings import remove_numbers
+
 from simpnmr.io.csv.spec import write_spectrum
 from simpnmr.viz.layout.canvas import create_stacked_canvas
 from simpnmr.viz.layout.export import render_figure
@@ -268,7 +268,7 @@ def plot_raw_deconv_pred(
     for signal in experiment.signals:
         # Convert experimental linewidth from Hz to ppm
         exp_width_ppm = signal.width / (
-            NUCLEAR_GAMMAS[remove_numbers(isotope)] * experiment.magnetic_field
+            get_nuclear_gamma(isotope) * experiment.magnetic_field
         )
         # Add Lorentzian contribution
         y_deconv_intensity += signal.l_to_g * lorentzian(

@@ -3,13 +3,15 @@
 
 """Extract ChemCraft atom labels from annotated XYZ files.
 
-Reads ChemCraft-style XYZ files and writes per-atom chemical labels to CSV format.
+Reads ChemCraft-style XYZ files and writes per-atom chemical labels to CSV.
 """
 
 import argparse
 import csv
 import logging
+import re
 
+from simpnmr.core.const.isotopes import DEFAULT_ISOTOPES
 from . import xyz_fmt as xyzf
 
 logger = logging.getLogger(__name__)
@@ -107,14 +109,19 @@ def main():
     with open("chemlabels.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter=",")
         if uargs.math_placeholder:
-            writer.writerow(["atom_label", "chem_label", "chem_math_label"])
+            writer.writerow(
+                ["atom_label", "chem_label", "chem_math_label", "isotope"]
+            )
         else:
-            writer.writerow(["atom_label", "chem_label"])
+            writer.writerow(["atom_label", "chem_label", "isotope"])
 
         for k, v in chem_dict.items():
+            element = re.sub(r"\d", "", k)
+            isotope = DEFAULT_ISOTOPES.get(element, "")
             row = [k, v]
             if uargs.math_placeholder:
                 row.append(math_dict[k])
+            row.append(isotope)
             writer.writerow(row)
 
     logger.info("Chemical labels written to chemlabels.csv")

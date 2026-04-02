@@ -584,3 +584,201 @@ def plot_tau_space_combined(
         )
 
     return fig, ax
+
+
+def plot_tau_space_multitemp(
+    records: list[dict],
+    observable: str,
+    spin: float,
+    orbit: float,
+    total_momentum_J: float | None,
+    relaxation_model: str,
+    spec: PlotSpec = None,
+    tau_e_range: list[float] | None = None,
+    tau_r_range: list[float] | None = None,
+    n_points: int = 120,
+    confidence: float = 0.95,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "r6_tau_space_multitemp",
+    verbose: bool = True,
+    window_title: str = "τ parameter space (multi-T)",
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot τ-space constraint contours for multiple temperatures.
+
+    Each temperature produces a different constraint curve in (τe, τR)
+    space. The intersection of all curves indicates the (τe, τR) pair
+    consistent with all experimental temperatures simultaneously.
+
+    Args:
+        records: List of dicts, one per temperature, each containing:
+            ``"fit_result"`` (from ``fit_r6``),
+            ``"temperature"`` (K),
+            ``"omega_I"`` (rad s⁻¹),
+            ``"omega_S"`` (rad s⁻¹),
+            ``"gamma_I"`` (rad s⁻¹ T⁻¹).
+        observable: ``"r1"`` or ``"width"``.
+        spin: Electron spin quantum number S.
+        orbit: Orbital angular momentum L.
+        total_momentum_J: Total angular momentum J, or None.
+        relaxation_model: One of ``"sbm"``, ``"curie"``,
+            ``"sbm curie"``.
+        spec: Plot style specification.
+        tau_e_range: Optional [min, max] in seconds for τe axis.
+        tau_r_range: Optional [min, max] in seconds for τR axis.
+        n_points: Grid resolution along each axis.
+        confidence: Confidence level for shaded CI bands.
+        save: Save the figure if ``True``.
+        show: Display the figure if ``True``.
+        save_name: Output file base name.
+        verbose: Log path when ``True``.
+        window_title: Figure window title.
+
+    Returns:
+        A tuple ``(fig, ax)``.
+    """
+    from scipy.stats import norm as _norm
+    import matplotlib.cm as cm
+
+    if not records:
+        logger.warning("No records provided to plot_tau_space_multitemp.")
+        return None, None
+
+    z = _norm.ppf(0.5 + confidence / 2.0)
+    ci_pct = int(round(confidence * 100))
+
+    _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
+    _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
+    _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
+    tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
+
+    _tau_e_mid = np.sqrt(tau_e[0] * tau_e[-1])
+    if _tau_e_mid < 1e-12:
+        _tau_e_scale, _tau_e_unit = 1e15, "fs"
+    elif _tau_e_mid < 1e-9:
+        _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    else:
+        _tau_e_scale, _tau_e_unit = 1e9, "ns"
+
+    _tau_r_mid = np.sqrt(tau_R[0] * tau_R[-1])
+    if _tau_r_mid < 1e-9:
+        _tau_r_scale, _tau_r_unit = 1e12, "ps"
+    elif _tau_r_mid < 1e-6:
+        _tau_r_scale, _tau_r_unit = 1e9, "ns"
+    else:
+        _tau_r_scale, _tau_r_unit = 1e6, "µs"
+
+    TAU_E_2D, TAU_R_2D = np.meshgrid(
+        tau_e * _tau_e_scale, tau_R * _tau_r_scale
+    )
+
+    fig, ax = create_canvas(
+        spec.profile,
+        variant="standard",
+        window_title=window_title,
+        layout="constrained",
+    )
+    palette = spec.palette
+    spec.skin_axes(ax)
+    ax.set_facecolor(palette.annotation_bg)
+
+    # Colour cycle across temperatures
+    colors = cm.plasma(
+        np.linspace(0.1, 0.9, len(records))
+    )
+
+    for rec, color in zip(records, colors):
+        fit_result = rec["fit_result"]
+        T = rec["temperature"]
+        omega_I = rec["omega_I"]
+        omega_S = rec["omega_S"]
+        gamma_I = rec["gamma_I"]
+        p1_fit = fit_result["p1"]
+        p1_err = fit_result["p1_err"]
+
+        p1_grid = compute_p1_theoretical(
+            tau_e, tau_R,
+            omega_I=omega_I, omega_S=omega_S, gamma_I=gamma_I,
+            spin=spin, orbit=orbit,
+            total_momentum_J=total_momentum_J,
+            temperature=T,
+            observable=observable,
+            relaxation_model=relaxation_model,
+        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lr = np.log10(np.abs(p1_grid) / abs(p1_fit))
+        lr = np.clip(lr.T, -3, 3)
+
+        lo_val = float(lr.min())
+        hi_val = float(lr.max())
+
+        # CI band
+        if p1_fit != 0:
+            rel = z * abs(p1_err / p1_fit)
+            log_lo = np.log10(max(1.0 - rel, 1e-6))
+            log_hi = np.log10(1.0 + rel)
+            if lo_val <= log_lo <= hi_val or lo_val <= log_hi <= hi_val:
+                ax.contourf(
+                    TAU_E_2D, TAU_R_2D, lr,
+                    levels=[log_lo, log_hi],
+                    colors=[color],
+                    alpha=0.20,
+                )
+
+        # Central contour
+        if lo_val <= 0.0 <= hi_val:
+            cs = ax.contour(
+                TAU_E_2D, TAU_R_2D, lr,
+                levels=[0.0],
+                colors=[color],
+                linewidths=[1.6],
+            )
+            cs.collections[0].set_label(f"{T:.0f} K")
+        else:
+            logger.warning(
+                "Central contour for T=%.1f K not visible in grid "
+                "(p1_fit=%.4g, grid range [%.4g, %.4g]).",
+                T, p1_fit,
+                float(np.min(p1_grid)), float(np.max(p1_grid)),
+            )
+
+    obs_label = _OBS_LABELS.get(observable, observable)
+    ax.legend(
+        title="Temperature",
+        fontsize=spec.typography.legend,
+        framealpha=0.8,
+    )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
+    ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
+    ax.set_title(
+        f"{obs_label}  —  {ci_pct}% CI per temperature",
+        fontsize=spec.typography.title,
+    )
+
+    ann = f"model: {relaxation_model}"
+    ax.text(
+        0.97, 0.03, ann,
+        transform=ax.transAxes,
+        ha="right", va="bottom",
+        fontsize=spec.typography.annotation,
+        color=palette.primary,
+        bbox=dict(
+            boxstyle="round,pad=0.3",
+            facecolor=palette.annotation_bg,
+            edgecolor=palette.grid,
+            alpha=0.8,
+        ),
+    )
+
+    render_figure(fig, save=save, show=show, save_name=save_name)
+
+    if save and verbose:
+        logger.info(
+            "Multi-T τ-space plot saved to %s", f"{save_name}.pdf"
+        )
+
+    return fig, ax

@@ -28,6 +28,7 @@ import logging
 import os
 from collections import defaultdict
 
+from simpnmr.core.const.isotopes import DEFAULT_ISOTOPES
 from simpnmr.tools.coords import xyz_fmt as xyzf
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def _write_csv(
     group_labels: list[str],
     raw_rows: list[list],
 ) -> None:
-    """Write atom_label,chem_label CSV for C and H atoms."""
+    """Write atom_label,chem_label,isotope CSV for C and H atoms."""
     c_counter = 0
     h_counter = 0
     rows = []
@@ -190,10 +191,11 @@ def _write_csv(
             atom_label = f"H{h_counter}"
         if not label:
             label = atom_label
-        rows.append(f"{atom_label},{label}")
+        isotope = DEFAULT_ISOTOPES.get(sym, "")
+        rows.append(f"{atom_label},{label},{isotope}")
 
     with open(path, "w") as f:
-        f.write("atom_label,chem_label\n")
+        f.write("atom_label,chem_label,isotope\n")
         f.write("\n".join(rows) + "\n")
     logger.info("CSV labels   ->  %s", path)
 

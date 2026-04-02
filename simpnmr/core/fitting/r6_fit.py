@@ -14,9 +14,12 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from simpnmr.core.build.eff_factors import calc_g_eff, choose_S_eff
-from simpnmr.core.const.physics import KB, MU0, MUB
+from simpnmr.core.const.gammas import get_nuclear_gamma
+from simpnmr.core.const.physics import EGAMMA, KB, MU0, MUB
+from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
+from simpnmr.core.relaxation.sbm import calc_r1_contact, calc_r2_contact
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,7 @@ def fit_r6(
     molecule: Molecule,
     experiment: Experiment,
     observable: str = "r1",
+    tau_e: float | None = None,
 ) -> dict:
     """Fit linewidth or R1 to the model ``p1 / r**6 + p2``.
 
@@ -140,6 +144,13 @@ def fit_r6(
     correctly averages the distance-dependent relaxation contribution across
     the group rather than using a single representative distance.
 
+    When ``tau_e`` is provided, the Fermi-contact SBM contribution to R1 or
+    R2 is computed for each chem_label group and subtracted from the observed
+    value before fitting.  The contact contribution depends on the isotropic
+    hyperfine coupling (``nuc.A.fc``) and the electronic correlation time
+    ``tau_e = T1e = T2e`` (s).  Only nuclei with non-zero A_iso contribute;
+    the subtraction is silently skipped when all A_iso are zero (e.g. pdip).
+
     Args:
         molecule: Molecule with nuclei, coordinates, and
             ``paramagnetic_centre`` set.
@@ -147,6 +158,9 @@ def fit_r6(
             observable and are already assigned to chemical labels.
         observable: Which quantity to fit — ``"r1"`` (longitudinal relaxation
             rate, s⁻¹) or ``"width"`` (linewidth, ppm).
+        tau_e: Electronic correlation time T1e = T2e (s) used to subtract the
+            Fermi-contact relaxation contribution before fitting.  If ``None``
+            no contact subtraction is performed.
 
     Returns:
         A dict with keys:
@@ -156,7 +170,12 @@ def fit_r6(
           covariance matrix.
         - ``"r_eff"`` — effective distances ``(mean(1/r**6))**(-1/6)`` in Å,
           one per signal, in the same order as ``labels``.
-        - ``"obs"`` — observed values used in the fit.
+        - ``"obs"`` — observed values used in the fit (contact-corrected when
+          ``tau_e`` is given).
+        - ``"obs_raw"`` — original observed values before contact subtraction
+          (equals ``"obs"`` when ``tau_e`` is ``None``).
+        - ``"contact"`` — contact contribution subtracted per signal (zero
+          array when ``tau_e`` is ``None``).
         - ``"labels"`` — chemical labels in the same order.
         - ``"pred"`` — model-predicted values at each ``r_eff``.
         - ``"rmse"`` — root-mean-square error of the fit (same units as
@@ -221,7 +240,88 @@ def fit_r6(
         )
 
     r6_inv = np.array(r6_inv_vals, dtype=float)
-    obs = np.array(obs_vals, dtype=float)
+    obs_raw = np.array(obs_vals, dtype=float)
+
+    # --- Contact contribution subtraction -----------------------------------
+    contact = np.zeros(len(labels), dtype=float)
+
+    if tau_e is not None:
+        # Frequency constants from first nucleus with non-zero gamma
+        _ref_nuc = next(
+            (n for n in molecule.nuclei if n.chem_label in labels), None
+        )
+        if _ref_nuc is not None:
+            _gamma_I = get_nuclear_gamma(_ref_nuc.isotope) * 2 * np.pi * 1e6
+            _B0 = experiment.magnetic_field
+            _omega_I = -_gamma_I * _B0
+            _omega_S = -EGAMMA * _B0 * 2 * np.pi * 1e6
+            spin = molecule.electronic.spin_S
+            total_J = molecule.electronic.total_J
+
+            # Build per-label A_iso in rad/s (averaged over group)
+            _nuc_gamma_cache: dict[str, float] = {}
+            _aiso_by_label: dict[str, float] = {}
+            for cl in labels:
+                group = cl_to_nuclei.get(cl, [])
+                aiso_vals = []
+                for nuc in group:
+                    gamma_nuc = _nuc_gamma_cache.setdefault(
+                        nuc.isotope,
+                        get_nuclear_gamma(nuc.isotope) * 2 * np.pi * 1e6,
+                    )
+                    if gamma_nuc == 0:
+                        continue
+                    a_iso_ang = float(np.trace(nuc.A.fc)) / 3.0
+                    a_iso_mhz = float(
+                        angstrom_to_mhz(
+                            a_iso_ang,
+                            get_nuclear_gamma(nuc.isotope),
+                        )
+                    )
+                    # rad/s
+                    aiso_vals.append(a_iso_mhz * 1e6 * 2 * np.pi)
+                _aiso_by_label[cl] = (
+                    float(np.mean(aiso_vals)) if aiso_vals else 0.0
+                )
+
+            _omega_I_dict = {cl: _omega_I for cl in labels}
+
+            if observable == "r1":
+                _contact_rates = calc_r1_contact(
+                    nuclei_labels=labels,
+                    Aiso_dict=_aiso_by_label,
+                    omega_I_dict=_omega_I_dict,
+                    omega_S=_omega_S,
+                    tau_e2=tau_e,
+                    spin=spin,
+                    total_momentum_J=total_J,
+                )
+                for i, cl in enumerate(labels):
+                    contact[i] = _contact_rates.get(cl, 0.0)
+            else:  # width (ppm)
+                _contact_rates = calc_r2_contact(
+                    nuclei_labels=labels,
+                    Aiso_dict=_aiso_by_label,
+                    omega_I_dict=_omega_I_dict,
+                    omega_S=_omega_S,
+                    tau_e1=tau_e,
+                    tau_e2=tau_e,
+                    spin=spin,
+                    total_momentum_J=total_J,
+                )
+                for i, cl in enumerate(labels):
+                    # R2 (s⁻¹) → linewidth (ppm): lw = R2 / (π |γI| B0)
+                    r2 = _contact_rates.get(cl, 0.0)
+                    contact[i] = r2 / (np.pi * abs(_gamma_I) * _B0)
+
+            logger.info(
+                "r^-6 fit (%s): contact subtraction with tau_e=%.3g s",
+                observable,
+                tau_e,
+            )
+
+    obs = obs_raw - contact
+    # -------------------------------------------------------------------------
 
     popt, pcov = curve_fit(_r6_model, r6_inv, obs, p0=[1.0, 0.0])
     perr = np.sqrt(np.diag(pcov))
@@ -249,6 +349,8 @@ def fit_r6(
         "p2_err": perr[1],
         "r_eff": r_eff,
         "obs": obs,
+        "obs_raw": obs_raw,
+        "contact": contact,
         "pred": pred,
         "labels": labels,
         "rmse": rmse,

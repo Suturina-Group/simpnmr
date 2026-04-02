@@ -64,9 +64,11 @@ Chemcraft-annotated XYZ file and writes them to a CSV file ready for use as a
 
    xyz_to_chemlabel structure.xyz
 
-Produces ``chemlabels.csv`` with ``atom_label`` and ``chem_label`` columns.
-An optional ``--math_placeholder`` flag adds a third ``chem_math_label``
-column pre-populated with LaTeX-wrapped labels (e.g. ``$tBu1$``).
+Produces ``chemlabels.csv`` with ``atom_label``, ``chem_label``, and
+``isotope`` columns. The ``isotope`` column is auto-populated from the most
+abundant NMR-active isotope for each element (e.g. H → ``1H``, C → ``13C``).
+An optional ``--math_placeholder`` flag adds a ``chem_math_label`` column
+pre-populated with LaTeX-wrapped labels (e.g. ``$tBu1$``).
 
 
 ``label_groups``
@@ -95,8 +97,9 @@ the spectrum.
 
 - ``<input>_labeled.xyz`` — original XYZ with group tags appended in quotes,
   e.g. ``H   1.23  4.56  7.89  "tBu2"``
-- ``<input>_labels.csv`` — ``atom_label,chem_label`` CSV for all C and H
-  atoms, ready to use as ``chem_labels.file`` in a SimpNMR YAML
+- ``<input>_labels.csv`` — ``atom_label,chem_label,isotope`` CSV for all C
+  and H atoms, ready to use as ``chem_labels.file`` in a SimpNMR YAML.
+  The ``isotope`` column is auto-populated (H → ``1H``, C → ``13C``)
 
 **Group naming**
 
