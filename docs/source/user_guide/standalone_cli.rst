@@ -47,29 +47,6 @@ The command produces PCS values on a three-dimensional grid, suitable for
 visualisation or further analysis.
 
 
-``xyz_to_chemlabel``
---------------------
-
-The ``xyz_to_chemlabel`` command extracts per-atom chemical labels from a
-Chemcraft-annotated XYZ file and writes them to a CSV file ready for use as a
-``chem_labels`` file in SimpNMR.
-
-**Required input**
-
-- A Chemcraft-style XYZ file with optional quoted labels in the fifth column
-
-**Typical usage**
-
-::
-
-   xyz_to_chemlabel structure.xyz
-
-Produces ``chemlabels.csv`` with ``atom_label``, ``chem_label``, and
-``isotope`` columns. The ``isotope`` column is auto-populated from the most
-abundant NMR-active isotope for each element (e.g. H → ``1H``, C → ``13C``).
-An optional ``--math_placeholder`` flag adds a ``chem_math_label`` column
-pre-populated with LaTeX-wrapped labels (e.g. ``$tBu1$``).
-
 
 ``label_groups``
 -----------------

@@ -88,10 +88,12 @@ def plot_shift_width_bubble(
 
     records = []
     for sig in experiment.signals:
+        cl = sig.assignment
+        if cl not in cl_to_size:
+            continue
         y = sig.r1 if observable == "r1" else sig.width
         if y is None or (observable == "r1" and np.isnan(float(y))):
             continue
-        cl = sig.assignment
         records.append(
             {
                 "shift": sig.shift,
@@ -100,12 +102,19 @@ def plot_shift_width_bubble(
                 "label": cl,
                 "group_size": cl_to_size.get(cl, 0),
                 "pred": label_to_pred.get(cl),
+                "area": float(sig.area),
             }
         )
 
     if not records:
         logger.warning("plot_shift_width_bubble: no valid data for %s", observable)
         return None, []
+
+    # Scale experimental marker size by area, normalised to median = _MARKER_SIZE
+    _areas = np.array([r["area"] for r in records])
+    _area_ref = float(np.median(_areas[_areas > 0])) if np.any(_areas > 0) else 1.0
+    for r in records:
+        r["marker_size"] = max(10.0, _MARKER_SIZE * r["area"] / _area_ref)
 
     # --- Group by group size, sorted ascending ---
     group_sizes = sorted({r["group_size"] for r in records})
@@ -141,12 +150,13 @@ def plot_shift_width_bubble(
         ys = [r["y"] for r in subset]
         labels = [r["label"] for r in subset]
         preds = [r["pred"] for r in subset]
+        marker_sizes = [r["marker_size"] for r in subset]
 
-        # Experimental points
+        # Experimental points — size scaled by peak area
         ax.scatter(
             shifts,
             ys,
-            s=_MARKER_SIZE,
+            s=marker_sizes,
             color=palette.primary,
             alpha=0.7,
             edgecolors=palette.primary,

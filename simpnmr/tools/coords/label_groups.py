@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 
 # ── Bond-length cutoffs (Å) ────────────────────────────────────────────────
 _BOND_CUTOFFS = {
-    frozenset(["C", "H"]): 1.35,
-    frozenset(["C", "C"]): 1.85,
+    frozenset(["C", "H"]): 1.20,
+    frozenset(["C", "C"]): 1.65,
 }
 
 
@@ -122,43 +122,20 @@ def _write_labeled_xyz(
     raw_rows: list[list],
     group_labels: list[str],
 ) -> None:
-    """Write labeled XYZ with group tags appended in quotes."""
+    """Write labeled XYZ in Chemcraft format with group tags in quotes."""
     lines = []
+    indexed_labels = xyzf.add_label_indices([a[0] for a in atoms])
 
-    if fmt == "standard":
-        lines.append(f"{len(atoms)}\n")
-        lines.append(f"{comment} [labeled]\n")
-        for i, atom in enumerate(atoms):
-            sym = atom[0]
-            xs, ys, zs = raw_rows[i][1], raw_rows[i][2], raw_rows[i][3]
-            tag = group_labels[i]
-            if tag:
-                lines.append(
-                    f"{sym:<4s} {xs:>14s} {ys:>14s} {zs:>14s}"
-                    f'   "{tag}"\n'
-                )
-            else:
-                lines.append(
-                    f"{sym:<4s} {xs:>14s} {ys:>14s} {zs:>14s}\n"
-                )
-    else:
-        for i, atom in enumerate(atoms):
-            anum_s, xs, ys, zs = (
-                raw_rows[i][0], raw_rows[i][1],
-                raw_rows[i][2], raw_rows[i][3],
-            )
-            tag = group_labels[i]
-            if tag:
-                lines.append(
-                    f"{anum_s:>5s}"
-                    f"  {xs:>14s}  {ys:>14s}  {zs:>14s}"
-                    f'      "{tag}"\n'
-                )
-            else:
-                lines.append(
-                    f"{anum_s:>5s}"
-                    f"  {xs:>14s}  {ys:>14s}  {zs:>14s}\n"
-                )
+    for i, atom in enumerate(atoms):
+        sym = atom[0]
+        xs, ys, zs = raw_rows[i][1], raw_rows[i][2], raw_rows[i][3]
+        tag = group_labels[i] or indexed_labels[i]
+        anum = xyzf.lab_to_num(sym)
+        lines.append(
+            f"{anum:>5d}"
+            f"  {xs:>14s}  {ys:>14s}  {zs:>14s}"
+            f'      "{tag}"\n'
+        )
 
     with open(path, "w") as f:
         f.writelines(lines)
@@ -316,6 +293,7 @@ def label_groups(input_path: str) -> None:
         members = _collect_group_atoms(tc, atoms, adj, methyl_C, "tbu")
         for idx in members:
             group_labels[idx] = tag
+        group_labels[tc] = f"{tag}q"
         groups.append({
             "tag": tag,
             "kind": "tert-butyl",

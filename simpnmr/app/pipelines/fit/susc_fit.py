@@ -459,8 +459,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             )
 
         # r^-6 distance-model fits (R1 and linewidth) — one fit per isotope
-        _width_fit_result = None
-        _r1_fit_result = None
+        _width_fit_result_by_iso: dict = {}
+        _r1_fit_result_by_iso: dict = {}
         _relaxation_model = getattr(config, "relaxation_model", "sbm curie")
         _omega_S_r6 = -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
 
@@ -499,12 +499,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     )
                     continue
 
-                # Store last result for the linewidth/r1 bubble plots
-                # (those plots don't separate by isotope, so last wins)
                 if _obs == "width":
-                    _width_fit_result = r6_result
+                    _width_fit_result_by_iso[_iso_r6] = r6_result
                 elif _obs == "r1":
-                    _r1_fit_result = r6_result
+                    _r1_fit_result_by_iso[_iso_r6] = r6_result
 
                 _r6_rec = {
                     "fit_result": r6_result,
@@ -618,57 +616,67 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         ),
                     )
 
-        # Shift vs linewidth bubble plot
-        with spec.context():
-            plot_shift_width_bubble(
-                experiment,
-                molecule,
-                spec=spec,
-                observable="width",
-                fit_result=_width_fit_result,
-                show=options.runtime.show_plots,
-                save=True,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"shift_width_bubble_{experiment.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    f"Shift vs Linewidth at {experiment.temperature:.2f} K"
-                ),
-            )
+        # Bubble plots — one per isotope
+        _iso_suffix = len(_isotopes_mol) > 1
+        for _iso_bubble in _isotopes_mol:
+            _suffix = f"_{_iso_bubble}" if _iso_suffix else ""
+            _iso_mol = copy.copy(molecule)
+            _iso_mol.nuclei = [
+                nuc for nuc in molecule.nuclei
+                if nuc.isotope == _iso_bubble
+            ]
 
-        # Shift vs R1 bubble plot (only when R1 data is present)
-        if _r1_fit_result is not None or any(
-            sig.r1 is not None for sig in experiment.signals
-        ):
+            # Shift vs linewidth bubble plot
             with spec.context():
                 plot_shift_width_bubble(
                     experiment,
-                    molecule,
+                    _iso_mol,
                     spec=spec,
-                    observable="r1",
-                    fit_result=_r1_fit_result,
+                    observable="width",
+                    fit_result=_width_fit_result_by_iso.get(_iso_bubble),
                     show=options.runtime.show_plots,
                     save=True,
                     save_name=os.path.join(
                         config.project_name,
-                        f"shift_r1_bubble_{experiment.temperature:.2f}_K",
+                        f"shift_width_bubble_{experiment.temperature:.2f}_K{_suffix}",
                     ),
                     verbose=True,
                     window_title=(
-                        f"Shift vs R1 at {experiment.temperature:.2f} K"
+                        f"Shift vs Linewidth at {experiment.temperature:.2f} K"
                     ),
                 )
 
+            # Shift vs R1 bubble plot (only when R1 data is present)
+            if _r1_fit_result_by_iso.get(_iso_bubble) is not None or any(
+                sig.r1 is not None for sig in experiment.signals
+            ):
+                with spec.context():
+                    plot_shift_width_bubble(
+                        experiment,
+                        _iso_mol,
+                        spec=spec,
+                        observable="r1",
+                        fit_result=_r1_fit_result_by_iso.get(_iso_bubble),
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"shift_r1_bubble_{experiment.temperature:.2f}_K{_suffix}",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Shift vs R1 at {experiment.temperature:.2f} K"
+                        ),
+                    )
+
         # Apply r^-6 predicted linewidths to molecule nuclei before spectrum
-        if _width_fit_result is not None:
+        _b0_loop = experiment.magnetic_field
+        for _iso_lw, _width_fit_result in _width_fit_result_by_iso.items():
             _label_to_lw_loop = dict(
                 zip(_width_fit_result["labels"], _width_fit_result["pred"])
             )
-            _b0_loop = experiment.magnetic_field
             for nuc in molecule.nuclei:
-                if nuc.chem_label in _label_to_lw_loop:
+                if nuc.isotope == _iso_lw and nuc.chem_label in _label_to_lw_loop:
                     lw_hz = _label_to_lw_loop[nuc.chem_label]
                     _gamma_loop = get_nuclear_gamma(nuc.isotope)
                     nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))

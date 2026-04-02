@@ -6,6 +6,7 @@
 import logging
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 
 from simpnmr.core.fitting.r6_fit import compute_p1_theoretical
@@ -329,7 +330,7 @@ def plot_tau_space(
             linestyles=["-"],
         )
         for coll in cs_c.collections:
-            coll.set_clip_on(True)
+            coll.set_clip_path(ax.patch)
     if levels_lo or levels_hi:
         ci_levels = levels_lo + levels_hi
         cs_ci = ax.contour(
@@ -340,7 +341,7 @@ def plot_tau_space(
             linestyles=["--"] * len(ci_levels),
         )
         for coll in cs_ci.collections:
-            coll.set_clip_on(True)
+            coll.set_clip_path(ax.patch)
     if not levels_central:
         logger.warning(
             "Central contour (p1_calc = p1_fit) not visible: "
@@ -531,7 +532,7 @@ def plot_tau_space_combined(
         ),
     ]:
         for coll in _cf.collections:
-            coll.set_clip_on(True)
+            coll.set_clip_path(ax.patch)
 
     # Central contours
     for lr, color, label in [
@@ -549,7 +550,7 @@ def plot_tau_space_combined(
             )
             cs.collections[0].set_label(label)
             for coll in cs.collections:
-                coll.set_clip_on(True)
+                coll.set_clip_path(ax.patch)
         else:
             logger.warning(
                 "Central contour for '%s' not visible in grid.", label
@@ -699,6 +700,9 @@ def plot_tau_space_multitemp(
         np.linspace(0.1, 0.9, len(records))
     )
 
+    legend_handles = []
+    legend_labels = []
+
     for rec, color in zip(records, colors):
         fit_result = rec["fit_result"]
         T = rec["temperature"]
@@ -737,7 +741,7 @@ def plot_tau_space_multitemp(
                     alpha=0.20,
                 )
                 for coll in cf.collections:
-                    coll.set_clip_on(True)
+                    coll.set_clip_path(ax.patch)
 
         # Central contour
         if lo_val <= 0.0 <= hi_val:
@@ -747,9 +751,10 @@ def plot_tau_space_multitemp(
                 colors=[color],
                 linewidths=[1.6],
             )
-            cs.collections[0].set_label(f"{T:.0f} K")
             for coll in cs.collections:
-                coll.set_clip_on(True)
+                coll.set_clip_path(ax.patch)
+            legend_handles.append(Line2D([0], [0], color=color, lw=1.6))
+            legend_labels.append(f"{T:.0f} K")
         else:
             logger.warning(
                 "Central contour for T=%.1f K not visible in grid "
@@ -759,11 +764,14 @@ def plot_tau_space_multitemp(
             )
 
     obs_label = _OBS_LABELS.get(observable, observable)
-    ax.legend(
-        title="Temperature",
-        fontsize=spec.typography.legend,
-        framealpha=0.8,
-    )
+    if legend_handles:
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            title="Temperature",
+            fontsize=spec.typography.legend,
+            framealpha=0.8,
+        )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
