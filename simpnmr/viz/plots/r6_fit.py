@@ -13,12 +13,31 @@ from simpnmr.core.fitting.r6_fit import compute_p1_theoretical
 from simpnmr.viz.layout.canvas import create_canvas
 from simpnmr.viz.layout.export import render_figure
 from simpnmr.viz.style.theme import PlotSpec
+from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
 
 logger = logging.getLogger(__name__)
+
+
+def _fmt_sci(val: float, err: float) -> str:
+    """Format ``val ± err`` as compact scientific notation, e.g. ``4.2(3)e5``."""
+    exp = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
+    scale = 10**exp
+    return f"{format_compact_uncertainty(val / scale, err / scale)}e{exp}"
+
 
 _OBS_LABELS = {
     "r1": r"$R_1$ (s$^{-1}$)",
     "width": "Linewidth (ppm)",
+}
+
+_P1_UNITS = {
+    "r1": r"s$^{-1}$Å$^{6}$",
+    "width": r"Hz·Å$^{6}$",
+}
+
+_P2_UNITS = {
+    "r1": r"s$^{-1}$",
+    "width": "Hz",
 }
 
 
@@ -74,8 +93,8 @@ def plot_r6_fit(
     fig.patch.set_facecolor(palette.annotation_bg)
     ax.set_facecolor(palette.annotation_bg)
 
-    ax.grid(True, which="major", color=palette.grid, linewidth=1.0)
-    ax.grid(True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8)
+    ax.grid(True, which="major", color=palette.grid, linewidth=0.3)
+    ax.grid(True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8)
     ax.set_axisbelow(True)
 
     # Scatter: data points
@@ -122,19 +141,21 @@ def plot_r6_fit(
     ax.set_ylabel(obs_label)
 
     # Annotation box
+    p1_unit = _P1_UNITS.get(observable, "")
+    p2_unit = _P2_UNITS.get(observable, "")
     ann = (
-        f"$p_1$ = {p1:.3g} ± {p1_err:.2g}\n"
-        f"$p_2$ = {p2:.3g} ± {p2_err:.2g}\n"
+        f"$p_1$ = {_fmt_sci(p1, p1_err)} {p1_unit}\n"
+        f"$p_2$ = {format_compact_uncertainty(p2, p2_err)} {p2_unit}\n"
         f"RMSE = {rmse:.3g}"
     )
     ax.text(
-        0.97,
+        0.03,
         0.97,
         ann,
         transform=ax.transAxes,
-        ha="right",
+        ha="left",
         va="top",
-        fontsize=8,
+        fontsize=spec.typography.annotation,
         color=palette.primary,
         bbox=dict(
             boxstyle="round,pad=0.3",
@@ -368,8 +389,9 @@ def plot_tau_space(
         fontsize=spec.typography.title,
     )
 
+    p1_unit = _P1_UNITS.get(observable, "")
     ann = (
-        f"$p_1$ = {p1_fit:.3g} ± {p1_err:.2g}\n"
+        f"$p_1$ = {_fmt_sci(p1_fit, p1_err)} {p1_unit}\n"
         f"model: {relaxation_model}\n"
         f"T = {temperature:.0f} K"
     )
@@ -579,6 +601,7 @@ def plot_tau_space_combined(
         ax.legend(
             legend_handles, legend_labels_list,
             fontsize=spec.typography.legend, framealpha=0.8,
+            loc="upper left",
         )
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
@@ -587,11 +610,11 @@ def plot_tau_space_combined(
         fontsize=spec.typography.title,
     )
 
+    _r1_str = _fmt_sci(r1_fit_result['p1'], r1_fit_result['p1_err'])
+    _w_str = _fmt_sci(width_fit_result['p1'], width_fit_result['p1_err'])
     ann = (
-        f"$p_1(R_1)$ = {r1_fit_result['p1']:.3g}"
-        f" ± {r1_fit_result['p1_err']:.2g}\n"
-        f"$p_1$(width) = {width_fit_result['p1']:.3g}"
-        f" ± {width_fit_result['p1_err']:.2g}\n"
+        f"$p_1(R_1)$ = {_r1_str} {_P1_UNITS['r1']}\n"
+        f"$p_1$(width) = {_w_str} {_P1_UNITS['width']}\n"
         f"model: {relaxation_model}  |  T = {temperature:.0f} K"
     )
     ax.text(

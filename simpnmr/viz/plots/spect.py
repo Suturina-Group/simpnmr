@@ -328,6 +328,44 @@ def plot_raw_deconv_pred(
     # Pre-compute top-panel barrier so cross-panel connectors can reference it
     _sim_barrier = 1.1 * float(np.max(y_sim_intensity))
 
+    # Try to match exp. to the same LaTeX labels used for the simulated spectrum
+    latex_label_map: dict[str, str] = {}
+    for nucleus in molecule.nuclei:
+        if nucleus.isotope != isotope:
+            continue
+        plain = getattr(nucleus, "chem_label", None)
+        latex = getattr(nucleus, "chem_math_label", None)
+        if plain and latex:
+            latex_label_map[str(plain)] = str(latex)
+
+    def _map_assignment_to_latex(assignment: str) -> str:
+        """Map an experimental assignment string to LaTeX labels if possible.
+
+        Supports comma-separated assignments (e.g. "H1,H2"). If no mapping is
+        found, the original token is preserved.
+        """
+        if assignment is None:
+            return ""
+        tokens = [t.strip() for t in str(assignment).split(",")]
+        mapped: list[str] = []
+        for tok in tokens:
+            mapped.append(latex_label_map.get(tok, tok))
+        return ",".join(mapped)
+
+    # Build lookup: LaTeX label -> predicted shift (needed for label colouring below)
+    _label_to_pred = dict(zip(labels, shifts))
+
+    # Predicted labels with no matching experimental assignment → shown in red
+    _matched_pred_labels = {
+        _map_assignment_to_latex(s.assignment)
+        for s in _connector_signals
+        if _label_to_pred.get(_map_assignment_to_latex(s.assignment)) is not None
+    }
+    _sim_label_colors = {
+        lab: ("red" if lab not in _matched_pred_labels else palette.primary)
+        for lab in labels
+    }
+
     # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
     ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
     ax[0].plot(x_grid, y_sim_intensity, lw=0.8 * glyphs.line_lw, color=palette.primary)
@@ -351,6 +389,7 @@ def plot_raw_deconv_pred(
         reverse_axis=True,
         label_fontsize=round(spec.typography.label * 0.6),
         line_scale=0.8,
+        label_colors=_sim_label_colors,
     )
 
     # Vertical left-side label
@@ -424,34 +463,6 @@ def plot_raw_deconv_pred(
             alpha=0.35,
         )
 
-    # Try to match exp. to the same LaTeX labels used for the simulated spectrum
-    latex_label_map: dict[str, str] = {}
-    for nucleus in molecule.nuclei:
-        if nucleus.isotope != isotope:
-            continue
-
-        # Prefer the plain chemical label if available.
-        plain = getattr(nucleus, "chem_label", None)
-        latex = getattr(nucleus, "chem_math_label", None)
-        if plain and latex:
-            latex_label_map[str(plain)] = str(latex)
-
-    def _map_assignment_to_latex(assignment: str) -> str:
-        """Map an experimental assignment string to LaTeX labels if possible.
-
-        Supports comma-separated assignments (e.g. "H1,H2"). If no mapping is
-        found, the original token is preserved.
-        """
-
-        if assignment is None:
-            return ""
-
-        tokens = [t.strip() for t in str(assignment).split(",")]
-        mapped: list[str] = []
-        for tok in tokens:
-            mapped.append(latex_label_map.get(tok, tok))
-        return ",".join(mapped)
-
     # Bottom panel: Z-shaped connectors linking each experimental peak to the
     # predicted position with the same label.
     # Path: (exp_x, peak_y) -> vertical -> (exp_x, barrier)
@@ -475,9 +486,6 @@ def plot_raw_deconv_pred(
         alpha=0.7,
     )
     ax[1].set_ylim(bottom=None, top=_y_top_exp)
-
-    # Build lookup: LaTeX label -> predicted shift
-    _label_to_pred = dict(zip(labels, shifts))
 
     for signal in _connector_signals:
         latex_lab = _map_assignment_to_latex(signal.assignment)
@@ -607,6 +615,7 @@ def _annotate_peaks_with_barrier(
     barrier_alpha: float = 0.7,
     label_fontsize: str | None = None,
     line_scale: float = 1.0,
+    label_colors: dict[str, str] | None = None,
 ) -> None:
     """Annotate a spectrum with a horizontal barrier, vertical labels, and connectors.
 
@@ -721,17 +730,19 @@ def _annotate_peaks_with_barrier(
         adj = sorted(adj, reverse=reverse_axis)
 
         for px, py, lx, lab in zip(vis_px, vis_py, adj, vis_labs):
+            _col = label_colors.get(lab, palette.primary) if label_colors else palette.primary
             t = ax_.text(
                 lx, labels_position_y, lab,
                 fontsize=_fs, rotation="vertical",
                 va="bottom", ha="center",
+                color=_col,
                 clip_on=False,
             )
             ln, = ax_.plot(
                 [px, px, lx],
                 [py, label_barrier, labels_position_y],
                 linestyle="--",
-                color=palette.primary,
+                color=_col,
                 linewidth=_lw_connector,
                 alpha=connector_alpha,
                 clip_on=False,

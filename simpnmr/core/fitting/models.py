@@ -321,6 +321,202 @@ class SusceptibilityModel(ABC):
         """
         return
 
+    def _compute_euler_stdev(self) -> None:
+        """Delta-method propagation of fit uncertainties to ZYZ Euler angles.
+
+        Uses central finite differences through ``totensor → Susceptibility``
+        for each fitted parameter that has a valid standard deviation.  The
+        resulting uncertainties (in degrees) are stored in ``self.fit_stdev``
+        under the keys ``"alpha"``, ``"beta"``, and ``"gamma"``.
+
+        When β is within 1° of its singular values (0° or 180°), α and γ
+        become degenerate and their uncertainties are set to ``nan``.
+        """
+        params0 = {k: float(v) for k, v in self.final_var_values.items()}
+
+        # Collect fitted parameters that have a usable stdev
+        fit_names = []
+        sigmas = []
+        for name in self.VARNAMES:
+            if name not in self.fit_vars:
+                continue
+            sig = self.fit_stdev.get(name)
+            if sig is None or not np.isfinite(sig) or sig <= 0:
+                continue
+            fit_names.append(name)
+            sigmas.append(float(sig))
+
+        if not fit_names:
+            return
+
+        # Base Euler angles
+        susc0 = Susceptibility(self.totensor(params0), self.temperature)
+        alpha0, beta0, gamma0 = susc0.alpha, susc0.beta, susc0.gamma
+
+        # Jacobian columns: d(alpha, beta, gamma) / d(param_i)
+        d_alpha = []
+        d_beta = []
+        d_gamma = []
+
+        for name, sig in zip(fit_names, sigmas):
+            p_plus = dict(params0)
+            p_minus = dict(params0)
+            p_plus[name] = params0[name] + sig
+            p_minus[name] = params0[name] - sig
+
+            try:
+                s_plus = Susceptibility(self.totensor(p_plus), self.temperature)
+                s_minus = Susceptibility(self.totensor(p_minus), self.temperature)
+            except Exception:
+                d_alpha.append(0.0)
+                d_beta.append(0.0)
+                d_gamma.append(0.0)
+                continue
+
+            def _wrap(diff: float) -> float:
+                """Wrap angle difference into [-180, 180)."""
+                return (diff + 180.0) % 360.0 - 180.0
+
+            two_sig = 2.0 * sig
+            d_alpha.append(_wrap(s_plus.alpha - s_minus.alpha) / two_sig)
+            d_beta.append((s_plus.beta - s_minus.beta) / two_sig)
+            d_gamma.append(_wrap(s_plus.gamma - s_minus.gamma) / two_sig)
+
+        sig_arr = np.asarray(sigmas, dtype=float)
+        self.fit_stdev["beta"] = float(
+            np.sqrt(np.sum((np.asarray(d_beta) * sig_arr) ** 2))
+        )
+
+        # α and γ are degenerate when β ≈ 0° or 180° (gimbal lock)
+        if abs(beta0) < 1.0 or abs(beta0 - 180.0) < 1.0:
+            self.fit_stdev["alpha"] = float("nan")
+            self.fit_stdev["gamma"] = float("nan")
+        else:
+            self.fit_stdev["alpha"] = float(
+                np.sqrt(np.sum((np.asarray(d_alpha) * sig_arr) ** 2))
+            )
+            self.fit_stdev["gamma"] = float(
+                np.sqrt(np.sum((np.asarray(d_gamma) * sig_arr) ** 2))
+            )
+
+    def _compute_canonical_stdev(self) -> None:
+        """Delta-method stdevs for canonical physical quantities.
+
+        Populates ``fit_stdev`` with standard deviations for ``"iso"``,
+        ``"ax"`` (axiality), ``"rh"`` (rhombicity), ``"rh_over_ax"``
+        (Δχ_rh / Δχ_ax ratio), and the three ZYZ Euler angles
+        ``"alpha"``, ``"beta"``, ``"gamma"`` via central finite differences
+        through ``totensor → Susceptibility``.
+
+        Existing valid entries are preserved (e.g. those set by the
+        optimiser or a model-specific ``_post_fit``).  The ratio stdev is
+        derived analytically from the ``"rh"`` and ``"ax"`` stdevs.
+
+        Angular finite differences for α and γ use minimum-arc arithmetic
+        to avoid wrap-around artefacts at 0°/360°.
+        """
+
+        def _valid(key: str) -> bool:
+            v = self.fit_stdev.get(key)
+            return v is not None and np.isfinite(float(v)) and float(v) > 0
+
+        def _ang_diff(a: float, b: float) -> float:
+            """Signed angular difference a − b in (−180°, 180°]."""
+            return (a - b + 180.0) % 360.0 - 180.0
+
+        need_iso = not _valid("iso")
+        need_ax = not _valid("ax")
+        need_rh = not _valid("rh")
+        need_alpha = not _valid("alpha")
+        need_beta = not _valid("beta")
+        need_gamma = not _valid("gamma")
+
+        if need_iso or need_ax or need_rh or need_alpha or need_beta or need_gamma:
+            params0 = {k: float(v) for k, v in self.final_var_values.items()}
+            d_iso, d_ax, d_rh = [], [], []
+            d_alpha, d_beta, d_gamma, sigs = [], [], [], []
+
+            for name in self.VARNAMES:
+                if name not in self.fit_vars:
+                    continue
+                sig = self.fit_stdev.get(name)
+                if sig is None or not np.isfinite(float(sig)) or float(sig) <= 0:
+                    continue
+                sig = float(sig)
+                p_plus = {**params0, name: params0[name] + sig}
+                p_minus = {**params0, name: params0[name] - sig}
+                try:
+                    sp = Susceptibility(self.totensor(p_plus), self.temperature)
+                    sm = Susceptibility(self.totensor(p_minus), self.temperature)
+                except Exception:
+                    continue
+                d_iso.append((float(sp.iso) - float(sm.iso)) / (2.0 * sig))
+                d_ax.append(
+                    (float(sp.axiality) - float(sm.axiality)) / (2.0 * sig)
+                )
+                d_rh.append(
+                    (float(sp.rhombicity) - float(sm.rhombicity)) / (2.0 * sig)
+                )
+                d_alpha.append(
+                    _ang_diff(float(sp.alpha), float(sm.alpha)) / (2.0 * sig)
+                )
+                d_beta.append(
+                    (float(sp.beta) - float(sm.beta)) / (2.0 * sig)
+                )
+                d_gamma.append(
+                    _ang_diff(float(sp.gamma), float(sm.gamma)) / (2.0 * sig)
+                )
+                sigs.append(sig)
+
+            if sigs:
+                sa = np.asarray(sigs, dtype=float)
+                if need_iso and "iso" not in self.fix_vars:
+                    self.fit_stdev["iso"] = float(
+                        np.sqrt(np.dot(np.asarray(d_iso) ** 2, sa ** 2))
+                    )
+                if need_ax and "ax" not in self.fix_vars:
+                    self.fit_stdev["ax"] = float(
+                        np.sqrt(np.dot(np.asarray(d_ax) ** 2, sa ** 2))
+                    )
+                if need_rh and "rh" not in self.fix_vars:
+                    self.fit_stdev["rh"] = float(
+                        np.sqrt(np.dot(np.asarray(d_rh) ** 2, sa ** 2))
+                    )
+                if need_alpha:
+                    self.fit_stdev["alpha"] = float(
+                        np.sqrt(np.dot(np.asarray(d_alpha) ** 2, sa ** 2))
+                    )
+                if need_beta:
+                    self.fit_stdev["beta"] = float(
+                        np.sqrt(np.dot(np.asarray(d_beta) ** 2, sa ** 2))
+                    )
+                if need_gamma:
+                    self.fit_stdev["gamma"] = float(
+                        np.sqrt(np.dot(np.asarray(d_gamma) ** 2, sa ** 2))
+                    )
+
+        # Ratio Δχ_rh / Δχ_ax — analytical propagation from rh and ax stdevs
+        if not _valid("rh_over_ax"):
+            sig_rh = self.fit_stdev.get("rh")
+            sig_ax = self.fit_stdev.get("ax")
+            params0 = {k: float(v) for k, v in self.final_var_values.items()}
+            susc0 = Susceptibility(self.totensor(params0), self.temperature)
+            ax0 = float(susc0.axiality)
+            rh0 = float(susc0.rhombicity)
+            if (
+                sig_rh is not None
+                and np.isfinite(float(sig_rh))
+                and sig_ax is not None
+                and np.isfinite(float(sig_ax))
+                and abs(ax0) > 1e-12
+            ):
+                self.fit_stdev["rh_over_ax"] = float(
+                    np.sqrt(
+                        (float(sig_rh) / ax0) ** 2
+                        + (rh0 * float(sig_ax) / ax0 ** 2) ** 2
+                    )
+                )
+
     def residuals(
         self,
         parameters: dict[str, float],
@@ -507,6 +703,8 @@ class SusceptibilityModel(ABC):
 
             # Model-specific post-processing (e.g., derived parameter uncertainties)
             self._post_fit()
+            self._compute_canonical_stdev()
+            self._compute_euler_stdev()
 
             # R2
             self.mae = np.sum(np.abs(curr_fit.fun)) / len(curr_fit.fun)

@@ -3,14 +3,15 @@
 
 """Scatter plot of experimental shift vs linewidth or R1.
 
-Two subplots are produced side by side:
+One or two subplots are produced:
 
-* **Matched** (left): signals whose assignment exists in both the experiment
-  and the molecule. Experimental points are area-scaled; predicted overlay
-  uses a fixed marker size.
-* **Unmatched** (right): signals present in only one dataset. Experimental
-  unmatched markers are area-scaled; predicted unmatched markers are scaled
-  by the molecule group size (number of equivalent nuclei).
+* **Matched** (always shown): signals whose assignment exists in both the
+  experiment and the molecule. Experimental points are area-scaled;
+  predicted overlay uses a fixed marker size.
+* **Unmatched** (only when unmatched signals exist): signals present in
+  only one dataset. Experimental unmatched markers are area-scaled;
+  predicted unmatched markers are scaled by the molecule group size
+  (number of equivalent nuclei).
 """
 
 import logging
@@ -163,15 +164,18 @@ def plot_shift_width_bubble(
     _scale_by_group(unmatched_pred)
 
     # ------------------------------------------------------------------
-    # Figure with two subplots
+    # Figure with one or two subplots
     # ------------------------------------------------------------------
     palette = spec.palette
     fontsize = 7
     y_label = _Y_LABELS.get(observable, observable)
 
+    has_unmatched = bool(unmatched_exp or unmatched_pred)
+    ncols = 2 if has_unmatched else 1
+
     fig, axes = plt.subplots(
-        1, 2,
-        figsize=(10.0, 4.5),
+        1, ncols,
+        figsize=(10.0 if has_unmatched else 5.5, 4.5),
         squeeze=False,
     )
     axes = axes[0]
@@ -186,9 +190,9 @@ def plot_shift_width_bubble(
     ax_m = axes[0]
     spec.skin_axes(ax_m)
     ax_m.set_facecolor(palette.annotation_bg)
-    ax_m.grid(True, which="major", color=palette.grid, linewidth=1.0)
+    ax_m.grid(True, which="major", color=palette.grid, linewidth=0.3)
     ax_m.grid(
-        True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8
+        True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8
     )
     ax_m.set_axisbelow(True)
 
@@ -238,58 +242,59 @@ def plot_shift_width_bubble(
     ax_m.legend(fontsize=fontsize, framealpha=0.8)
 
     # ------------------------------------------------------------------
-    # Right panel — unmatched
+    # Right panel — unmatched (only when there is unmatched data)
     # ------------------------------------------------------------------
-    ax_u = axes[1]
-    spec.skin_axes(ax_u)
-    ax_u.set_facecolor(palette.annotation_bg)
-    ax_u.grid(True, which="major", color=palette.grid, linewidth=1.0)
-    ax_u.grid(
-        True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8
-    )
-    ax_u.set_axisbelow(True)
-
-    if unmatched_exp:
-        ax_u.scatter(
-            [r["shift"] for r in unmatched_exp],
-            [r["y"] for r in unmatched_exp],
-            s=[r["marker_size"] for r in unmatched_exp],
-            color=_UNMATCHED_COLOR,
-            alpha=0.7,
-            edgecolors=_UNMATCHED_COLOR,
-            linewidths=0.8,
-            zorder=3,
-            label="Exp. (unmatched)",
+    if has_unmatched:
+        ax_u = axes[1]
+        spec.skin_axes(ax_u)
+        ax_u.set_facecolor(palette.annotation_bg)
+        ax_u.grid(True, which="major", color=palette.grid, linewidth=0.3)
+        ax_u.grid(
+            True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8
         )
-        for r in unmatched_exp:
-            ax_u.annotate(
-                r["label"], xy=(r["shift"], r["y"]),
-                xytext=(4, 4), textcoords="offset points",
-                fontsize=fontsize, color=_UNMATCHED_COLOR,
-            )
+        ax_u.set_axisbelow(True)
 
-    if unmatched_pred:
-        ax_u.scatter(
-            [r["pred_shift"] for r in unmatched_pred],
-            [r["pred_y"] for r in unmatched_pred],
-            s=[r["marker_size"] for r in unmatched_pred],
-            facecolors="none",
-            edgecolors=_UNMATCHED_COLOR,
-            linewidths=1.2,
-            zorder=4,
-            label="Predicted (unmatched)",
-        )
-        for r in unmatched_pred:
-            ax_u.annotate(
-                r["label"], xy=(r["pred_shift"], r["pred_y"]),
-                xytext=(4, 4), textcoords="offset points",
-                fontsize=fontsize, color=_UNMATCHED_COLOR,
+        if unmatched_exp:
+            ax_u.scatter(
+                [r["shift"] for r in unmatched_exp],
+                [r["y"] for r in unmatched_exp],
+                s=[r["marker_size"] for r in unmatched_exp],
+                color=_UNMATCHED_COLOR,
+                alpha=0.7,
+                edgecolors=_UNMATCHED_COLOR,
+                linewidths=0.8,
+                zorder=3,
+                label="Exp. (unmatched)",
             )
+            for r in unmatched_exp:
+                ax_u.annotate(
+                    r["label"], xy=(r["shift"], r["y"]),
+                    xytext=(4, 4), textcoords="offset points",
+                    fontsize=fontsize, color=_UNMATCHED_COLOR,
+                )
 
-    ax_u.set_title("Unmatched", fontsize=8)
-    ax_u.set_xlabel("Shift (ppm)")
-    ax_u.invert_xaxis()
-    ax_u.legend(fontsize=fontsize, framealpha=0.8)
+        if unmatched_pred:
+            ax_u.scatter(
+                [r["pred_shift"] for r in unmatched_pred],
+                [r["pred_y"] for r in unmatched_pred],
+                s=[r["marker_size"] for r in unmatched_pred],
+                facecolors="none",
+                edgecolors=_UNMATCHED_COLOR,
+                linewidths=1.2,
+                zorder=4,
+                label="Predicted (unmatched)",
+            )
+            for r in unmatched_pred:
+                ax_u.annotate(
+                    r["label"], xy=(r["pred_shift"], r["pred_y"]),
+                    xytext=(4, 4), textcoords="offset points",
+                    fontsize=fontsize, color=_UNMATCHED_COLOR,
+                )
+
+        ax_u.set_title("Unmatched", fontsize=8)
+        ax_u.set_xlabel("Shift (ppm)")
+        ax_u.invert_xaxis()
+        ax_u.legend(fontsize=fontsize, framealpha=0.8)
 
     fig.suptitle(window_title, fontsize=9)
     fig.tight_layout()

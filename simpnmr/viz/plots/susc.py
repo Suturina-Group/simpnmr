@@ -181,8 +181,8 @@ def plot_isoaxrh(
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
         # Subtle grid for readability (major + minor)
-        ax.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.25)
-        ax.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.15)
+        ax.grid(True, which="major", linestyle="-", linewidth=0.3, alpha=0.25)
+        ax.grid(True, which="minor", linestyle=":", linewidth=0.2, alpha=0.15)
 
         # Secondary top axis for T(K): uses axis transform only
         def _inv_to_t(inv_plot: float | np.ndarray) -> float | np.ndarray:
@@ -360,8 +360,8 @@ def plot_exp_vs_ab_initio(
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
         # Subtle grid for readability (major + minor)
-        ax.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.25)
-        ax.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.15)
+        ax.grid(True, which="major", linestyle="-", linewidth=0.3, alpha=0.25)
+        ax.grid(True, which="minor", linestyle=":", linewidth=0.2, alpha=0.15)
 
         # Add asymmetric padding on y-axis
         y_min, y_max = ax.get_ylim()

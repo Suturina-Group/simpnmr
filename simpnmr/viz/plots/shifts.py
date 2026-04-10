@@ -227,7 +227,7 @@ def plot_shift_spread(
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
     # Add grey gridlinesand ticks on x axis
-    ax.grid(axis="x", ls="--", which="minor")
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
     # Shift label, specify isotope/nucleus if only one type plotted
@@ -246,7 +246,7 @@ def plot_shift_spread(
     ax.set_xticklabels(_order, rotation=90)
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
-    ax.grid(axis="x", ls="--", which="minor")
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
     ax.set_xlim(0.5, len(_order) + 1.5)
     ax.xaxis.set_tick_params("major", length=0)
 
@@ -469,7 +469,7 @@ def plot_shift_contrib(
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
-    ax.grid(axis="x", ls="--", which="minor")
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:

@@ -239,6 +239,49 @@ tensor from the same QC source.
    from the transformed combination
    :math:`\mathbf{A}^{\mathrm{SD}}+\mathbf{A}^{\mathrm{ORB}}`.
 
+.. _EULER:
+
+Susceptibility tensor and Euler angle convention
+-------------------------------------------------
+
+The magnetic susceptibility tensor :math:`\boldsymbol{\chi}` is decomposed
+into an isotropic part and a traceless anisotropic (deviatoric) part:
+
+.. math::
+
+    \boldsymbol{\chi} = \chi_{\mathrm{iso}} \mathbf{I} + \Delta\boldsymbol{\chi}
+
+where :math:`\chi_{\mathrm{iso}} = \tfrac{1}{3}\operatorname{tr}(\boldsymbol{\chi})`.
+
+The anisotropic part is characterised by two invariants:
+
+* **Axiality** :math:`\Delta\chi_{\mathrm{ax}}` — the largest principal deviation from isotropy.
+* **Rhombicity** :math:`\Delta\chi_{\mathrm{rh}}` — the in-plane asymmetry.
+
+**Euler angles** describe the passive ZYZ rotation that maps the input
+(molecular) frame to the eigenframe of :math:`\boldsymbol{\chi}`.  The three
+angles :math:`(\alpha, \beta, \gamma)` are defined as:
+
+.. math::
+
+    \alpha &= \operatorname{arctan2}(R_{31},\,-R_{11}) \\
+    \beta  &= \arccos(R_{21}) \\
+    \gamma &= \operatorname{arctan2}(-R_{23},\, R_{21})
+
+where :math:`R_{ij}` are elements of the rotation matrix whose columns are
+the eigenvectors of :math:`\boldsymbol{\chi}`, sorted in ascending order of
+deviation from :math:`\chi_{\mathrm{iso}}`.  All angles are reported in
+degrees in the range :math:`[0°,\,180°]` for :math:`\beta` and
+:math:`(-180°,\,180°]` for :math:`\alpha` and :math:`\gamma`.
+
+.. note::
+
+   The eigenvector ordering places the eigenvector with the *smallest*
+   deviation from :math:`\chi_{\mathrm{iso}}` first (index 0) and the one
+   with the *largest* deviation last (index 2).  The axial direction therefore
+   corresponds to the last eigenvector, and the angles describe how to align
+   the molecular-frame Y-axis with the axial eigenvector.
+
 References
 ^^^^^^^^^^
 

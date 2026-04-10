@@ -291,6 +291,8 @@ class Susceptibility:
     @property
     def iso(self) -> float:
         """Isotropic susceptibility (Å³)."""
+        if self._iso is None:
+            self.calc_iso()
         return self._iso
 
     @iso.setter
@@ -516,17 +518,59 @@ class Susceptibility:
         return
 
     def calc_euler(self):
-        """Computes and stores ZYZ Euler angles mapping input frame to eigenframe.
+        """Computes ZYZ Euler angles mapping input frame to eigenframe.
+
+        Eigenvectors are sorted by deviation from iso (|λ − iso|),
+        consistent with the axiality/rhombicity convention:
+          col 0 → x (least anisotropic)
+          col 1 → y (intermediate)
+          col 2 → z (axial, largest deviation)
+
+        Sign convention: the largest-magnitude component of each eigenvector
+        is forced positive, then the determinant is checked and col 0 is
+        flipped if needed to ensure a proper rotation (det = +1).  This makes
+        the eigenvectors — and therefore the angles — unique for
+        non-degenerate tensors.
+
+        Angle ranges:
+          α ∈ [0°, 360°),  β ∈ [0°, 180°],  γ ∈ [0°, 360°)
+
+        The ZYZ decomposition is derived from the axial column (col 2):
+          β  = arccos(V[2, 2])
+          α  = arctan2(V[1, 2], V[0, 2])  mod 360
+          γ  = arctan2(V[2, 1], −V[2, 0]) mod 360
 
         Angles are stored in degrees.
         """
         _ev = np.abs(self.eigvals - self.iso)
         order = np.argsort(_ev)
-        _vecs = self.eigvecs[:, order]
+        _ev_sorted = _ev[order]
+        _vecs = self.eigvecs[:, order].copy()
 
-        self.alpha = np.rad2deg(np.arctan2(_vecs[2, 1], -_vecs[0, 1]))
-        self.beta = np.rad2deg(np.arccos(_vecs[1, 1]))
-        self.gamma = np.rad2deg(np.arctan2(-_vecs[1, 2], _vecs[1, 0]))
+        # Fix sign of each eigenvector: largest-magnitude component → positive
+        for j in range(3):
+            idx = np.argmax(np.abs(_vecs[:, j]))
+            if _vecs[idx, j] < 0:
+                _vecs[:, j] = -_vecs[:, j]
+
+        # Ensure proper rotation matrix (det = +1)
+        if np.linalg.det(_vecs) < 0:
+            _vecs[:, 0] = -_vecs[:, 0]
+
+        self.alpha = np.float64(
+            np.rad2deg(np.arctan2(_vecs[1, 2], _vecs[0, 2])) % 360
+        )
+        self.beta = np.float64(
+            np.rad2deg(np.arccos(np.clip(_vecs[2, 2], -1.0, 1.0)))
+        )
+        # γ is undefined when the two minor axes are degenerate (axial tensor);
+        # fix to 0 in that case.
+        if np.isclose(_ev_sorted[0], _ev_sorted[1], rtol=1e-8):
+            self.gamma = np.float64(0.0)
+        else:
+            self.gamma = np.float64(
+                np.rad2deg(np.arctan2(_vecs[2, 1], -_vecs[2, 0])) % 360
+            )
         return
 
     @property

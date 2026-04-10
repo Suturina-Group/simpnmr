@@ -84,6 +84,7 @@ def render_compact_table(
     *,
     col_widths: Sequence[float] | None = None,
     bbox: Sequence[float] | None = None,
+    row_height: float | None = None,
     cell_align: str = "center",
     remove_outer_frame: bool = True,
 ) -> list[list[Rectangle]]:
@@ -141,7 +142,8 @@ def render_compact_table(
         raise ValueError("col_widths must sum to a positive value.")
 
     n_rows = max(len(lines) for _, lines in ordered_blocks) + 1
-    row_height = bbox[3] / n_rows
+    if row_height is None:
+        row_height = bbox[3] / n_rows
 
     body_linewidth = 0.8
     header_linewidth = 0.8

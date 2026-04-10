@@ -75,7 +75,7 @@ def plot_corr_time_scatter(
     ax.set_facecolor("white")
     scale = spec.skin_axes(ax)
     ax.minorticks_on()
-    ax.grid(True, which="major", color=palette.grid, linewidth=0.7, alpha=0.8)
+    ax.grid(True, which="major", color=palette.grid, linewidth=0.3, alpha=0.8)
     ax.set_axisbelow(True)
     marker_size = glyphs.ms
     annotation_size = scale.annotation

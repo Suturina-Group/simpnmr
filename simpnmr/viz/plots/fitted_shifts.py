@@ -151,7 +151,7 @@ def plot_fitted_shifts(
     # TODO(viz): Move fitted-shift header/plot ratio tuning into PlotSpec so
     # figure-layout heuristics are configured centrally rather than locally.
     header_ratio, plot_ratio = (
-        (1.90, 4.50) if figure_variant == "vertical_extended" else (1.35, 5.05)
+        (1.30, 4.50) if figure_variant == "vertical_extended" else (0.90, 5.05)
     )
     fig, header_ax, ax = create_header_plot_canvas(
         spec.profile,
@@ -160,7 +160,7 @@ def plot_fitted_shifts(
         layout="constrained",
         header_ratio=header_ratio,
         plot_ratio=plot_ratio,
-        hspace=0.02,
+        hspace=0.0,
     )
 
     glyphs = spec.glyphs
@@ -189,93 +189,90 @@ def plot_fitted_shifts(
         )
 
     fit_lines = [
-        f"R²adj: {susc_model.adj_r2:.4f}",
+        f"$R^2_\\mathrm{{adj}}$: {susc_model.adj_r2:.4f}",
         f"MAE: {susc_model.mae:.1f} ppm",
         f"RMSE: {susc_model.rmse:.1f} ppm",
     ]
 
     model_lines: list[str] = []
 
+    def _fmt_val(val: float, fmt: str) -> str:
+        return "0" if val == 0.0 else format(val, fmt)
+
+    def _ci_str(val: float, key: str, fmt: str = ".4f") -> str:
+        err = susc_model.fit_stdev.get(key)
+        if err is not None and np.isfinite(float(err)) and float(err) > 0:
+            return format_compact_uncertainty(val, float(err))
+        return _fmt_val(val, fmt)
+
+    def _err_scaled(key: str, factor: float) -> float | None:
+        err = susc_model.fit_stdev.get(key)
+        if err is not None and np.isfinite(float(err)) and float(err) > 0:
+            return float(err) * factor
+        return None
+
+    ax0 = float(molecule.susc.axiality)
+    rh0 = float(molecule.susc.rhombicity)
+    roa_val = rh0 / ax0 if abs(ax0) > 1e-12 else float("nan")
+
     if spin is not None:
-        # Report all susceptibility quantities as dimensionless reduced values
+        # Report canonical quantities as dimensionless reduced values
         # χ′T = χ · T / norm_factor  (norm_factor in Å³·K)
         norm_factor = compute_curie_prefactor(spin)  # Å³·K
         T = float(molecule.susc.temperature)
         red_conv = T / norm_factor  # Å³ → dimensionless
 
-        # iso and other non-ax/non-rh_over_ax terms first
-        for name in susc_model.VARNAMES:
-            if name in ("ax", "rh_over_ax"):
-                continue
-            val_red = float(susc_model.final_var_values[name]) * red_conv
-            label = susc_model.VARNAMES_MM[name]
-            if name == "iso":
-                label = r"$\chi'_\mathrm{iso}T$"
-            err = susc_model.fit_stdev.get(name)
-            if name in susc_model.fit_vars and err is not None and err > 0:
-                err_red = float(err) * red_conv
-                compact_value = format_compact_uncertainty(val_red, err_red)
-                model_lines.append(f"{label}: {compact_value}")
-            else:
-                model_lines.append(f"{label}: {val_red:.4f}")
-
-        # Δχ′_ax T
-        dax_red = float(molecule.susc.axiality) * red_conv
-        ax_err = susc_model.fit_stdev.get("ax")
-        if "ax" in susc_model.fit_vars and ax_err is not None and ax_err > 0:
-            dax_red_err = float(ax_err) * red_conv
-            dax_str = format_compact_uncertainty(dax_red, dax_red_err)
+        iso_red = float(molecule.susc.iso) * red_conv
+        iso_err_red = _err_scaled("iso", red_conv)
+        if iso_err_red is not None:
+            iso_line = format_compact_uncertainty(iso_red, iso_err_red)
         else:
-            dax_str = f"{dax_red:.4f}"
+            iso_line = _fmt_val(iso_red, ".4f")
+        model_lines.append(f"$\\chi$′$_\\mathrm{{iso}}$T: {iso_line}")
+
+        dax_red = ax0 * red_conv
+        ax_err_red = _err_scaled("ax", red_conv)
+        if ax_err_red is not None:
+            dax_line = format_compact_uncertainty(dax_red, ax_err_red)
+        else:
+            dax_line = _fmt_val(dax_red, ".4f")
+        model_lines.append(f"$\\Delta\\chi$′$_{{\\mathrm{{ax}}}}$T: {dax_line}")
+
         model_lines.append(
-            f"$\\Delta\\chi'_{{\\mathrm{{ax}}}}T$: {dax_str}"
+            "$\\Delta\\chi_{{\\mathrm{{rh}}}}$/$\\Delta\\chi_{{\\mathrm{{ax}}}}$: "
+            f"{_ci_str(roa_val, 'rh_over_ax')}"
+        )
+        model_block_header = r"$\chi$′T"
+    else:
+        iso_val = float(molecule.susc.iso) * conv
+        model_lines.append(f"$\\chi_{{\\mathrm{{iso}}}}$: {_ci_str(iso_val, 'iso', '.3f')}")
+
+        dax = ax0 * conv
+        ax_err_conv = _err_scaled("ax", conv)
+        if ax_err_conv is not None:
+            dax_line = format_compact_uncertainty(dax, ax_err_conv)
+        else:
+            dax_line = _fmt_val(dax, ".3f")
+        model_lines.append(f"$\\Delta\\chi_{{\\mathrm{{ax}}}}$: {dax_line}")
+
+        model_lines.append(
+            "$\\Delta\\chi_{{\\mathrm{{rh}}}}$/$\\Delta\\chi_{{\\mathrm{{ax}}}}$: "
+            f"{_ci_str(roa_val, 'rh_over_ax', '.3f')}"
         )
 
-        # Δχ_rh / Δχ_ax ratio immediately below
-        if "rh_over_ax" in susc_model.VARNAMES:
-            _roa_val = float(
-                susc_model.final_var_values["rh_over_ax"]
-            )
-            _roa_label = susc_model.VARNAMES_MM["rh_over_ax"]
-            _roa_err = susc_model.fit_stdev.get("rh_over_ax")
-            if (
-                "rh_over_ax" in susc_model.fit_vars
-                and _roa_err is not None
-                and _roa_err > 0
-            ):
-                model_lines.append(
-                    f"{_roa_label}: "
-                    f"{format_compact_uncertainty(_roa_val, float(_roa_err))}"
-                )
-            else:
-                model_lines.append(f"{_roa_label}: {_roa_val:.4f}")
-
-        model_block_header = r"$\chi'\!T$ (dimensionless)"
-    else:
-        for name in susc_model.VARNAMES:
-            val = float(susc_model.final_var_values[name]) * conv
-            label = susc_model.VARNAMES_MM[name]
-            err = susc_model.fit_stdev.get(name)
-            if name in susc_model.fit_vars and err is not None and err > 0:
-                err_val = float(err) * conv
-                compact_value = format_compact_uncertainty(val, err_val)
-                model_lines.append(f"{label}: {compact_value}")
-            else:
-                model_lines.append(f"{label}: {val:.3f}")
-
-        dax = float(molecule.susc.axiality) * conv
-        ax_err = susc_model.fit_stdev.get("ax")
-        if "ax" in susc_model.fit_vars and ax_err is not None and ax_err > 0:
-            dax_str = format_compact_uncertainty(dax, float(ax_err) * conv)
-        else:
-            dax_str = f"{dax:.3f}"
-        model_lines.append(f"Δχ$_{{ax}}$: {dax_str}")
         model_block_header = f"χ ({model_unit_label})"
 
+    def _euler_str(angle_deg: float, key: str) -> str:
+        err = susc_model.fit_stdev.get(key)
+        if err is not None and np.isfinite(err) and err > 0:
+            return f"{format_compact_uncertainty(angle_deg, float(err))}°"
+        val_str = "0" if angle_deg == 0.0 else f"{angle_deg:.1f}"
+        return f"{val_str}°"
+
     euler_lines = [
-        f"α: {int(round(molecule.susc.alpha))}°",
-        f"β: {int(round(molecule.susc.beta))}°",
-        f"γ: {int(round(molecule.susc.gamma))}°",
+        f"α: {_euler_str(molecule.susc.alpha, 'alpha')}",
+        f"β: {_euler_str(molecule.susc.beta, 'beta')}",
+        f"γ: {_euler_str(molecule.susc.gamma, 'gamma')}",
     ]
 
     blocks = [
@@ -284,8 +281,8 @@ def plot_fitted_shifts(
         ("Euler Angles", euler_lines),
     ]
 
-    ax.grid(True, which="major", color=palette.grid, linewidth=1.0)
-    ax.grid(True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8)
+    ax.grid(True, which="major", color=palette.grid, linewidth=0.3)
+    ax.grid(True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8)
     ax.set_axisbelow(True)
 
     for (label, calc), expt in zip(calc_shifts.items(), exp.values()):
@@ -335,6 +332,7 @@ def plot_fitted_shifts(
         blocks,
         spec,
         bbox=[0.0, 0.02, 1.0, 0.96],
+        row_height=0.16,
         cell_align="center",
         remove_outer_frame=True,
     )
@@ -345,11 +343,12 @@ def plot_fitted_shifts(
     header_ax.set_position(
         [
             plot_pos.x0,
-            header_pos.y0,
+            plot_pos.y0 + plot_pos.height + 0.005,
             plot_pos.width,
             header_pos.height,
         ]
     )
+    fig.set_layout_engine(None)
 
     ax.invert_xaxis()
     ax.invert_yaxis()
