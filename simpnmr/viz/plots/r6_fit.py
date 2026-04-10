@@ -278,6 +278,12 @@ def plot_tau_space(
     )
     log_ratio_plot = log_ratio.T  # (N_R, N_e) for contourf
 
+    # Set log scale and limits before any drawing so clip paths are correct
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
     # Heatmap
     import matplotlib.colors as mcolors
     cmap = plt.get_cmap("RdYlGn_r")
@@ -322,26 +328,22 @@ def plot_tau_space(
     levels_hi = [log_hi] if actual_min <= log_hi <= actual_max else []
 
     if levels_central:
-        cs_c = ax.contour(
+        ax.contour(
             TAU_E_2D, TAU_R_2D, log_ratio_plot,
             levels=levels_central,
             colors=["black"],
             linewidths=[1.6],
             linestyles=["-"],
         )
-        for coll in cs_c.collections:
-            coll.set_clip_path(ax.patch)
     if levels_lo or levels_hi:
         ci_levels = levels_lo + levels_hi
-        cs_ci = ax.contour(
+        ax.contour(
             TAU_E_2D, TAU_R_2D, log_ratio_plot,
             levels=sorted(ci_levels),
             colors=["white"] * len(ci_levels),
             linewidths=[1.2] * len(ci_levels),
             linestyles=["--"] * len(ci_levels),
         )
-        for coll in cs_ci.collections:
-            coll.set_clip_path(ax.patch)
     if not levels_central:
         logger.warning(
             "Central contour (p1_calc = p1_fit) not visible: "
@@ -352,9 +354,12 @@ def plot_tau_space(
             float(np.max(p1_grid)),
         )
 
+    # Clip all contour/mesh collections in one pass after drawing is done
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
     obs_label = _OBS_LABELS.get(observable, observable)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
     ax.set_title(
@@ -505,7 +510,14 @@ def plot_tau_space_combined(
     palette = spec.palette
     spec.skin_axes(ax)
 
-    # CI bands — semi-transparent fills
+    # Set log scale and explicit limits before drawing any contours so that
+    # set_clip_path(ax.patch) uses the correct transform.
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
+    # CI boundary contours (dashed) and central contours (solid)
     def _ci_levels(fit_result):
         p1_fit = fit_result["p1"]
         p1_err = fit_result["p1_err"]
@@ -517,48 +529,57 @@ def plot_tau_space_combined(
     lo_r1, hi_r1 = _ci_levels(r1_fit_result)
     lo_lw, hi_lw = _ci_levels(width_fit_result)
 
-    for _cf in [
-        ax.contourf(
-            TAU_E_2D, TAU_R_2D, lr_r1,
-            levels=[lo_r1, hi_r1],
-            colors=[palette.primary],
-            alpha=0.25,
-        ),
-        ax.contourf(
-            TAU_E_2D, TAU_R_2D, lr_lw,
-            levels=[lo_lw, hi_lw],
-            colors=[palette.highlight],
-            alpha=0.25,
-        ),
-    ]:
-        for coll in _cf.collections:
-            coll.set_clip_path(ax.patch)
+    legend_handles = []
+    legend_labels_list = []
 
-    # Central contours
-    for lr, color, label in [
-        (lr_r1, palette.primary, r"$R_1$ fit"),
-        (lr_lw, palette.highlight, "Width fit"),
+    for lr, color, label, lo_ci, hi_ci in [
+        (lr_r1, palette.primary, r"$R_1$ fit", lo_r1, hi_r1),
+        (lr_lw, palette.highlight, "Width fit", lo_lw, hi_lw),
     ]:
-        lo = float(lr.min())
-        hi = float(lr.max())
-        if lo <= 0.0 <= hi:
-            cs = ax.contour(
+        lo_data = float(lr.min())
+        hi_data = float(lr.max())
+
+        # CI boundary dashed lines
+        ci_levels = [
+            lv for lv in [lo_ci, hi_ci]
+            if lo_data <= lv <= hi_data
+        ]
+        if ci_levels:
+            ax.contour(
+                TAU_E_2D, TAU_R_2D, lr,
+                levels=sorted(ci_levels),
+                colors=[color] * len(ci_levels),
+                linewidths=[1.0] * len(ci_levels),
+                linestyles=["--"] * len(ci_levels),
+            )
+
+        # Central solid line
+        if lo_data <= 0.0 <= hi_data:
+            ax.contour(
                 TAU_E_2D, TAU_R_2D, lr,
                 levels=[0.0],
                 colors=[color],
                 linewidths=[1.6],
             )
-            cs.collections[0].set_label(label)
-            for coll in cs.collections:
-                coll.set_clip_path(ax.patch)
+            legend_handles.append(
+                Line2D([0], [0], color=color, lw=1.6)
+            )
+            legend_labels_list.append(label)
         else:
             logger.warning(
                 "Central contour for '%s' not visible in grid.", label
             )
 
-    ax.legend(fontsize=spec.typography.legend, framealpha=0.8)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
+    # Clip all line collections in one pass after drawing is complete
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
+    if legend_handles:
+        ax.legend(
+            legend_handles, legend_labels_list,
+            fontsize=spec.typography.legend, framealpha=0.8,
+        )
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
     ax.set_title(
@@ -695,6 +716,12 @@ def plot_tau_space_multitemp(
     spec.skin_axes(ax)
     ax.set_facecolor(palette.annotation_bg)
 
+    # Set log scale and explicit limits before drawing contours
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
     # Colour cycle across temperatures
     colors = cm.plasma(
         np.linspace(0.1, 0.9, len(records))
@@ -734,25 +761,21 @@ def plot_tau_space_multitemp(
             log_lo = np.log10(max(1.0 - rel, 1e-6))
             log_hi = np.log10(1.0 + rel)
             if lo_val <= log_lo <= hi_val or lo_val <= log_hi <= hi_val:
-                cf = ax.contourf(
+                ax.contourf(
                     TAU_E_2D, TAU_R_2D, lr,
                     levels=[log_lo, log_hi],
                     colors=[color],
                     alpha=0.20,
                 )
-                for coll in cf.collections:
-                    coll.set_clip_path(ax.patch)
 
         # Central contour
         if lo_val <= 0.0 <= hi_val:
-            cs = ax.contour(
+            ax.contour(
                 TAU_E_2D, TAU_R_2D, lr,
                 levels=[0.0],
                 colors=[color],
                 linewidths=[1.6],
             )
-            for coll in cs.collections:
-                coll.set_clip_path(ax.patch)
             legend_handles.append(Line2D([0], [0], color=color, lw=1.6))
             legend_labels.append(f"{T:.0f} K")
         else:
@@ -763,6 +786,11 @@ def plot_tau_space_multitemp(
                 float(np.min(p1_grid)), float(np.max(p1_grid)),
             )
 
+    # Clip all contour collections to the axes patch in one pass after drawing
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
     obs_label = _OBS_LABELS.get(observable, observable)
     if legend_handles:
         ax.legend(
@@ -772,8 +800,6 @@ def plot_tau_space_multitemp(
             fontsize=spec.typography.legend,
             framealpha=0.8,
         )
-    ax.set_xscale("log")
-    ax.set_yscale("log")
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
     ax.set_title(

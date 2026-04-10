@@ -237,17 +237,46 @@ Used in fitting workflows that require experimental shift data.
 
 .. note::
 
-   **Experiment CSV format**
+   **Experiment CSV format (wide format)**
 
-   Each experiment CSV file must contain comment-line metadata at the top::
+   Experimental peak data are stored in a *wide-format* CSV file. Temperature
+   and magnetic field are specified as the first two header rows; one block of
+   signal columns is written for each (T, B) condition, allowing multiple
+   conditions to coexist in a single file::
 
-       # temperature 298.15
-       # magnetic_field 11.75
+       temperature (K),298.15,298.15,298.15,305,305,305
+       magnetic field (T),4.7,4.7,4.7,4.7,4.7,4.7
+       assignment,shift (ppm),width (Hz),area (),assignment,shift (ppm),width (Hz),area ()
+       aax,82.89,587.31,4108.48,...
+       py5,24.14,97.24,5139.30,...
 
-   The ``# isotope`` metadata line is no longer read or required. Isotope
-   information is instead derived per-nucleus from the ``chem_labels`` file
-   (see the ``isotope`` column described under *Chemical Labels*), which
-   correctly handles experiments containing signals from more than one isotope.
+   **Required columns** (repeated for each condition block):
+
+   - ``assignment`` — unique label for each signal (non-empty, unique per isotope)
+   - ``shift (ppm)`` — observed chemical shift in ppm
+   - ``width (Hz)`` — linewidth (FWHM) in Hz
+   - ``area`` — integrated signal area
+
+   **Optional columns:**
+
+   - ``r1 (Hz)`` — longitudinal relaxation rate R\ :sub:`1` in s\ :sup:`−1`
+   - ``L/G`` — Lorentzian-to-Gaussian lineshape ratio (default 1.0)
+   - ``isotope`` — nuclear isotope tag (e.g. ``1H``, ``13C``). When present,
+     each signal is attributed only to plots and filters for that isotope.
+     When absent, isotope attribution falls back to the ``chem_labels`` file
+     or a single-isotope shortcut if only one isotope is present.
+
+   Every signal must carry a non-empty assignment. Assignments must be unique
+   within each isotope in a given (T, B) block.
+
+   A trailing comma at the end of the temperature or magnetic field header row
+   (as produced by some spreadsheet applications) is ignored automatically.
+
+   .. rubric:: Legacy format
+
+   Files beginning with ``# temperature`` and ``# magnetic_field`` comment
+   lines (one file per condition) are still accepted for backwards
+   compatibility.
 
 .. note::
 

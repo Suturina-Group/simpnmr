@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Suturina Group
 
-"""Grouped scatter plot of experimental shift vs linewidth or R1.
+"""Scatter plot of experimental shift vs linewidth or R1.
 
-Signals are grouped into subplots by the number of equivalent nuclei sharing
-the same chemical label (group size). All markers are uniform in size. An
-optional overlay shows values predicted by the r^-6 distance model.
+Two subplots are produced side by side:
+
+* **Matched** (left): signals whose assignment exists in both the experiment
+  and the molecule. Experimental points are area-scaled; predicted overlay
+  uses a fixed marker size.
+* **Unmatched** (right): signals present in only one dataset. Experimental
+  unmatched markers are area-scaled; predicted unmatched markers are scaled
+  by the molecule group size (number of equivalent nuclei).
 """
 
 import logging
@@ -20,12 +25,15 @@ from simpnmr.viz.style.theme import PlotSpec
 
 logger = logging.getLogger(__name__)
 
-_MARKER_SIZE = 60  # uniform scatter marker area (points²)
+_MARKER_SIZE = 60   # reference marker area (points²)
+_MAX_MARKER  = 300  # cap on scaled marker area
 
 _Y_LABELS = {
     "width": "Linewidth (ppm)",
     "r1": r"$R_1$ (s$^{-1}$)",
 }
+
+_UNMATCHED_COLOR = "#e05c3a"
 
 
 def plot_shift_width_bubble(
@@ -39,24 +47,16 @@ def plot_shift_width_bubble(
     save_name: str = "shift_width_bubble",
     verbose: bool = True,
     window_title: str = "Shift vs Linewidth",
-) -> tuple[plt.Figure, list[plt.Axes]]:
-    """Grouped scatter plot of shift (x) vs linewidth or R1 (y).
-
-    Signals are split into subplots by the group size of their chemical
-    label (number of equivalent nuclei in the molecule). All markers are
-    drawn at the same size. If ``fit_result`` is supplied, predicted values
-    from the r^-6 model are overlaid as open circles with dashed connectors.
+) -> tuple[plt.Figure, np.ndarray]:
+    """Two-panel scatter: matched signals (left) and unmatched (right).
 
     Args:
-        experiment: Experiment supplying shift, width, r1, area, and
-            assignment for each signal.
-        molecule: Molecule used to determine the group size for each
-            chemical label.
+        experiment: Experiment supplying shift, width, r1, area, assignment.
+        molecule: Molecule used for predicted shifts and group sizes.
         spec: Plot style specification.
         observable: ``"width"`` or ``"r1"`` — selects the y-axis quantity.
-        fit_result: Optional r^-6 fit result dict (from
-            :func:`~simpnmr.core.fitting.r6_fit.fit_r6`). When provided,
-            predicted values are shown as open circles.
+        fit_result: Optional r^-6 fit result dict. When provided, predicted
+            values are shown as open circles on the matched panel.
         save: If ``True``, saves the figure.
         show: If ``True``, displays the figure.
         save_name: Output file base name (extension appended automatically).
@@ -64,14 +64,17 @@ def plot_shift_width_bubble(
         window_title: Figure window title.
 
     Returns:
-        A tuple ``(fig, axes)`` where ``axes`` is the list of subplots.
+        A tuple ``(fig, axes)`` where ``axes`` is a length-2 ndarray.
     """
-    # --- Build group-size and predicted-shift lookups from molecule nuclei ---
+    # ------------------------------------------------------------------
+    # Build per-label lookups from molecule
+    # ------------------------------------------------------------------
     cl_to_size: dict[str, int] = {}
     cl_to_pred_shift: dict[str, float] = {}
     for nuc in molecule.nuclei:
-        cl_to_size[nuc.chem_label] = cl_to_size.get(nuc.chem_label, 0) + 1
-        # Average predicted shift across equivalent nuclei sharing the same label
+        cl_to_size[nuc.chem_label] = (
+            cl_to_size.get(nuc.chem_label, 0) + 1
+        )
         prev = cl_to_pred_shift.get(nuc.chem_label)
         cl_to_pred_shift[nuc.chem_label] = (
             float(nuc.shift.avg)
@@ -79,84 +82,121 @@ def plot_shift_width_bubble(
             else (prev + float(nuc.shift.avg)) / 2
         )
 
-    # --- Collect per-signal data ---
+    # Predicted observable y via p1 * mean(1/r^6) + p2
+    cl_to_pred_y: dict[str, float] = {}
+    if (
+        fit_result is not None
+        and getattr(molecule, "paramagnetic_centre", None) is not None
+    ):
+        p1 = fit_result["p1"]
+        p2 = fit_result["p2"]
+        centre = np.asarray(molecule.paramagnetic_centre, dtype=float)
+        cl_r6: dict[str, list] = {}
+        for nuc in molecule.nuclei:
+            r = float(np.linalg.norm(nuc.coord - centre))
+            cl_r6.setdefault(nuc.chem_label, []).append(
+                1.0 / max(r, 1e-6) ** 6
+            )
+        for cl, vals in cl_r6.items():
+            cl_to_pred_y[cl] = p1 * float(np.mean(vals)) + p2
+
     label_to_pred = (
         dict(zip(fit_result["labels"], fit_result["pred"]))
         if fit_result is not None
         else {}
     )
 
-    records = []
+    # ------------------------------------------------------------------
+    # Partition experimental signals
+    # ------------------------------------------------------------------
+    matched: list[dict] = []
+    unmatched_exp: list[dict] = []
+    exp_assignments: set[str] = set()
+
     for sig in experiment.signals:
         cl = sig.assignment
-        if cl not in cl_to_size:
-            continue
+        exp_assignments.add(cl)
         y = sig.r1 if observable == "r1" else sig.width
         if y is None or (observable == "r1" and np.isnan(float(y))):
             continue
-        records.append(
+        record = {
+            "shift": sig.shift,
+            "pred_shift": cl_to_pred_shift.get(cl, sig.shift),
+            "y": float(y),
+            "label": cl,
+            "pred": label_to_pred.get(cl),
+            "area": float(sig.area),
+        }
+        if cl in cl_to_size:
+            matched.append(record)
+        else:
+            unmatched_exp.append(record)
+
+    # Unmatched predicted: in molecule but not in experiment
+    unmatched_pred: list[dict] = []
+    for cl, pred_shift in cl_to_pred_shift.items():
+        if cl in exp_assignments:
+            continue
+        pred_y = cl_to_pred_y.get(cl)
+        if pred_y is None:
+            continue
+        unmatched_pred.append(
             {
-                "shift": sig.shift,
-                "pred_shift": cl_to_pred_shift.get(cl, sig.shift),
-                "y": float(y),
+                "pred_shift": pred_shift,
+                "pred_y": pred_y,
                 "label": cl,
-                "group_size": cl_to_size.get(cl, 0),
-                "pred": label_to_pred.get(cl),
-                "area": float(sig.area),
+                "group_size": cl_to_size[cl],
             }
         )
 
-    if not records:
-        logger.warning("plot_shift_width_bubble: no valid data for %s", observable)
-        return None, []
+    if not matched and not unmatched_exp and not unmatched_pred:
+        logger.warning(
+            "plot_shift_width_bubble: no valid data for %s", observable
+        )
+        return None, None
 
-    # Scale experimental marker size by area, normalised to median = _MARKER_SIZE
-    _areas = np.array([r["area"] for r in records])
-    _area_ref = float(np.median(_areas[_areas > 0])) if np.any(_areas > 0) else 1.0
-    for r in records:
-        r["marker_size"] = max(10.0, _MARKER_SIZE * r["area"] / _area_ref)
+    # ------------------------------------------------------------------
+    # Scale marker sizes
+    # ------------------------------------------------------------------
+    _scale_by_area(matched)
+    _scale_by_area(unmatched_exp)
+    _scale_by_group(unmatched_pred)
 
-    # --- Group by group size, sorted ascending ---
-    group_sizes = sorted({r["group_size"] for r in records})
-    n_cols = len(group_sizes)
-
+    # ------------------------------------------------------------------
+    # Figure with two subplots
+    # ------------------------------------------------------------------
     palette = spec.palette
     fontsize = 7
+    y_label = _Y_LABELS.get(observable, observable)
 
     fig, axes = plt.subplots(
-        1,
-        n_cols,
-        figsize=(4.0 * n_cols, 4.0),
+        1, 2,
+        figsize=(10.0, 4.5),
         squeeze=False,
     )
-    axes = axes[0]  # flatten to 1-D list
+    axes = axes[0]
 
     if hasattr(fig, "canvas") and fig.canvas.manager is not None:
         fig.canvas.manager.set_window_title(window_title)
     fig.patch.set_facecolor(palette.annotation_bg)
 
-    y_label = _Y_LABELS.get(observable, observable)
+    # ------------------------------------------------------------------
+    # Left panel — matched
+    # ------------------------------------------------------------------
+    ax_m = axes[0]
+    spec.skin_axes(ax_m)
+    ax_m.set_facecolor(palette.annotation_bg)
+    ax_m.grid(True, which="major", color=palette.grid, linewidth=1.0)
+    ax_m.grid(
+        True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8
+    )
+    ax_m.set_axisbelow(True)
 
-    for ax, gs in zip(axes, group_sizes):
-        spec.skin_axes(ax)
-        ax.set_facecolor(palette.annotation_bg)
-        ax.grid(True, which="major", color=palette.grid, linewidth=1.0)
-        ax.grid(True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8)
-        ax.set_axisbelow(True)
-
-        subset = [r for r in records if r["group_size"] == gs]
-        shifts = [r["shift"] for r in subset]
-        pred_shifts = [r["pred_shift"] for r in subset]
-        ys = [r["y"] for r in subset]
-        labels = [r["label"] for r in subset]
-        preds = [r["pred"] for r in subset]
-        marker_sizes = [r["marker_size"] for r in subset]
-
-        # Experimental points — size scaled by peak area
-        ax.scatter(
-            shifts,
-            ys,
-            s=marker_sizes,
+    if matched:
+        ax_m.scatter(
+            [r["shift"] for r in matched],
+            [r["y"] for r in matched],
+            s=[r["marker_size"] for r in matched],
             color=palette.primary,
             alpha=0.7,
             edgecolors=palette.primary,
@@ -164,56 +204,92 @@ def plot_shift_width_bubble(
             zorder=3,
             label="Experiment",
         )
+        for r in matched:
+            ax_m.annotate(
+                r["label"], xy=(r["shift"], r["y"]),
+                xytext=(4, 4), textcoords="offset points",
+                fontsize=fontsize, color=palette.primary,
+            )
 
-        # Labels
-        for x, y, lbl in zip(shifts, ys, labels):
-            ax.annotate(
-                lbl,
-                xy=(x, y),
-                xytext=(4, 4),
-                textcoords="offset points",
-                fontsize=fontsize,
+    has_pred = [r for r in matched if r["pred"] is not None]
+    if has_pred:
+        ax_m.scatter(
+            [r["pred_shift"] for r in has_pred],
+            [r["pred"] for r in has_pred],
+            s=_MARKER_SIZE,
+            facecolors="none",
+            edgecolors=palette.primary,
+            linewidths=1.2,
+            zorder=4,
+            label=r"Predicted ($r^{-6}$)",
+        )
+        for r in has_pred:
+            ax_m.plot(
+                [r["shift"], r["pred_shift"]],
+                [r["y"], r["pred"]],
                 color=palette.primary,
+                lw=0.5, ls="--", alpha=0.4, zorder=2,
             )
 
-        # Predicted overlay (open circles at predicted shift, predicted y)
-        has_pred = [p is not None for p in preds]
-        if any(has_pred):
-            pred_xs = [ps for ps, hp in zip(pred_shifts, has_pred) if hp]
-            pred_ys = [p for p in preds if p is not None]
-            exp_xs = [x for x, hp in zip(shifts, has_pred) if hp]
-            exp_ys = [y for y, hp in zip(ys, has_pred) if hp]
+    ax_m.set_title("Matched", fontsize=8)
+    ax_m.set_xlabel("Shift (ppm)")
+    ax_m.set_ylabel(y_label)
+    ax_m.invert_xaxis()
+    ax_m.legend(fontsize=fontsize, framealpha=0.8)
 
-            ax.scatter(
-                pred_xs,
-                pred_ys,
-                s=_MARKER_SIZE,
-                facecolors="none",
-                edgecolors=palette.primary,
-                linewidths=1.2,
-                zorder=4,
-                label=r"Predicted ($r^{-6}$)",
+    # ------------------------------------------------------------------
+    # Right panel — unmatched
+    # ------------------------------------------------------------------
+    ax_u = axes[1]
+    spec.skin_axes(ax_u)
+    ax_u.set_facecolor(palette.annotation_bg)
+    ax_u.grid(True, which="major", color=palette.grid, linewidth=1.0)
+    ax_u.grid(
+        True, which="minor", color=palette.grid, linewidth=0.7, alpha=0.8
+    )
+    ax_u.set_axisbelow(True)
+
+    if unmatched_exp:
+        ax_u.scatter(
+            [r["shift"] for r in unmatched_exp],
+            [r["y"] for r in unmatched_exp],
+            s=[r["marker_size"] for r in unmatched_exp],
+            color=_UNMATCHED_COLOR,
+            alpha=0.7,
+            edgecolors=_UNMATCHED_COLOR,
+            linewidths=0.8,
+            zorder=3,
+            label="Exp. (unmatched)",
+        )
+        for r in unmatched_exp:
+            ax_u.annotate(
+                r["label"], xy=(r["shift"], r["y"]),
+                xytext=(4, 4), textcoords="offset points",
+                fontsize=fontsize, color=_UNMATCHED_COLOR,
             )
 
-            for xe, ye, xp, yp in zip(exp_xs, exp_ys, pred_xs, pred_ys):
-                ax.plot(
-                    [xe, xp],
-                    [ye, yp],
-                    color=palette.primary,
-                    lw=0.5,
-                    ls="--",
-                    alpha=0.4,
-                    zorder=2,
-                )
+    if unmatched_pred:
+        ax_u.scatter(
+            [r["pred_shift"] for r in unmatched_pred],
+            [r["pred_y"] for r in unmatched_pred],
+            s=[r["marker_size"] for r in unmatched_pred],
+            facecolors="none",
+            edgecolors=_UNMATCHED_COLOR,
+            linewidths=1.2,
+            zorder=4,
+            label="Predicted (unmatched)",
+        )
+        for r in unmatched_pred:
+            ax_u.annotate(
+                r["label"], xy=(r["pred_shift"], r["pred_y"]),
+                xytext=(4, 4), textcoords="offset points",
+                fontsize=fontsize, color=_UNMATCHED_COLOR,
+            )
 
-        ax.set_title(f"N = {gs}", fontsize=8)
-        ax.set_xlabel("Shift (ppm)")
-        ax.invert_xaxis()
-
-        # Only label y-axis on the leftmost subplot
-        if ax is axes[0]:
-            ax.set_ylabel(y_label)
-            ax.legend(fontsize=fontsize, framealpha=0.8)
+    ax_u.set_title("Unmatched", fontsize=8)
+    ax_u.set_xlabel("Shift (ppm)")
+    ax_u.invert_xaxis()
+    ax_u.legend(fontsize=fontsize, framealpha=0.8)
 
     fig.suptitle(window_title, fontsize=9)
     fig.tight_layout()
@@ -222,7 +298,37 @@ def plot_shift_width_bubble(
 
     if save and verbose:
         logger.info(
-            "Shift–%s grouped bubble plot saved to %s", observable, f"{save_name}.pdf"
+            "Shift–%s bubble plot saved to %s",
+            observable, f"{save_name}.pdf",
         )
 
     return fig, axes
+
+
+# ------------------------------------------------------------------
+# Marker sizing helpers
+# ------------------------------------------------------------------
+
+def _scale_by_area(records: list[dict]) -> None:
+    """Set marker_size proportional to area, median → _MARKER_SIZE."""
+    if not records:
+        return
+    areas = np.array([r["area"] for r in records])
+    ref = float(np.median(areas[areas > 0])) if np.any(areas > 0) else 1.0
+    for r in records:
+        r["marker_size"] = min(
+            _MAX_MARKER, max(10.0, _MARKER_SIZE * r["area"] / ref)
+        )
+
+
+def _scale_by_group(records: list[dict]) -> None:
+    """Set marker_size proportional to group_size, max group → _MARKER_SIZE."""
+    if not records:
+        return
+    max_gs = max(r["group_size"] for r in records)
+    ref = max_gs if max_gs > 0 else 1
+    for r in records:
+        r["marker_size"] = min(
+            _MAX_MARKER,
+            max(10.0, _MARKER_SIZE * r["group_size"] / ref),
+        )

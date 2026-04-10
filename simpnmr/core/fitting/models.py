@@ -351,9 +351,12 @@ class SusceptibilityModel(ABC):
             # For each group, compute the average shift and assign a weight factor
             # such that the overall contribution of the group is independent of its size
             for group in average_labels:
-                group_average = np.mean([trial_shifts[lab] for lab in group])
-                group_size = len(group)
-                for lab in group:
+                present = [lab for lab in group if lab in trial_shifts]
+                if not present:
+                    continue
+                group_average = np.mean([trial_shifts[lab] for lab in present])
+                group_size = len(present)
+                for lab in present:
                     trial_shifts[lab] = group_average
                     # residuals will be divided by this
                     weights[lab] = np.sqrt(group_size)
@@ -434,10 +437,22 @@ class SusceptibilityModel(ABC):
         # Get bounds for variables to be fitted
         bounds = np.array([self.BOUNDS[name] for name in self.fit_vars.keys()]).T
 
-        # Chemical label to paramagnetic shift
+        # Chemical label to paramagnetic shift — skip nuclei absent from experiment
+        _missing = sorted({
+            nuc.chem_label for nuc in molecule.nuclei
+            if nuc.chem_label not in experiment
+        })
+        if _missing:
+            logger.warning(
+                "Nuclei skipped in fit (no experimental signal): %s",
+                ", ".join(_missing),
+            )
+        _fit_nuclei = [
+            nuc for nuc in molecule.nuclei if nuc.chem_label in experiment
+        ]
         al_to_para_shift = {
             nuc.label: experiment[nuc.chem_label].shift - nuc.shift.dia
-            for nuc in molecule.nuclei
+            for nuc in _fit_nuclei
         }
 
         curr_fit = least_squares(
@@ -445,7 +460,7 @@ class SusceptibilityModel(ABC):
             args=(
                 self.fit_vars,
                 self.fix_vars,
-                molecule.nuclei,
+                _fit_nuclei,
                 al_to_para_shift,
                 average_labels,
             ),
@@ -497,7 +512,7 @@ class SusceptibilityModel(ABC):
             self.mae = np.sum(np.abs(curr_fit.fun)) / len(curr_fit.fun)
             ss_res = np.sum(curr_fit.fun**2)
             self.rmse = np.sqrt(ss_res / len(curr_fit.fun))
-            ecs = [al_to_para_shift[nuc.label] for nuc in molecule.nuclei]
+            ecs = [al_to_para_shift[nuc.label] for nuc in _fit_nuclei]
             ss_tot = np.sum((ecs - np.mean(ecs)) ** 2)
             self.r2 = 1 - (ss_res / ss_tot)
             self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
@@ -533,9 +548,22 @@ class LinearSusceptibilityModel(SusceptibilityModel):
         # Get bounds for variables to be fitted
         bounds = np.array([self.BOUNDS[name] for name in self.fit_vars.keys()]).T
 
+        _missing = sorted({
+            nuc.chem_label for nuc in molecule.nuclei
+            if nuc.chem_label not in experiment
+        })
+        if _missing:
+            logger.warning(
+                "Nuclei skipped in fit (no experimental signal): %s",
+                ", ".join(_missing),
+            )
+        _fit_nuclei = [
+            nuc for nuc in molecule.nuclei if nuc.chem_label in experiment
+        ]
+
         curr_fit = lsq_linear(
-            A=self.design_matrix(molecule.nuclei, self.fix_vars),
-            b=self.target_vector(molecule.nuclei, experiment, self.fix_vars),
+            A=self.design_matrix(_fit_nuclei, self.fix_vars),
+            b=self.target_vector(_fit_nuclei, experiment, self.fix_vars),
             bounds=bounds,
         )
 
@@ -559,7 +587,7 @@ class LinearSusceptibilityModel(SusceptibilityModel):
             self.adj_r2 = np.NaN
         else:
             # Calculate Jacobian, here equal to the design matrix
-            curr_fit.jac = self.design_matrix(molecule.nuclei, self.fix_vars)
+            curr_fit.jac = self.design_matrix(_fit_nuclei, self.fix_vars)
 
             # Calculate standard deviation error on the parameters
             stdev, _ = svd_stdev(curr_fit)
@@ -579,7 +607,7 @@ class LinearSusceptibilityModel(SusceptibilityModel):
             # R2
             ss_res = np.sum(curr_fit.fun**2)
             self.rmse = np.sqrt(ss_res / len(curr_fit.fun))
-            ecs = [experiment[nuc.chem_label] for nuc in molecule.nuclei]
+            ecs = [experiment[nuc.chem_label].shift for nuc in _fit_nuclei]
             ss_tot = np.sum((ecs - np.mean(ecs)) ** 2)
             self.r2 = 1 - (ss_res / ss_tot)
             self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
@@ -1120,7 +1148,7 @@ class FullSuscFitter(SusceptibilityModel):
         target = []
 
         for nuc in nuclei:
-            _tgt = experiment[nuc.chem_label]
+            _tgt = experiment[nuc.chem_label].shift
             to_subtract = {
                 "xx": nuc.A.tensor_full[0, 0],
                 "xy": nuc.A.tensor_full[1, 0] + nuc.A.tensor_full[0, 1],

@@ -96,6 +96,19 @@ def plot_fitted_shifts(
         if nuc.chem_label not in seen
     ]
 
+    # Only plot nuclei whose chem_label has an experimental signal
+    _present_labels = set()
+    for nuc in unique_nuclei:
+        try:
+            experiment[nuc.chem_label]
+            _present_labels.add(nuc.chem_label)
+        except (KeyError, TypeError):
+            logger.warning(
+                "chem_label '%s' absent from experiment — skipped in shift plot",
+                nuc.chem_label,
+            )
+    unique_nuclei = [nuc for nuc in unique_nuclei if nuc.chem_label in _present_labels]
+
     if average:
         # Theoretical shifts, averaged over equivalent nuclei
         calc_shifts = {nuc.chem_label: nuc.shift.avg for nuc in unique_nuclei}
@@ -105,6 +118,8 @@ def plot_fitted_shifts(
         # One signal per nucleus
         calc_shifts = {nuc.chem_label: [] for nuc in unique_nuclei}
         for nuc in molecule.nuclei:
+            if nuc.chem_label not in _present_labels:
+                continue
             calc_shifts[nuc.chem_label].append(nuc.shift.total)
 
         # Experimental shifts, same order as theoretical
@@ -119,7 +134,11 @@ def plot_fitted_shifts(
     ]
     _markers = {ele: mrkr for (ele, mrkr) in zip(_unique_elements, ["o", "v", "s"])}
 
-    markers = {nuc.chem_label: _markers[nuc.label_nn] for nuc in molecule.nuclei}
+    markers = {
+        nuc.chem_label: _markers[nuc.label_nn]
+        for nuc in molecule.nuclei
+        if nuc.chem_label in _present_labels
+    }
 
     # if math labels are present then use these instead
     if all([len(nuc.chem_math_label) for nuc in molecule.nuclei]):

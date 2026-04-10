@@ -40,6 +40,7 @@ class Signal:
         assignment: str = "UNK",
         l_to_g: float = 1.0,
         r1: Optional[float] = None,
+        isotope: Optional[str] = None,
     ) -> None:
         try:
             self.shift = float(shift)
@@ -61,12 +62,13 @@ class Signal:
         if self.area < 0.0:
             raise ValueError("area must be non-negative")
 
+        if assignment is None or (
+            isinstance(assignment, str) and not assignment.strip()
+        ):
+            raise ValueError("assignment must be a non-empty string")
         if not isinstance(assignment, str):
             raise TypeError("assignment must be str")
-        assignment = assignment.strip()
-        if not assignment:
-            raise ValueError("assignment must be non-empty")
-        self.assignment = assignment
+        self.assignment = assignment.strip()
 
         try:
             self.l_to_g = float(l_to_g)
@@ -84,6 +86,13 @@ class Signal:
                 raise TypeError("r1 must be floatable") from exc
             if self.r1 < 0.0:
                 raise ValueError("r1 must be non-negative")
+
+        if isotope is None:
+            self.isotope = None
+        else:
+            if not isinstance(isotope, str):
+                raise TypeError("isotope must be str or None")
+            self.isotope = isotope.strip() or None
 
         return
 
@@ -116,6 +125,18 @@ class Experiment:
         spectrum: ArrayLike = None,
         exp_reference: Optional[float] = None,
     ) -> None:
+        # Validate per-isotope assignment uniqueness
+        from collections import defaultdict
+        _seen: dict = defaultdict(set)
+        for sig in signals:
+            iso = sig.isotope or ""
+            if sig.assignment in _seen[iso]:
+                raise ValueError(
+                    f"Duplicate assignment '{sig.assignment}' for "
+                    f"isotope '{iso or 'untagged'}' in experiment."
+                )
+            _seen[iso].add(sig.assignment)
+
         self._signals = signals
         self.temperature = temperature
         self.magnetic_field = magnetic_field
@@ -224,6 +245,7 @@ class Experiment:
         width = max([len(signal.assignment) for signal in self.signals])
         for signal in self.signals:
             out += "{}, {: 10.4f}, {:7.4f}, {:5.2f}\n".format(
-                signal.assignment.ljust(width), signal.shift, signal.width, signal.area
+                signal.assignment.ljust(width),
+                signal.shift, signal.width, signal.area,
             )
         return out

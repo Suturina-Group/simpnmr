@@ -226,14 +226,30 @@ def plot_raw_deconv_pred(
         for nuc in molecule.nuclei
         if nuc.isotope == isotope
     }
+    # All isotopes present in the molecule
+    _all_isotopes = {nuc.isotope for nuc in molecule.nuclei}
+    _single_isotope = len(_all_isotopes) == 1
 
-    # Only consider signals assigned to the target isotope
-    _iso_signals = [
+    # Signals for the deconvoluted spectrum.
+    # Priority: use signal.isotope field when present; fall back to
+    # assignment-based lookup or single-isotope shortcut.
+    def _signal_belongs(s) -> bool:
+        """True if signal s belongs to the rendered isotope."""
+        if s.isotope is not None:
+            return s.isotope == isotope
+        if _single_isotope:
+            return True
+        return s.assignment in _iso_chem_labels
+
+    _iso_signals = [s for s in experiment.signals if _signal_belongs(s)]
+
+    # Connector arrows only for signals assigned to this isotope
+    _connector_signals = [
         s for s in experiment.signals
         if s.assignment in _iso_chem_labels
     ]
 
-    # Use the union of simulation and experimental peak ranges to avoid clipping.
+    # Use union of simulation and experimental ranges to avoid clipping.
     if _iso_signals:
         exp_min = min(s.shift for s in _iso_signals)
         exp_max = max(s.shift for s in _iso_signals)
@@ -463,7 +479,7 @@ def plot_raw_deconv_pred(
     # Build lookup: LaTeX label -> predicted shift
     _label_to_pred = dict(zip(labels, shifts))
 
-    for signal in _iso_signals:
+    for signal in _connector_signals:
         latex_lab = _map_assignment_to_latex(signal.assignment)
         pred_x = _label_to_pred.get(latex_lab)
         if pred_x is None:
@@ -503,6 +519,37 @@ def plot_raw_deconv_pred(
             linewidth=_lw_conn,
             alpha=0.4,
             clip_on=False,
+        )
+
+    # Red dot + label for signals with no matching predicted assignment
+    _matched_assignments = {
+        _map_assignment_to_latex(s.assignment)
+        for s in _connector_signals
+        if _label_to_pred.get(_map_assignment_to_latex(s.assignment)) is not None
+    }
+    _unmatched_signals = [
+        s for s in _iso_signals
+        if _map_assignment_to_latex(s.assignment) not in _matched_assignments
+    ]
+    for signal in _unmatched_signals:
+        exp_x = signal.shift
+        peak_y = y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+        ax[1].plot(
+            exp_x, peak_y,
+            marker="o",
+            color="red",
+            markersize=0.4 * glyphs.line_lw + 0.5,
+            lw=0,
+            zorder=5,
+        )
+        ax[1].text(
+            exp_x, peak_y,
+            f" {signal.assignment}",
+            fontsize=str(round(spec.typography.label * 0.7)),
+            color="red",
+            va="bottom",
+            ha="left",
+            clip_on=True,
         )
 
     # Vertical left-side label (instead of a top title)

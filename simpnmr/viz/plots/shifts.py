@@ -71,14 +71,6 @@ def plot_shift_spread(
     palette = spec.palette
     shift_colours = spec.shift_colours
 
-    unique_chemlabels = {nuc.chem_math_label for nuc in molecule.nuclei}
-
-    xvals = np.arange(1, len(unique_chemlabels) + 1)
-
-    # width of bars, and shift to apply for starting positions
-    width = 1 / (len(terms) + 2)
-    widthscaler = 1.0
-
     # Total theoretical
     total = {nuc.chem_math_label: [] for nuc in molecule.nuclei}
     # Grouped by chem_label
@@ -120,6 +112,12 @@ def plot_shift_spread(
                 k
                 for k, _ in sorted(exps.items(), key=lambda item: item[1], reverse=True)
             ]
+
+    xvals = np.arange(1, len(_order) + 1)
+
+    # width of bars, and shift to apply for starting positions
+    width = 1 / (len(terms) + 2)
+    widthscaler = 1.0
 
     # Total Theoretical shift violin plot
     _violin = ax.violinplot(
@@ -224,7 +222,7 @@ def plot_shift_spread(
     ax.hlines(
         0.0,
         1,
-        len(unique_chemlabels) + 1,
+        len(_order) + 1,
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
@@ -312,16 +310,22 @@ def plot_shift_contrib(
     xvals = np.arange(len(cl_to_al))
 
     # Experiment
+    _exp_math_labels: set[str] = set()  # math labels with real experimental data
     if experiment is not None:
-        # Take average
+        # Take average (skip nuclei absent from experiment)
         exps = dict.fromkeys(cl_to_al, 0)
         for nuc in molecule.nuclei:
+            if nuc.chem_label not in experiment:
+                continue
             exps[nuc.chem_math_label] += (
                 experiment[nuc.chem_label].shift / cl_to_al[nuc.chem_math_label]
             )
+            _exp_math_labels.add(nuc.chem_math_label)
 
         if "d" not in terms:
             for nuc in molecule.nuclei:
+                if nuc.chem_label not in experiment:
+                    continue
                 exps[nuc.chem_math_label] -= (
                     nuc.shift.dia / cl_to_al[nuc.chem_math_label]
                 )
@@ -443,9 +447,13 @@ def plot_shift_contrib(
         widthscaler += 1
 
     if experiment is not None:
+        _exp_xpos = [
+            i + 0.5 for i, o in enumerate(order) if o in _exp_math_labels
+        ]
+        _exp_yvals = [exps[o] for o in order if o in _exp_math_labels]
         ax.plot(
-            (xvals + 0.5),
-            [exps[o] for o in order],
+            _exp_xpos,
+            _exp_yvals,
             label="Exp.",
             color=palette.primary,
             lw=0,
@@ -545,7 +553,12 @@ def plot_shift_tdep(
     )
 
     # Group signals of each experiment by assignment label
-    labels = {signal.assignment for experiment in experiments for signal in experiment}
+    labels = {
+        signal.assignment
+        for experiment in experiments
+        for signal in experiment
+        if signal.assignment is not None
+    }
 
     colour_cycle_len = len(colour_cycle)
     colours = {
@@ -555,6 +568,8 @@ def plot_shift_tdep(
 
     for experiment in experiments:
         for signal in experiment.signals:
+            if signal.assignment is None:
+                continue
             ax.plot(
                 experiment.temperature,
                 signal.shift * experiment.temperature,

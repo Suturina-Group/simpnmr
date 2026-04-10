@@ -39,6 +39,7 @@ from simpnmr.core.fitting import models
 from simpnmr.core.util.strings import remove_numbers
 from simpnmr.core.fitting.assign import (
     fit_with_hungarian_assignment,
+    fit_with_hungarian_assignment_multi,
     generate_assignment_permutations,
 )
 from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
@@ -251,6 +252,92 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     _r6_records_r1: dict[str, list[dict]] = {}
     _r6_records_width: dict[str, list[dict]] = {}
 
+    # Multi-experiment Hungarian assignment (run once, before the main loop).
+    # Finds one shared assignment across all (T, B) conditions by summing
+    # cost matrices; each condition retains its own susceptibility parameters.
+    _hungarian_done = False
+    if config.assignment_method == "hungarian" and len(experiments) > 1:
+        search_settings = resolve_assignment_search_settings(
+            mode=config.assignment_search,
+            n_attempts=config.assignment_n_attempts,
+            max_iter=config.assignment_max_iter,
+            rmse_threshold=config.assignment_rmse_threshold,
+        )
+        logger.info(
+            "Multi-experiment Hungarian: %d conditions, "
+            "mode=%s, n_attempts=%d, max_iter=%d, rmse_threshold=%.6f",
+            len(experiments),
+            search_settings.mode,
+            search_settings.n_attempts,
+            search_settings.max_iter,
+            search_settings.rmse_threshold,
+        )
+
+        # Per-isotope partitions (signal indices from the first experiment)
+        _isotopes_multi = list(
+            dict.fromkeys(nuc.isotope for nuc in molecules[0].nuclei)
+        )
+        _multi_iso_partitions = None
+        if len(_isotopes_multi) > 1:
+            _multi_iso_partitions = []
+            for _iso_m in _isotopes_multi:
+                _iso_labels_m = {
+                    n.chem_label for n in molecules[0].nuclei
+                    if n.isotope == _iso_m
+                }
+                _iso_sig_idxs_m = [
+                    i for i, s in enumerate(experiments[0].signals)
+                    if (
+                        s.isotope == _iso_m
+                        if s.isotope is not None
+                        else s.assignment in _iso_labels_m
+                    )
+                ]
+                if _iso_sig_idxs_m:
+                    _multi_iso_partitions.append(
+                        (_iso_sig_idxs_m, _iso_labels_m)
+                    )
+
+        _multi_records = [
+            {
+                "molecule": mol,
+                "susc_model": sm,
+                "experiment": exp,
+                "average_labels": average_labels,
+            }
+            for mol, sm, exp in zip(molecules, susc_models, experiments)
+        ]
+        _multi_rmse, _ = fit_with_hungarian_assignment_multi(
+            records=_multi_records,
+            n_attempts=search_settings.n_attempts,
+            max_iter=search_settings.max_iter,
+            rmse_threshold=search_settings.rmse_threshold,
+            area_weight=config.assignment_area_weight,
+            width_weight=config.assignment_width_weight,
+            r1_weight=config.assignment_r1_weight,
+            isotope_partitions=_multi_iso_partitions,
+        )
+        logger.info(
+            "Multi-experiment Hungarian completed: mean RMSE = %.6f",
+            _multi_rmse,
+        )
+        # Save each assigned experiment
+        for exp in experiments:
+            save_experiment(
+                exp,
+                file_name=os.path.join(
+                    config.project_name,
+                    f"assigned_experiment_{exp.temperature:.2f}_K.csv",
+                ),
+                delimiter=delimiter,
+                comment=(
+                    f"# Optimal Assignment (Hungarian, multi-experiment)\n"
+                    f"# mean rmse = {_multi_rmse:f}\n"
+                    f"# T = {exp.temperature:.2f} K"
+                ),
+            )
+        _hungarian_done = True
+
     # Run fit for all experiments
     for molecule, susc_model, experiment in zip(
         molecules, susc_models, experiments
@@ -265,8 +352,18 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ]
             # For the current experiment, generate a new set in which
             # the assignment is permuted according to user defined groups
+            # Build a view of the experiment containing only fittable
+            # signals (those whose assignment matches a molecule label) so
+            # that unmatched signals do not enter the permutation space.
+            import copy as _copy
+            _mol_labels_perm = {nuc.chem_label for nuc in molecule.nuclei}
+            _perm_exp = _copy.copy(experiment)
+            _perm_exp._signals = [
+                s for s in experiment.signals
+                if s.assignment in _mol_labels_perm
+            ]
             permed_assignments = generate_assignment_permutations(
-                experiment=experiment, groups=config.assignment_groups
+                experiment=_perm_exp, groups=config.assignment_groups
             )
 
             logger.info(
@@ -318,9 +415,15 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             opt_rmse = np.nanmin(results)
             logger.info("Optimal assignment with RMSE = %.6f", opt_rmse)
 
-            # and swap in new, permuted, assignments
-            for it, new in enumerate(assignment):
-                experiment.signals[it].assignment = new
+            # Only update signals whose assignment matches a molecule label;
+            # unmatched signals are frozen (their assignment is unchanged).
+            _mol_labels = {nuc.chem_label for nuc in molecule.nuclei}
+            _fit_sigs = [
+                s for s in experiment.signals
+                if s.assignment in _mol_labels
+            ]
+            for sig, new in zip(_fit_sigs, assignment):
+                sig.assignment = new
 
             # Save assigned experiment to file
             save_experiment(
@@ -337,7 +440,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ),
             )
 
-        elif config.assignment_method == "hungarian":
+        elif config.assignment_method == "hungarian" and not _hungarian_done:
             search_settings = resolve_assignment_search_settings(
                 mode=config.assignment_search,
                 n_attempts=config.assignment_n_attempts,
@@ -353,8 +456,41 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 search_settings.rmse_threshold,
             )
 
-            # Call Hungarian assignment function
-            opt_rmse, assignment = fit_with_hungarian_assignment(
+            # Build per-isotope partitions so the tensor is fitted jointly
+            # using all signals and nuclei, but each isotope's signals only
+            # compete for labels belonging to that isotope.
+            _isotopes_hung = list(
+                dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+            )
+            _iso_partitions = None
+            if len(_isotopes_hung) > 1:
+                _iso_partitions = []
+                for _iso_hung in _isotopes_hung:
+                    _iso_labels = {
+                        n.chem_label for n in molecule.nuclei
+                        if n.isotope == _iso_hung
+                    }
+                    _iso_sig_idxs = [
+                        i for i, s in enumerate(experiment.signals)
+                        if (
+                            s.isotope == _iso_hung
+                            if s.isotope is not None
+                            else s.assignment in _iso_labels
+                        )
+                    ]
+                    if _iso_sig_idxs:
+                        _iso_partitions.append(
+                            (_iso_sig_idxs, _iso_labels)
+                        )
+                        logger.info(
+                            "Hungarian partition: isotope %s — "
+                            "%d signals, %d labels",
+                            _iso_hung,
+                            len(_iso_sig_idxs),
+                            len(_iso_labels),
+                        )
+
+            opt_rmse, _ = fit_with_hungarian_assignment(
                 molecule=molecule,
                 susc_model=susc_model,
                 experiment=experiment,
@@ -365,6 +501,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 area_weight=config.assignment_area_weight,
                 width_weight=config.assignment_width_weight,
                 r1_weight=config.assignment_r1_weight,
+                isotope_partitions=_iso_partitions,
             )
             logger.info("Hungarian completed: best RMSE = %.6f", opt_rmse)
 

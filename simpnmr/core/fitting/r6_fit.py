@@ -219,6 +219,8 @@ def fit_r6(
     obs_vals: list[float] = []
 
     for sig in experiment.signals:
+        if sig.assignment is None:
+            continue
         cl = sig.assignment
         obs = sig.r1 if observable == "r1" else sig.width
 
