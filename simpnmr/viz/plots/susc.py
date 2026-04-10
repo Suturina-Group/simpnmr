@@ -3,7 +3,7 @@
 
 """Plot magnetic susceptibility tensor components.
 
-Provides plotting utilities for chi_iso, chi_ax, and chi_rho trends versus
+Provides plotting utilities for chi_iso, chi_ax, and chi_rh trends versus
 inverse temperature, with optional precomputed fit curves and uncertainty bands.
 """
 
@@ -21,7 +21,7 @@ from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
 logger = logging.getLogger(__name__)
 
 
-def plot_isoaxrho(
+def plot_isoaxrh(
     vals: dict,
     errs: dict,
     params: dict,
@@ -32,7 +32,7 @@ def plot_isoaxrho(
     save_name: str = "susceptibility_components",
     verbose: bool = True,
 ) -> None:
-    """Plots iso/ax/rho susceptibility components vs x-values.
+    """Plots iso/ax/rh susceptibility components vs x-values.
 
     Notes:
         - This function is intentionally "dumb": it only visualizes arrays that are
@@ -48,14 +48,14 @@ def plot_isoaxrho(
 
     # Early guard clause for empty vals
     if not vals:
-        raise ValueError("plot_isoaxrho: no components provided in `vals`")
+        raise ValueError("plot_isoaxrh: no components provided in `vals`")
 
     glyphs = spec.glyphs
 
     _chiT_label_map = {
         "iso": r"\mathrm{iso}",
         "ax": r"\mathrm{ax}",
-        "rho": r"\mathrm{rh}",
+        "rh": r"\mathrm{rh}",
     }
 
     for component in vals.keys():
@@ -243,28 +243,28 @@ def plot_exp_vs_ab_initio(
     save_name: str = "exp_vs_ab_initio_susc",
     verbose: bool = True,
 ) -> None:
-    """Plots fitted chiT model vs ab initio chiT components (iso/ax/rho).
+    """Plots fitted chiT model vs ab initio chiT components (iso/ax/rh).
 
     Args:
-        params: Fitted chiT model parameters keyed by component (iso/ax/rho). Each
+        params: Fitted chiT model parameters keyed by component (iso/ax/rh). Each
             entry must include a precomputed array under key "fit_y" evaluated on
             `inv_t`.
         inv_t: Inverse-temperature grid for the fitted model.
         ab_series: Ab initio chiT series on the ab initio grid, with keys: "inv_t",
-            "iso", "ax", "rho". All values are arrays on the ab initio grid.
+            "iso", "ax", "rh". All values are arrays on the ab initio grid.
         analytic_chi_vt: Analytic VT 2nd order susceptibility,
         as arrays on the ab initio grid for each component.
     """
     _chiT_label_map = {
         "iso": r"\mathrm{iso}",
         "ax": r"\mathrm{ax}",
-        "rho": r"\mathrm{rh}",
+        "rh": r"\mathrm{rh}",
     }
 
     comp_to_gsq_key = {
         "iso": "g_sq_iso",
         "ax": "g_sq_ax",
-        "rho": "g_sq_rh",
+        "rh": "g_sq_rh",
     }
 
     for component in params.keys():

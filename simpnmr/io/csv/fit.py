@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def save_slope_intercept(
     fits,
     spin: float | None = None,
-    file_name: str = "isoaxrho_fit.csv",
+    file_name: str = "isoaxrh_fit.csv",
     verbose: bool = True,
 ) -> None:
     """Writes slope/intercept results for chiT fits to a CSV file.
@@ -42,7 +42,7 @@ def save_slope_intercept(
         component type.
     """
 
-    labels = ["iso", "ax", "rho"]
+    labels = ["iso", "ax", "rh"]
 
     types = []
     intercepts = []

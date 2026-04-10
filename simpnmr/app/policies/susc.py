@@ -59,7 +59,7 @@ _SUSC_FIT_INPUT_UNIT_ALIASES: Final[dict[str, SuscFitInputUnits]] = {
     "cm3/mol": "cm3 mol-1",
     "reduced": "reduced",
 }
-_DIMENSIONLESS_SUSC_FIT_VARIABLES: Final[frozenset[str]] = frozenset({"rho_over_ax"})
+_DIMENSIONLESS_SUSC_FIT_VARIABLES: Final[frozenset[str]] = frozenset({"rh_over_ax"})
 
 
 def resolve_susceptibility_backend(susceptibility_file: str) -> SusceptibilityBackend:
@@ -136,7 +136,7 @@ def resolve_susc_fit_variables(
 
     The fitting models operate in internal ``Å^3`` units. This helper converts
     user-facing YAML values into those canonical units while preserving
-    dimensionless parameters such as ``rho_over_ax``.
+    dimensionless parameters such as ``rh_over_ax``.
 
     Args:
         raw_variables: Mapping from variable name to ``[mode, value]`` pair.

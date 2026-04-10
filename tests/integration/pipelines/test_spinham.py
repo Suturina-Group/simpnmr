@@ -12,15 +12,15 @@ import pytest
 
 
 @pytest.mark.integration
-def test_get_sh_with_isoaxrho_fit_csv_runs_successfully():
-    """Run the ``get_sh`` CLI workflow on an ``isoaxrho`` fit result.
+def test_get_sh_with_isoaxrh_fit_csv_runs_successfully():
+    """Run the ``get_sh`` CLI workflow on an ``isoaxrh`` fit result.
 
     This test exercises the CLI-driven spin-Hamiltonian extraction path using
     an internal susceptibility-fit CSV fixture and verifies successful command
     execution together with creation of the expected output CSV.
     """
     cwd = Path("tests/data/pipelines/spinham")
-    cmd = ["simpnmr", "get_sh", "--spin", "2.0", "isoaxrho_fit.csv"]
+    cmd = ["simpnmr", "get_sh", "--spin", "2.0", "isoaxrh_fit.csv"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 and "missing" in result.stderr.lower():

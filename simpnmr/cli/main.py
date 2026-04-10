@@ -366,13 +366,13 @@ def read_args(arg_list=None):
     )
 
     fit_susc.add_argument(
-        "--isoaxrho_plots",
+        "--isoaxrh_plots",
         choices=["on", "off"],
         metavar="<str>",
         type=str,
         default="on",
         help=(
-            "Enable/disable susceptibility component plots (iso/ax/rho vs T).\n"
+            "Enable/disable susceptibility component plots (iso/ax/rh vs T).\n"
             " - 'on': generate the plot (always saved; use --show to display)\n"
             " - 'off': skip\n"
             "Default: on"
@@ -426,7 +426,7 @@ def read_args(arg_list=None):
             "dzy",
             "dzz",
             "ax",
-            "rho",
+            "rh",
         ],
         nargs="+",
         help=("Component() to plot"),
@@ -519,7 +519,7 @@ def read_args(arg_list=None):
             "y",
             "z",
             "ax",
-            "rho",
+            "rh",
         ],
         nargs="+",
         help=("Component(s) to plot"),

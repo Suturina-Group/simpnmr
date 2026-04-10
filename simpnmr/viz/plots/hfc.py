@@ -37,7 +37,7 @@ def plot_hyperfine(
     Args:
         nuclei: Nuclei to plot.
         components: Names of hyperfine components to plot (e.g. ``"xx"``, ``"yy"``,
-            ``"iso"``, ``"ax"``, ``"rho"``, ``"dxy"``).
+            ``"iso"``, ``"ax"``, ``"rh"``, ``"dxy"``).
         save: If ``True``, saves the plot to `save_name`.
         show: If ``True``, shows the plot.
         save_name: Output image file name.
@@ -63,10 +63,10 @@ def plot_hyperfine(
             for nuc in nuclei:
                 hf_components[component][nuc.label] = nuc.A.sd[0, 0] - nuc.A.sd[1, 1]
                 complabels[component] = r"$dA_\mathregular{ax}$"
-        elif component == "rho":
+        elif component == "rh":
             for nuc in nuclei:
                 hf_components[component][nuc.label] = nuc.A.sd[0, 0] + nuc.A.sd[1, 1]
-                complabels[component] = r"$dA_\mathregular{rho}$"
+                complabels[component] = r"$dA_\mathregular{rh}$"
         elif "d" in component:
             for nuc in nuclei:
                 hf_components[component][nuc.label] = nuc.A.sd[comp2ind(component[1:])]
@@ -225,7 +225,7 @@ def plot_hyperfine_spread(
     Args:
         nuclei: Nuclei to plot.
         components: Names of hyperfine components to plot (e.g. ``"xx"``, ``"yy"``,
-            ``"iso"``, ``"ax"``, ``"rho"``, ``"dxy"``).
+            ``"iso"``, ``"ax"``, ``"rh"``, ``"dxy"``).
         save: If ``True``, saves the plot to `save_name`.
         show: If ``True``, shows the plot.
         save_name: Output image file name.
@@ -259,12 +259,12 @@ def plot_hyperfine_spread(
                     nuc.A.sd[0, 0] - nuc.A.sd[1, 1]
                 )
                 legend_labels[component] = r"$dA_\mathregular{ax}$"
-        elif component == "rho":
+        elif component == "rh":
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(
                     nuc.A.sd[0, 0] + nuc.A.sd[1, 1]
                 )
-                legend_labels[component] = r"$dA_\mathregular{rho}$"
+                legend_labels[component] = r"$dA_\mathregular{rh}$"
         elif "d" in component:
             for nuc in nuclei:
                 a_comps[component][nuc.chem_math_label].append(

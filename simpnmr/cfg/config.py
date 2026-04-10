@@ -984,7 +984,7 @@ class FitSuscConfig(Config):
         if not isinstance(value, dict):
             raise ValueError("susc_vt: variables must be a dict or None")
 
-        required_components = {"iso", "ax", "rho"}
+        required_components = {"iso", "ax", "rh"}
         unknown_components = set(value) - required_components
         if unknown_components:
             raise ValueError(
@@ -1240,7 +1240,7 @@ class FitSuscConfig(Config):
                         "slope": ["fit", 0.0],
                         "tip": ["fit", 0.0],
                     },
-                    "rho": {
+                    "rh": {
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                         "tip": ["fit", 0.0],
@@ -1260,7 +1260,7 @@ class FitSuscConfig(Config):
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                     },
-                    "rho": {
+                    "rh": {
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                     },

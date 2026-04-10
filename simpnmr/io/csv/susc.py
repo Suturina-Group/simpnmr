@@ -143,10 +143,10 @@ def save_susc(
             molecule.susc.axiality * conv for molecule in molecules
         ],
         f"chi_ax-s-dev ({unit_label})": None,
-        f"chi_rho ({unit_label})": [
+        f"chi_rh ({unit_label})": [
             molecule.susc.rhombicity * conv for molecule in molecules
         ],
-        f"chi_rho-s-dev ({unit_label})": None,
+        f"chi_rh-s-dev ({unit_label})": None,
         f"chi_xx ({unit_label})": [
             molecule.susc.tensor[0, 0] * conv for molecule in molecules
         ],
@@ -225,7 +225,7 @@ def save_susc(
         out["MAE (ppm)"] = [model.mae for model in susc_models]
         out["RMSE (ppm)"] = [model.rmse for model in susc_models]
         for key in susc_models[0].fit_stdev:
-            if key == "rho_over_ax":
+            if key == "rh_over_ax":
                 continue
             out[f"chi_{key}-s-dev ({unit_label})"] = [
                 model.fit_stdev[key] * conv for model in susc_models

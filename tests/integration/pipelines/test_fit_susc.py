@@ -29,11 +29,11 @@ def _cli_env(tmp_path: Path) -> dict[str, str]:
 
 
 @pytest.mark.integration
-def test_fit_susc_with_pdip_hfc_isoaxrho_and_permutation_assignment(tmp_path: Path):
+def test_fit_susc_with_pdip_hfc_isoaxrh_and_permutation_assignment(tmp_path: Path):
     """Run the canonical ``fit_susc`` workflow with PDIP hyperfine input.
 
     This public happy-path case uses point-dipole hyperfine data from XYZ
-    coordinates together with the ``isoaxrho`` susceptibility fit model and
+    coordinates together with the ``isoaxrh`` susceptibility fit model and
     permutation-based assignment.
     """
     cwd = Path("examples/DyL1/SIMULATIONS/Fitting")

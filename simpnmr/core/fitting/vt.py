@@ -357,14 +357,14 @@ def compute_analytic_component(
             - (f_S / (30 * KB * t))
             * (D_J * (g_sq_ax + 3 * g_sq_iso) - 3 * E_J * g_sq_rh)
         ) / t
-    elif chi_component == "rho":
+    elif chi_component == "rh":
         analytic = (
             g_sq_rh
             + (f_S / (30 * KB * t)) * (E_J * (g_sq_ax - 3 * g_sq_iso) + D_J * g_sq_rh)
         ) / t
     else:
         raise ValueError(
-            f"Unknown chi_component={chi_component!r}; expected 'iso', 'ax', or 'rho'."
+            f"Unknown chi_component={chi_component!r}; expected 'iso', 'ax', or 'rh'."
         )
 
     return analytic

@@ -200,7 +200,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     name_to_susc_fit: dict[str, models.SusceptibilityModel] = {
         "full": models.FullSuscFitter,
         "split": models.SplitFitter,
-        "isoaxrho": models.IsoAxRhoFitter,
+        "isoaxrh": models.IsoAxRhFitter,
         "eigen": models.EigenFitter,
         "isoeigen": models.IsoEigenFitter,
     }

@@ -3,7 +3,7 @@
 
 """Fit temperature-dependent (VT) susceptibility components to experimental data.
 
-Fits iso/ax/rho susceptibility components using the VT model to extract
+Fits iso/ax/rh susceptibility components using the VT model to extract
 temperature dependence, optionally fixing the temperature-independent
 paramagnetism (TIP) from ab initio susceptibilities.
 """
@@ -29,7 +29,7 @@ from simpnmr.io.csv.fit import save_slope_intercept
 from simpnmr.io.qc import gateway as rdrs
 
 # Visualisation
-from simpnmr.viz.plots.susc import plot_exp_vs_ab_initio, plot_isoaxrho
+from simpnmr.viz.plots.susc import plot_exp_vs_ab_initio, plot_isoaxrh
 from simpnmr.viz.style.theme import apply_profile
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def fit_vt(
             fit window when TIP is fixed from ab initio data.
     """
     # Define the components to fit
-    fit_component = ["iso", "ax", "rho"]
+    fit_component = ["iso", "ax", "rh"]
 
     # Default to high-temperature limit unless the user explicitly requests vt_2nd_order
     method = config.susc_vt_method or "ht_limit"
@@ -102,7 +102,7 @@ def fit_vt(
     chi_vals = {
         "iso": np.array([mol.susc.iso for mol in molecules]),
         "ax": np.array([abs(mol.susc.axiality) for mol in molecules]),
-        "rho": np.array([abs(mol.susc.rhombicity) for mol in molecules]),
+        "rh": np.array([abs(mol.susc.rhombicity) for mol in molecules]),
     }
 
     # Optional ab initio series and analytic chi(T) curves
@@ -164,8 +164,8 @@ def fit_vt(
         # Compute the axial and rhombic parts of the effective Hamiltonian tensor (J)
         D_J, E_J = vt.calculate_E_D_components(eff_H_rot)
 
-        # Map VT component identifiers to explicit Susceptibility attribute names
-        comp_to_attr = {"iso": "iso_g_corr", "ax": "axiality", "rho": "rhombicity"}
+        # Map VT component identifiers to Susceptibility attribute names
+        comp_to_attr = {"iso": "iso_g_corr", "ax": "axiality", "rh": "rhombicity"}
 
         # Build the full ab initio chiT series
         ab_series_full = _build_ab_initio_chit_series(
@@ -255,9 +255,9 @@ def fit_vt(
                 [float(m.fit_stdev.get("ax") or 0.0) for m in susc_models], dtype=float
             )
 
-        if "rho" not in fix:
-            chi_errors["rho"] = np.asarray(
-                [float(m.fit_stdev.get("rho") or 0.0) for m in susc_models], dtype=float
+        if "rh" not in fix:
+            chi_errors["rh"] = np.asarray(
+                [float(m.fit_stdev.get("rh") or 0.0) for m in susc_models], dtype=float
             )
 
     # Create dictionaries to store fitted chiT values, errors, and fit parameters
@@ -312,7 +312,7 @@ def fit_vt(
 
     # Plot chiT temperature dependence
     with spec.context():
-        plot_isoaxrho(
+        plot_isoaxrh(
             vals=chiT_reduced,
             errs=chiT_err_reduced,
             params=chiT_fit_params,
@@ -326,12 +326,12 @@ def fit_vt(
             verbose=True,
         )
 
-    # Write iso/ax/rho fit parameters to CSV
-    out_file = os.path.join(config.project_name, "isoaxrho_fit.csv")
+    # Write iso/ax/rh fit parameters to CSV
+    out_file = os.path.join(config.project_name, "isoaxrh_fit.csv")
     fits_list = [
         chiT_fit_params.get("iso"),
         chiT_fit_params.get("ax"),
-        chiT_fit_params.get("rho"),
+        chiT_fit_params.get("rh"),
     ]
     save_slope_intercept(fits_list, spin=spin, file_name=out_file)
 
@@ -373,7 +373,7 @@ def _build_ab_initio_chit_series(
             ``inv_t``: Inverse temperatures in K^-1.
             ``iso``: chiT isotropic values in ``Å^3 K``.
             ``ax``: chiT axial values in ``Å^3 K``.
-            ``rho``: chiT rhombic values in ``Å^3 K``.
+            ``rh``: chiT rhombic values in ``Å^3 K``.
 
     Raises:
         ValueError: If ``suscs_ab_initio`` is empty.
@@ -422,12 +422,12 @@ def _build_ab_initio_chit_series(
 
     iso = iso_base * temps
     ax = np.array([float(s.axiality) for s in suscs_sorted], dtype=float) * temps
-    rho = np.array([float(s.rhombicity) for s in suscs_sorted], dtype=float) * temps
+    rh = np.array([float(s.rhombicity) for s in suscs_sorted], dtype=float) * temps
 
     return {
         "temps": temps,
         "inv_t": inv_t,
         "iso": iso,
         "ax": ax,
-        "rho": rho,
+        "rh": rh,
     }
