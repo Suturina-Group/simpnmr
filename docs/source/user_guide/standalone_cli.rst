@@ -88,6 +88,79 @@ All atoms belonging to the same group receive the same ``chem_label``, so
 their shifts are averaged during prediction.
 
 
+``calc_tau_c``
+--------------
+
+The ``calc_tau_c`` command estimates the isotropic rotational correlation time
+τ\ :sub:`R` from molecular coordinates using a hydrodynamic model.  Viscosity
+is taken from a built-in solvent database (with Arrhenius temperature
+correction) or supplied directly.
+
+**Available models**
+
+*Perrin ellipsoid* (default, ``--method ellipsoid``)
+   Fits the molecule to a triaxial ellipsoid and applies the Perrin analytical
+   rotational diffusion tensor.  Fast and suitable for compact, roughly
+   ellipsoidal molecules.
+
+*Bead-shell* (``--method beadshell``)
+   Covers the molecular surface with minibeads and builds a Rotne–Prager–Yamakawa
+   hydrodynamic interaction matrix.  More accurate for extended or irregular
+   shapes.
+
+**Required input**
+
+- A coordinate file (XYZ or PDB format)
+- One or more temperatures in Kelvin
+
+**Typical usage**
+
+::
+
+   simpnmr calc_tau_c molecule.xyz 298.0 --solvent D2O
+
+Multiple temperatures can be given in a single call::
+
+   simpnmr calc_tau_c molecule.xyz 280.0 298.0 310.0 --solvent D2O
+
+To supply a custom viscosity instead of using the solvent database::
+
+   simpnmr calc_tau_c molecule.xyz 298.0 --eta 1.1e-3
+
+**Options**
+
+``--solvent <name>``
+   Solvent name (e.g. ``D2O``, ``CDCl3``, ``DMSO-d6``, ``CD3OD``).
+   Viscosity is automatically corrected to each temperature using Arrhenius
+   scaling.  Run ``simpnmr calc_tau_c --help`` to see all available solvents.
+
+``--eta <float>``
+   Explicit solvent viscosity in Pa·s.  Overrides ``--solvent`` and is applied
+   unchanged at every temperature.
+
+``--method ellipsoid|beadshell``
+   Hydrodynamic model (default: ``ellipsoid``).
+
+``--shell <float>``
+   Thickness of the solvation shell added to all van der Waals radii (Å,
+   default: 0.0).
+
+``--sigma <float>``
+   Minibead radius for the bead-shell model (Å, default: 0.6).
+
+**Output**
+
+A summary table is printed to standard output::
+
+   T (K)   η (mPa·s)    τ_R (ps)   D_iso (rad²/s)  Anisotropy
+   ---------------------------------------------------------------
+   298.0      1.1000      152.3      1.0948e+07       1.450
+
+The computed τ\ :sub:`R` values can be fed directly into the
+``fit_relaxation:tau_r_fixed`` field (see :ref:`fit_relaxation block <fit-relaxation-block>`)
+or automated via ``tau_r_method`` (see below).
+
+
 ``get_sh``
 ----------
 

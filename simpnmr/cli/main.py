@@ -170,6 +170,47 @@ def get_sh_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     return run_get_sh(options)
 
 
+def calc_tau_c_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Compute rotational correlation time from molecular coordinates."""
+
+    from simpnmr.core.phys.tau_c import compute_tau_r, SOLVENTS
+
+    results = []
+    for temp in uargs.temperatures:
+        result = compute_tau_r(
+            xyz_file=uargs.xyz_file,
+            temperature=temp,
+            solvent=uargs.solvent,
+            eta=uargs.eta,
+            method=uargs.method,
+            shell=uargs.shell,
+            sigma=uargs.sigma,
+        )
+        results.append((temp, result))
+
+    # Print summary table
+    header = f"{'T (K)':>8}  {'η (mPa·s)':>10}  {'τ_R (ps)':>10}  {'D_iso (rad²/s)':>16}  {'Anisotropy':>10}"
+    print(header)
+    print("-" * len(header))
+    for temp, r in results:
+        if r is None:
+            print(f"{temp:8.1f}  {'—':>10}  {'—':>10}  {'—':>16}  {'—':>10}")
+            continue
+        eta_mpa = r["eta"] * 1e3
+        tau_ps = r["tau_iso"] * 1e12
+        d_iso = r["D_iso"]
+        aniso = r.get("anisotropy", float("nan"))
+        print(
+            f"{temp:8.1f}  {eta_mpa:10.4f}  {tau_ps:10.1f}  {d_iso:16.4e}  {aniso:10.3f}"
+        )
+
+    if uargs.solvent and not uargs.eta:
+        avail = ", ".join(sorted(SOLVENTS.keys()))
+        logger.debug("Available solvents: %s", avail)
+
+    return 0
+
+
 def read_args(arg_list=None):
     """
     Parse CLI arguments and dispatch to the selected subcommand handler.
@@ -597,6 +638,77 @@ def read_args(arg_list=None):
         "input_file",
         type=str,
         help="Input file for fit_corr_time -- see documentation for format",
+    )
+
+    calc_tau_c = subparsers.add_parser(
+        "calc_tau_c",
+        description=(
+            "Calculate rotational correlation time τ_R from molecular coordinates "
+            "using the Perrin ellipsoid (default) or bead-shell hydrodynamic model"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    calc_tau_c.set_defaults(func=calc_tau_c_cli)
+
+    calc_tau_c.add_argument(
+        "xyz_file",
+        type=str,
+        help="Molecular coordinate file (.xyz or .pdb)",
+    )
+
+    calc_tau_c.add_argument(
+        "temperatures",
+        type=float,
+        nargs="+",
+        help="Temperature(s) in K",
+    )
+
+    calc_tau_c.add_argument(
+        "--solvent",
+        type=str,
+        default=None,
+        metavar="<str>",
+        help=(
+            "Solvent name for viscosity lookup (e.g. D2O, CDCl3, DMSO-d6).\n"
+            "Viscosity is corrected to each temperature via Arrhenius scaling.\n"
+            "Use --eta to supply a custom viscosity directly."
+        ),
+    )
+
+    calc_tau_c.add_argument(
+        "--eta",
+        type=float,
+        default=None,
+        metavar="<float>",
+        help="Solvent viscosity in Pa·s (overrides --solvent)",
+    )
+
+    calc_tau_c.add_argument(
+        "--method",
+        choices=["ellipsoid", "beadshell"],
+        default="ellipsoid",
+        metavar="<str>",
+        help=(
+            "Hydrodynamic model to use:\n"
+            " - 'ellipsoid': Perrin triaxial ellipsoid (default, fast)\n"
+            " - 'beadshell': HYDRONMR-style bead-shell (slower, more accurate)\n"
+        ),
+    )
+
+    calc_tau_c.add_argument(
+        "--shell",
+        type=float,
+        default=0.0,
+        metavar="<float>",
+        help="Solvent shell thickness added to vdW radii (Å, default: 0.0)",
+    )
+
+    calc_tau_c.add_argument(
+        "--sigma",
+        type=float,
+        default=0.6,
+        metavar="<float>",
+        help="Minibead radius for bead-shell model (Å, default: 0.6)",
     )
 
     # Read sub-parser and parse arguments

@@ -197,29 +197,64 @@ def _load_wide_experiments(file_name: str) -> list[Experiment]:
         temp_row.pop()
     while len(field_row) > 1 and field_row[-1].strip() == "":
         field_row.pop()
+    while len(header_row) > 1 and header_row[-1].strip() == "":
+        header_row.pop()
 
     n_data_cols = len(temp_row) - 1  # columns after the label cell
 
-    temperatures = [float(temp_row[i + 1]) for i in range(n_data_cols)]
-    fields = [float(field_row[i + 1]) for i in range(n_data_cols)]
-    col_names = [header_row[i + 1] for i in range(n_data_cols)]
+    # Columns with empty T and B are global metadata (e.g. a single isotope
+    # column that applies to all conditions).
+    global_col_map: dict[str, int] = {}
+    temp_vals: list[str] = []
+    field_vals: list[str] = []
+    col_names: list[str] = []
+    global_indices: list[int] = []  # original positions of global cols
+
+    for i in range(n_data_cols):
+        t_raw = temp_row[i + 1].strip() if i + 1 < len(temp_row) else ""
+        b_raw = field_row[i + 1].strip() if i + 1 < len(field_row) else ""
+        name = header_row[i + 1].strip() if i + 1 < len(header_row) else ""
+        if t_raw == "" and b_raw == "":
+            global_col_map[_norm(name)] = i
+            global_indices.append(i)
+        else:
+            temp_vals.append(t_raw)
+            field_vals.append(b_raw)
+            col_names.append(name)
+
+    temperatures = [float(v) for v in temp_vals]
+    fields = [float(v) for v in field_vals]
 
     # Unique (T, B) conditions in file order
     conditions: list[tuple[float, float]] = list(
         dict.fromkeys(zip(temperatures, fields))
     )
 
-    # For each condition, record which column indices belong to it
+    # For each condition, record which column indices belong to it.
+    # The index stored here is the position in the *original* data row
+    # (col 0 = assignment, col i+1 = data col i).
+    # We need to map from the filtered col_names back to original positions.
+    original_idx: list[int] = []  # maps filtered index → original data-col index
+    filtered_pos = 0
+    for i in range(n_data_cols):
+        if i not in global_indices:
+            original_idx.append(i)
+            filtered_pos += 1
+
     cond_col_map: dict[tuple, list[tuple[int, str]]] = {
         c: [] for c in conditions
     }
-    for i, (t, b) in enumerate(zip(temperatures, fields)):
-        cond_col_map[(t, b)].append((i, col_names[i]))
+    for j, (t, b) in enumerate(zip(temperatures, fields)):
+        cond_col_map[(t, b)].append((original_idx[j], col_names[j]))
 
     experiments: list[Experiment] = []
     for (T, B), cols in cond_col_map.items():
-        # Build normalised name -> data-column index mapping for this block
+        # Build normalised name -> original data-column index for this block,
+        # then fall back to global columns for any missing alias.
         name_to_idx: dict[str, int] = {_norm(name): idx for idx, name in cols}
+        name_to_idx.update(
+            {k: v for k, v in global_col_map.items() if k not in name_to_idx}
+        )
 
         def _find_idx(aliases: set) -> int | None:
             for a in aliases:
@@ -249,10 +284,7 @@ def _load_wide_experiments(file_name: str) -> list[Experiment]:
                 continue
             assignment = row[0].strip()
             if not assignment:
-                raise ValueError(
-                    f"{file_name}: row has an empty assignment. "
-                    "Every signal must have a unique assignment label."
-                )
+                continue
 
             def _get(idx: int | None) -> float | None:
                 if idx is None:

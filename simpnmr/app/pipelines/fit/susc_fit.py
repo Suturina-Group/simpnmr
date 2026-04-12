@@ -162,6 +162,38 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         comment=f"Structure from {config.hyperfine_file}",
     )
 
+    # Pre-compute τ_R per temperature when hydrodynamic parameters are given
+    _tau_r_by_temp: dict[float, float] = {}
+    if config.fit_relaxation_tau_r_method is not None:
+        from simpnmr.core.phys.tau_c import compute_tau_r
+
+        _struct_xyz = os.path.join(config.project_name, "structure.xyz")
+        _temps_seen: set[float] = set()
+        for _exp in load_experiments(config.experiment_files):
+            if _exp.temperature in _temps_seen:
+                continue
+            _temps_seen.add(_exp.temperature)
+            try:
+                _tau_r_result = compute_tau_r(
+                    xyz_file=_struct_xyz,
+                    temperature=_exp.temperature,
+                    solvent=config.fit_relaxation_tau_r_solvent,
+                    eta=config.fit_relaxation_tau_r_eta,
+                    method=config.fit_relaxation_tau_r_method,
+                    shell=config.fit_relaxation_tau_r_shell or 0.0,
+                    sigma=config.fit_relaxation_tau_r_sigma or 0.6,
+                )
+                if _tau_r_result is not None:
+                    _tau_r_by_temp[_exp.temperature] = _tau_r_result["tau_iso"]
+                    logger.info(
+                        "τ_R (%s) at %.1f K: %.1f ps",
+                        config.fit_relaxation_tau_r_method,
+                        _exp.temperature,
+                        _tau_r_result["tau_iso"] * 1e12,
+                    )
+            except ValueError as err:
+                logger.warning("τ_R calculation at %.1f K failed: %s", _exp.temperature, err)
+
     # Apply rotation matrix to all hyperfine tensors
     # if requested
     if len(config.hyperfine_rotate):
@@ -685,6 +717,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                             f" at {experiment.temperature:.2f} K"
                         ),
                     )
+                _tau_R_fixed = (
+                    _tau_r_by_temp.get(experiment.temperature)
+                    or config.fit_relaxation_tau_r_fixed
+                )
                 with spec.context():
                     plot_tau_space(
                         r6_result,
@@ -700,6 +736,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         spec=spec,
                         tau_e_range=config.fit_relaxation_tau_e_range,
                         tau_r_range=config.fit_relaxation_tau_r_range,
+                        tau_R_fixed=_tau_R_fixed,
                         show=options.runtime.show_plots,
                         save=True,
                         save_name=os.path.join(
@@ -739,6 +776,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         spec=spec,
                         tau_e_range=config.fit_relaxation_tau_e_range,
                         tau_r_range=config.fit_relaxation_tau_r_range,
+                        tau_R_fixed=_tau_R_fixed,
                         show=options.runtime.show_plots,
                         save=True,
                         save_name=os.path.join(

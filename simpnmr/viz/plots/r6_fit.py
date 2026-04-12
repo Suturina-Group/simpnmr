@@ -189,6 +189,7 @@ def plot_tau_space(
     tau_r_range: list[float] | None = None,
     n_points: int = 120,
     confidence: float = 0.95,
+    tau_R_fixed: float | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "r6_tau_space",
@@ -217,6 +218,10 @@ def plot_tau_space(
         spec: Plot style specification.
         n_points: Grid resolution along each axis.
         confidence: Confidence level for the shaded band (default 0.95).
+        tau_R_fixed: Optional fixed τ_R value (seconds). When provided, a
+            horizontal line is drawn at this τ_R, its intersection with the
+            central contour (p1_calc = p1_fit) is found, and the derived τ_e
+            is annotated on the figure.
         save: Save the figure if ``True``.
         show: Display the figure if ``True``.
         save_name: Output file base name.
@@ -239,6 +244,10 @@ def plot_tau_space(
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
     _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
     _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    # Ensure tau_R_fixed is within the computed grid
+    if tau_R_fixed is not None:
+        _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
+        _tau_r_hi = max(_tau_r_hi, np.log10(tau_R_fixed) + 0.5)
     tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
     tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
 
@@ -409,6 +418,90 @@ def plot_tau_space(
         ),
     )
 
+    if tau_R_fixed is not None:
+        tau_R_plot = tau_R_fixed * _tau_r_scale
+        ax.axhline(
+            tau_R_plot,
+            color=palette.highlight,
+            lw=1.5,
+            linestyle="--",
+            zorder=10,
+        )
+
+        # Find τ_e at the intersection with the central contour (log_ratio=0)
+        # by interpolating log_ratio along the row closest to tau_R_fixed.
+        r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
+        lr_row = log_ratio[:, r_idx]  # shape (N_e,), varies with tau_e
+        # Find sign changes → zero crossings
+        sign_changes = np.where(np.diff(np.sign(lr_row)))[0]
+        tau_e_intersections: list[float] = []
+        for sc in sign_changes:
+            # Linear interpolation between sc and sc+1
+            lr0, lr1 = lr_row[sc], lr_row[sc + 1]
+            te0, te1 = tau_e[sc], tau_e[sc + 1]
+            frac = -lr0 / (lr1 - lr0)
+            tau_e_intersections.append(te0 * (te1 / te0) ** frac)
+
+        for tau_e_cross in tau_e_intersections:
+            tau_e_cross_plot = tau_e_cross * _tau_e_scale
+            ax.axvline(
+                tau_e_cross_plot,
+                color=palette.highlight,
+                lw=0.8,
+                linestyle=":",
+                zorder=5,
+            )
+            ax.plot(
+                tau_e_cross_plot,
+                tau_R_plot,
+                marker="x",
+                color=palette.highlight,
+                markersize=8,
+                markeredgewidth=1.5,
+                zorder=6,
+            )
+
+        if tau_e_intersections:
+            # Format τ_e values for annotation
+            def _fmt_tau(t_s: float) -> str:
+                if t_s < 1e-12:
+                    return f"{t_s * 1e15:.2g} fs"
+                if t_s < 1e-9:
+                    return f"{t_s * 1e12:.2g} ps"
+                return f"{t_s * 1e9:.2g} ns"
+
+            def _fmt_tau_r(t_s: float) -> str:
+                if t_s < 1e-9:
+                    return f"{t_s * 1e12:.2g} ps"
+                if t_s < 1e-6:
+                    return f"{t_s * 1e9:.2g} ns"
+                return f"{t_s * 1e6:.2g} µs"
+
+            te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
+            ann_tau = (
+                f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}\n"
+                f"$\\tau_e$ = {te_strs}"
+            )
+            ax.text(
+                0.03, 0.03, ann_tau,
+                transform=ax.transAxes,
+                ha="left", va="bottom",
+                fontsize=spec.typography.annotation,
+                color=palette.highlight,
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor=palette.annotation_bg,
+                    edgecolor=palette.highlight,
+                    alpha=0.8,
+                ),
+            )
+        else:
+            logger.warning(
+                "tau_R_fixed=%.3g s: no intersection with central contour "
+                "found. Adjust tau_e_range or tau_r_range.",
+                tau_R_fixed,
+            )
+
     render_figure(fig, save=save, show=show, save_name=save_name)
 
     if save and verbose:
@@ -431,6 +524,7 @@ def plot_tau_space_combined(
     spec: PlotSpec = None,
     tau_e_range: list[float] | None = None,
     tau_r_range: list[float] | None = None,
+    tau_R_fixed: float | None = None,
     n_points: int = 120,
     confidence: float = 0.95,
     save: bool = True,
@@ -462,6 +556,11 @@ def plot_tau_space_combined(
         spec: Plot style specification.
         tau_e_range: Optional [min, max] in seconds for τe axis.
         tau_r_range: Optional [min, max] in seconds for τR axis.
+        tau_R_fixed: Optional fixed τ_R value (seconds). When provided, a
+            dashed horizontal line is drawn at that τ_R for both observables.
+            Dotted vertical lines and cross markers are placed at each
+            observable's intersection with the central contour, using that
+            observable's colour.
         n_points: Grid resolution along each axis.
         confidence: Confidence level for shaded bands.
         save: Save the figure if ``True``.
@@ -482,6 +581,10 @@ def plot_tau_space_combined(
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
     _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
     _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+
+    if tau_R_fixed is not None:
+        _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
+        _tau_r_hi = max(_tau_r_hi, np.log10(tau_R_fixed) + 0.5)
     tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
     tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
 
@@ -630,6 +733,93 @@ def plot_tau_space_combined(
             alpha=0.8,
         ),
     )
+
+    if tau_R_fixed is not None:
+        tau_R_plot = tau_R_fixed * _tau_r_scale
+        ax.axhline(
+            tau_R_plot,
+            color=palette.grid,
+            lw=1.5,
+            linestyle="--",
+            zorder=10,
+        )
+
+        def _fmt_tau(t_s: float) -> str:
+            if t_s < 1e-12:
+                return f"{t_s * 1e15:.2g} fs"
+            if t_s < 1e-9:
+                return f"{t_s * 1e12:.2g} ps"
+            return f"{t_s * 1e9:.2g} ns"
+
+        def _fmt_tau_r(t_s: float) -> str:
+            if t_s < 1e-9:
+                return f"{t_s * 1e12:.2g} ps"
+            if t_s < 1e-6:
+                return f"{t_s * 1e9:.2g} ns"
+            return f"{t_s * 1e6:.2g} µs"
+
+        r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
+        ann_lines = [f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}"]
+
+        for lr, color, obs_label in [
+            (lr_r1, palette.primary, "$R_1$"),
+            (lr_lw, palette.highlight, "width"),
+        ]:
+            # lr_r1 / lr_lw come from _log_ratio_grid which returns lr.T,
+            # shape (n_tau_R, n_tau_e).  Row r_idx fixes tau_R, columns vary
+            # with tau_e — the same slice used in plot_tau_space's log_ratio.
+            lr_row = lr[r_idx, :]
+            sign_changes = np.where(np.diff(np.sign(lr_row)))[0]
+            tau_e_intersections = []
+            for sc in sign_changes:
+                lr0, lr1 = lr_row[sc], lr_row[sc + 1]
+                te0, te1 = tau_e[sc], tau_e[sc + 1]
+                frac = -lr0 / (lr1 - lr0)
+                tau_e_intersections.append(te0 * (te1 / te0) ** frac)
+
+            for tau_e_cross in tau_e_intersections:
+                tau_e_cross_plot = tau_e_cross * _tau_e_scale
+                ax.axvline(
+                    tau_e_cross_plot,
+                    color=color,
+                    lw=0.8,
+                    linestyle=":",
+                    zorder=5,
+                )
+                ax.plot(
+                    tau_e_cross_plot,
+                    tau_R_plot,
+                    marker="x",
+                    color=color,
+                    markersize=8,
+                    markeredgewidth=1.5,
+                    zorder=6,
+                )
+
+            if tau_e_intersections:
+                te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
+                ann_lines.append(f"$\\tau_e$({obs_label}) = {te_strs}")
+            else:
+                logger.warning(
+                    "tau_R_fixed=%.3g s: no intersection with %s central "
+                    "contour. Adjust tau_e_range or tau_r_range.",
+                    tau_R_fixed, obs_label,
+                )
+
+        if len(ann_lines) > 1:
+            ax.text(
+                0.03, 0.03, "\n".join(ann_lines),
+                transform=ax.transAxes,
+                ha="left", va="bottom",
+                fontsize=spec.typography.annotation,
+                color=palette.primary,
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor=palette.annotation_bg,
+                    edgecolor=palette.grid,
+                    alpha=0.8,
+                ),
+            )
 
     render_figure(fig, save=save, show=show, save_name=save_name)
 

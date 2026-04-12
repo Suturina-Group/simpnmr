@@ -704,6 +704,17 @@ are present in the experiment files.
         # τR axis range for τ-space heatmap plots [Optional]
         tau_r_range: [1.0e-10, 1.0e-7]   # [min, max] in s
 
+        # Known rotational correlation time to overlay on τ-space plots [Optional]
+        tau_r_fixed: 1.5e-9  # s
+
+        # Automatic τR calculation from structure (Optional)
+        # Requires tau_r_method plus either tau_r_solvent or tau_r_eta.
+        tau_r_method: ellipsoid       # "ellipsoid" (default) or "beadshell"
+        tau_r_solvent: D2O            # solvent name for viscosity lookup
+        # tau_r_eta: 1.1e-3           # explicit viscosity (Pa·s); overrides tau_r_solvent
+        # tau_r_shell: 0.0            # solvation shell thickness added to vdW radii (Å)
+        # tau_r_sigma: 0.6            # minibead radius for bead-shell model (Å)
+
 .. note::
 
    **Contact contribution subtraction**
@@ -725,6 +736,83 @@ are present in the experiment files.
    If ``tau_e`` is omitted (default) no subtraction is performed and the fit
    is identical to the previous behaviour.  The ``p2`` intercept term then
    absorbs both diamagnetic and contact baseline contributions.
+
+.. note::
+
+   **Overlaying a known τ\ :sub:`R` on τ-space plots**
+
+   When ``tau_r_fixed`` is provided, each τ-space heatmap plot receives an
+   additional overlay:
+
+   - A dashed horizontal line drawn at the specified τ\ :sub:`R` value.
+   - A dotted vertical line and a cross marker at every intersection of that
+     horizontal with the central contour (p\ :sub:`1`\ :sup:`calc` =
+     p\ :sub:`1`\ :sup:`fit`), indicating the τ\ :sub:`e` value consistent
+     with the fitted slope at the given τ\ :sub:`R`.
+   - A bottom-left annotation reporting both τ\ :sub:`R` and the derived
+     τ\ :sub:`e`.
+
+   The grid is automatically extended to include ``tau_r_fixed`` even if it
+   falls outside the ``tau_r_range`` window, so the heatmap colours are
+   always shown across the full displayed region.
+
+   This is useful when τ\ :sub:`R` has been determined independently (e.g.
+   from NMR diffusion measurements or molecular dynamics) and you want to
+   read off the implied τ\ :sub:`e` directly from the plot.
+
+.. note::
+
+   **Automatic τ\ :sub:`R` calculation from molecular structure**
+
+   Setting ``tau_r_method`` enables automatic per-temperature τ\ :sub:`R`
+   computation from the molecular coordinates that are already loaded by the
+   pipeline (the same structure used for the hyperfine tensor calculation).
+   The result is used as ``tau_r_fixed`` for each individual τ-space plot —
+   overriding any manually specified ``tau_r_fixed`` value.
+
+   ``tau_r_method`` must be accompanied by either ``tau_r_solvent`` (for
+   automatic Arrhenius-corrected viscosity) or ``tau_r_eta`` (for a fixed
+   user-supplied viscosity):
+
+   .. code-block:: yaml
+
+       fit_relaxation:
+           tau_r_method: ellipsoid
+           tau_r_solvent: D2O         # viscosity corrected per temperature
+
+   Alternatively, supply the viscosity explicitly (useful for non-standard
+   solvents or when the Arrhenius correction is not desired):
+
+   .. code-block:: yaml
+
+       fit_relaxation:
+           tau_r_method: ellipsoid
+           tau_r_eta: 1.1e-3          # Pa·s, applied at every temperature
+
+   **Models**
+
+   *ellipsoid*
+      The molecule is approximated by a triaxial ellipsoid; the Perrin
+      analytical rotational diffusion tensor is computed from the three
+      principal semi-axes.  Fast and appropriate for compact molecules.
+
+   *beadshell*
+      The molecular surface is covered with minibeads (radius ``tau_r_sigma``,
+      default 0.6 Å) and the rotational diffusion tensor is obtained from the
+      Rotne–Prager–Yamakawa hydrodynamic interaction matrix.  More accurate
+      for non-ellipsoidal or highly elongated structures.
+
+   **Solvation shell**
+
+   Both models can include a solvation shell of thickness ``tau_r_shell``
+   (Å, default 0.0) added uniformly to all van der Waals radii before
+   computing the molecular shape.
+
+   **Standalone tool**
+
+   τ\ :sub:`R` values can also be calculated independently, outside a
+   ``fit_susc`` run, using the ``simpnmr calc_tau_c`` command
+   (see :doc:`standalone_cli`).
 
 .. note::
 

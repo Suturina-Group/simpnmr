@@ -186,6 +186,12 @@ class FitSuscConfig(Config):
             "tau_e_range",
             "tau_r_range",
             "tau_e",
+            "tau_r_fixed",
+            "tau_r_method",
+            "tau_r_solvent",
+            "tau_r_eta",
+            "tau_r_shell",
+            "tau_r_sigma",
         ],
     }
 
@@ -245,6 +251,12 @@ class FitSuscConfig(Config):
         self._fit_relaxation_tau_e_range = None
         self._fit_relaxation_tau_r_range = None
         self._fit_relaxation_tau_e = None
+        self._fit_relaxation_tau_r_fixed = None
+        self._fit_relaxation_tau_r_method = None
+        self._fit_relaxation_tau_r_solvent = None
+        self._fit_relaxation_tau_r_eta = None
+        self._fit_relaxation_tau_r_shell = None
+        self._fit_relaxation_tau_r_sigma = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -1191,6 +1203,94 @@ class FitSuscConfig(Config):
         if v <= 0:
             raise ValueError("fit_relaxation:tau_e must be positive")
         self._fit_relaxation_tau_e = v
+
+    @property
+    def fit_relaxation_tau_r_fixed(self) -> float | None:
+        """Fixed τR (s) to overlay as a horizontal line on τ-space plots."""
+        return self._fit_relaxation_tau_r_fixed
+
+    @fit_relaxation_tau_r_fixed.setter
+    def fit_relaxation_tau_r_fixed(self, value):
+        if value is None:
+            self._fit_relaxation_tau_r_fixed = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_fixed must be positive")
+        self._fit_relaxation_tau_r_fixed = v
+
+    @property
+    def fit_relaxation_tau_r_method(self) -> str | None:
+        """Hydrodynamic model for τ_R calculation ('ellipsoid' or 'beadshell')."""
+        return self._fit_relaxation_tau_r_method
+
+    @fit_relaxation_tau_r_method.setter
+    def fit_relaxation_tau_r_method(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_method = None
+            return
+        if value not in ("ellipsoid", "beadshell"):
+            raise ValueError(
+                "fit_relaxation:tau_r_method must be 'ellipsoid' or 'beadshell'"
+            )
+        self._fit_relaxation_tau_r_method = value
+
+    @property
+    def fit_relaxation_tau_r_solvent(self) -> str | None:
+        """Solvent name for viscosity lookup when computing τ_R."""
+        return self._fit_relaxation_tau_r_solvent
+
+    @fit_relaxation_tau_r_solvent.setter
+    def fit_relaxation_tau_r_solvent(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_solvent = None
+            return
+        self._fit_relaxation_tau_r_solvent = str(value)
+
+    @property
+    def fit_relaxation_tau_r_eta(self) -> float | None:
+        """Explicit solvent viscosity (Pa·s) for τ_R calculation, overrides solvent."""
+        return self._fit_relaxation_tau_r_eta
+
+    @fit_relaxation_tau_r_eta.setter
+    def fit_relaxation_tau_r_eta(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_eta = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_eta must be positive")
+        self._fit_relaxation_tau_r_eta = v
+
+    @property
+    def fit_relaxation_tau_r_shell(self) -> float | None:
+        """Solvent shell thickness (Å) added to vdW radii when computing τ_R."""
+        return self._fit_relaxation_tau_r_shell
+
+    @fit_relaxation_tau_r_shell.setter
+    def fit_relaxation_tau_r_shell(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_shell = None
+            return
+        v = float(value)
+        if v < 0:
+            raise ValueError("fit_relaxation:tau_r_shell must be non-negative")
+        self._fit_relaxation_tau_r_shell = v
+
+    @property
+    def fit_relaxation_tau_r_sigma(self) -> float | None:
+        """Minibead radius (Å) for the bead-shell τ_R model."""
+        return self._fit_relaxation_tau_r_sigma
+
+    @fit_relaxation_tau_r_sigma.setter
+    def fit_relaxation_tau_r_sigma(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_sigma = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_sigma must be positive")
+        self._fit_relaxation_tau_r_sigma = v
 
     @classmethod
     def from_file(cls, file_name) -> "FitSuscConfig":
