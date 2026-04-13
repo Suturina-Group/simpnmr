@@ -51,8 +51,10 @@ def create_stacked_canvas(
     layout: str = "constrained",
     sharex: bool = False,
     sharey: bool = False,
+    hspace: float = 0.05,
+    height_ratios: list[float] | None = None,
 ) -> tuple[Figure, np.ndarray]:
-    """Create a vertically stacked Matplotlib canvas from canonical layout tokens.
+    """Create a vertically stacked canvas from canonical layout tokens.
 
     Args:
         profile: Plotting profile that selects the publication context.
@@ -62,6 +64,10 @@ def create_stacked_canvas(
         layout: Matplotlib layout engine passed to ``plt.subplots``.
         sharex: Whether stacked axes should share the x-axis.
         sharey: Whether stacked axes should share the y-axis.
+        hspace: Vertical spacing between rows as a fraction of the average
+            subplot height (passed to ``gridspec_kw``).
+        height_ratios: Relative heights of each row. When supplied, the list
+            length must equal ``nrows``.
 
     Returns:
         Tuple of ``(fig, axes)`` for a vertically stacked plotting canvas.
@@ -72,6 +78,10 @@ def create_stacked_canvas(
     if nrows < 1:
         raise ValueError("nrows must be at least 1 for a stacked canvas.")
 
+    gridspec_kw: dict = {"hspace": hspace}
+    if height_ratios is not None:
+        gridspec_kw["height_ratios"] = height_ratios
+
     fig, axes = plt.subplots(
         nrows,
         1,
@@ -80,6 +90,7 @@ def create_stacked_canvas(
         layout=layout,
         sharex=sharex,
         sharey=sharey,
+        gridspec_kw=gridspec_kw,
     )
     return fig, axes
 

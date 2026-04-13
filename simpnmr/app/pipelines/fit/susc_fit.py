@@ -46,6 +46,7 @@ from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
 
 # IO layer
 from simpnmr.io.csv.fit import save_r6_fit
+from simpnmr.io.csv.spec import read_spectrum
 from simpnmr.io.csv.mol import save_molecule_to_csv
 from simpnmr.io.csv.susc import save_susc
 from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
@@ -220,6 +221,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
     # Create experiments
     experiments = load_experiments(config.experiment_files)
+
+    # Attach raw spectrum and reference ppm if provided in config
+    if config.experiment_spectrum_files:
+        for experiment, spectrum_path in zip(
+            experiments, config.experiment_spectrum_files
+        ):
+            experiment.spectrum = read_spectrum(spectrum_path)
+            experiment.exp_reference = config.experiment_exp_reference
 
     # Check the number of experiments is consistent across the files
     # and issue warning if not
