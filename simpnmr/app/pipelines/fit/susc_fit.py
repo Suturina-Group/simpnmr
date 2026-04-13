@@ -587,56 +587,59 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 spin=spin,
             )
 
-        with spec.context():
-            plot_shift_spread(
-                molecule,
-                experiment,
-                spec=spec,
-                terms=_terms,
-                show=options.runtime.show_plots,
-                save=True,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"shift_spread_{molecule.susc.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    f"Spread of predicted shift components "
-                    f"at {experiment.temperature:.2f} K"
-                ),
-                order="descending",
-            )
+        # Unique isotopes in molecule (insertion-ordered)
+        _isotopes_mol = list(
+            dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+        )
 
-        with spec.context():
-            plot_shift_contrib(
-                molecule,
-                experiment,
-                spec=spec,
-                terms=_terms,
-                show=options.runtime.show_plots,
-                save=True,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"mean_components_{experiment.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    "Predicted shift components at "
-                    f"{experiment.temperature:.2f} K"
-                ),
-                order="descending",
-            )
+        for _iso in _isotopes_mol:
+            _T = experiment.temperature
+            with spec.context():
+                plot_shift_spread(
+                    molecule,
+                    experiment,
+                    spec=spec,
+                    terms=_terms,
+                    isotope_filter=_iso,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"shift_spread_{_iso}_{_T:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Spread of predicted shift components "
+                        f"({_iso}) at {_T:.2f} K"
+                    ),
+                    order="descending",
+                )
+
+            with spec.context():
+                plot_shift_contrib(
+                    molecule,
+                    experiment,
+                    spec=spec,
+                    terms=_terms,
+                    isotope_filter=_iso,
+                    show=options.runtime.show_plots,
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"mean_components_{_iso}_{_T:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Predicted shift components ({_iso}) at {_T:.2f} K"
+                    ),
+                    order="descending",
+                )
 
         # r^-6 distance-model fits (R1 and linewidth) — one fit per isotope
         _width_fit_result_by_iso: dict = {}
         _r1_fit_result_by_iso: dict = {}
         _relaxation_model = getattr(config, "relaxation_model", "sbm curie")
         _omega_S_r6 = -EGAMMA * experiment.magnetic_field * 2 * np.pi * 1e6
-
-        # Unique isotopes present in the molecule (insertion-ordered)
-        _isotopes_mol = list(
-            dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
-        )
 
         for _iso_r6 in _isotopes_mol:
             _gamma_I_r6 = get_nuclear_gamma(_iso_r6) * 2 * np.pi * 1e6
@@ -809,6 +812,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     spec=spec,
                     observable="width",
                     fit_result=_width_fit_result_by_iso.get(_iso_bubble),
+                    isotope_filter=_iso_bubble,
                     show=options.runtime.show_plots,
                     save=True,
                     save_name=os.path.join(
@@ -823,7 +827,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
             # Shift vs R1 bubble plot (only when R1 data is present)
             if _r1_fit_result_by_iso.get(_iso_bubble) is not None or any(
-                sig.r1 is not None for sig in experiment.signals
+                sig.r1 is not None and sig.isotope == _iso_bubble
+                for sig in experiment.signals
             ):
                 with spec.context():
                     plot_shift_width_bubble(
@@ -832,6 +837,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         spec=spec,
                         observable="r1",
                         fit_result=_r1_fit_result_by_iso.get(_iso_bubble),
+                        isotope_filter=_iso_bubble,
                         show=options.runtime.show_plots,
                         save=True,
                         save_name=os.path.join(

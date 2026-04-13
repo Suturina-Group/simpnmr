@@ -27,7 +27,7 @@ from simpnmr.viz.style.theme import PlotSpec
 logger = logging.getLogger(__name__)
 
 _MARKER_SIZE = 60   # reference marker area (points²)
-_MAX_MARKER  = 300  # cap on scaled marker area
+_MAX_MARKER = 300  # cap on scaled marker area
 
 _Y_LABELS = {
     "width": "Linewidth (ppm)",
@@ -43,6 +43,7 @@ def plot_shift_width_bubble(
     spec: PlotSpec,
     observable: str = "width",
     fit_result: dict | None = None,
+    isotope_filter: str | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "shift_width_bubble",
@@ -72,6 +73,7 @@ def plot_shift_width_bubble(
     # ------------------------------------------------------------------
     cl_to_size: dict[str, int] = {}
     cl_to_pred_shift: dict[str, float] = {}
+    cl_to_math_label: dict[str, str] = {}
     for nuc in molecule.nuclei:
         cl_to_size[nuc.chem_label] = (
             cl_to_size.get(nuc.chem_label, 0) + 1
@@ -82,6 +84,7 @@ def plot_shift_width_bubble(
             if prev is None
             else (prev + float(nuc.shift.avg)) / 2
         )
+        cl_to_math_label[nuc.chem_label] = nuc.chem_math_label
 
     # Predicted observable y via p1 * mean(1/r^6) + p2
     cl_to_pred_y: dict[str, float] = {}
@@ -115,6 +118,8 @@ def plot_shift_width_bubble(
     exp_assignments: set[str] = set()
 
     for sig in experiment.signals:
+        if isotope_filter is not None and sig.isotope != isotope_filter:
+            continue
         cl = sig.assignment
         exp_assignments.add(cl)
         y = sig.r1 if observable == "r1" else sig.width
@@ -124,9 +129,10 @@ def plot_shift_width_bubble(
             "shift": sig.shift,
             "pred_shift": cl_to_pred_shift.get(cl, sig.shift),
             "y": float(y),
-            "label": cl,
+            "label": cl_to_math_label.get(cl, cl),
             "pred": label_to_pred.get(cl),
             "area": float(sig.area),
+            "group_size": cl_to_size.get(cl, 1),
         }
         if cl in cl_to_size:
             matched.append(record)
@@ -145,7 +151,7 @@ def plot_shift_width_bubble(
             {
                 "pred_shift": pred_shift,
                 "pred_y": pred_y,
-                "label": cl,
+                "label": cl_to_math_label.get(cl, cl),
                 "group_size": cl_to_size[cl],
             }
         )
@@ -217,10 +223,11 @@ def plot_shift_width_bubble(
 
     has_pred = [r for r in matched if r["pred"] is not None]
     if has_pred:
+        _scale_pred_matched(has_pred, matched)
         ax_m.scatter(
             [r["pred_shift"] for r in has_pred],
             [r["pred"] for r in has_pred],
-            s=_MARKER_SIZE,
+            s=[r["marker_size"] for r in has_pred],
             facecolors="none",
             edgecolors=palette.primary,
             linewidths=1.2,
@@ -336,4 +343,33 @@ def _scale_by_group(records: list[dict]) -> None:
         r["marker_size"] = min(
             _MAX_MARKER,
             max(10.0, _MARKER_SIZE * r["group_size"] / ref),
+        )
+
+
+def _scale_pred_matched(pred_records: list[dict], exp_records: list[dict]) -> None:
+    """Scale predicted open circles to match experimental filled circles.
+
+    Computes the median area-per-nucleus from experimental records, then
+    treats each predicted group as having ``group_size * area_per_nuc``
+    equivalent area.  Using the same median-area reference as
+    ``_scale_by_area`` ensures the two marker series are on the same scale.
+    """
+    if not pred_records:
+        return
+    if exp_records:
+        areas = np.array([r["area"] for r in exp_records], dtype=float)
+        sizes = np.array([r["group_size"] for r in exp_records], dtype=float)
+        ref = float(np.median(areas[areas > 0])) if np.any(areas > 0) else 1.0
+        per_nuc = areas / np.maximum(sizes, 1)
+        area_per_nuc = (
+            float(np.median(per_nuc[per_nuc > 0]))
+            if np.any(per_nuc > 0) else 1.0
+        )
+    else:
+        ref = 1.0
+        area_per_nuc = 1.0
+    for r in pred_records:
+        equiv_area = r["group_size"] * area_per_nuc
+        r["marker_size"] = min(
+            _MAX_MARKER, max(10.0, _MARKER_SIZE * equiv_area / ref)
         )

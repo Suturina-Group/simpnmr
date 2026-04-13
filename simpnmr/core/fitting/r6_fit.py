@@ -371,6 +371,12 @@ def fit_r6(
         rmse,
     )
 
+    # Build math_labels in the same order as labels, falling back to chem_label
+    math_labels = [
+        cl_to_nuclei[cl][0].chem_math_label if cl in cl_to_nuclei else cl
+        for cl in labels
+    ]
+
     return {
         "p1": popt[0],
         "p2": popt[1],
@@ -382,5 +388,6 @@ def fit_r6(
         "contact": contact,
         "pred": pred,
         "labels": labels,
+        "math_labels": math_labels,
         "rmse": rmse,
     }

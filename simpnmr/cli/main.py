@@ -170,6 +170,13 @@ def get_sh_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     return run_get_sh(options)
 
 
+def gui_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
+    """Launch the fit_susc graphical interface."""
+    from simpnmr.gui.fit_susc_app import main as _gui_main
+    _gui_main()
+    return 0
+
+
 def calc_tau_c_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Compute rotational correlation time from molecular coordinates."""
 
@@ -710,6 +717,12 @@ def read_args(arg_list=None):
         metavar="<float>",
         help="Minibead radius for bead-shell model (Å, default: 0.6)",
     )
+
+    gui = subparsers.add_parser(
+        "gui",
+        description="Launch the fit_susc graphical interface",
+    )
+    gui.set_defaults(func=gui_cli)
 
     # Read sub-parser and parse arguments
     parser.set_defaults(func=lambda args, runtime: parser.print_help())

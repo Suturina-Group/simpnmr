@@ -9,6 +9,7 @@ logic for visualization workflows.
 
 from __future__ import annotations
 
+import pickle
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,30 @@ def save_figure_pdf(
     return out
 
 
+def _save_figure_pickle(
+    fig: matplotlib.figure.Figure,
+    save_name: str | Path,
+) -> None:
+    """Save a Matplotlib figure as a pickle file for later interactive use.
+
+    The pickle can be reopened with::
+
+        import pickle, matplotlib.pyplot as plt
+        fig = pickle.load(open("figure.pkl", "rb"))
+        plt.show()
+    """
+    out = Path(f"{save_name}.pkl")
+    if out.parent and not out.parent.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(out, "wb") as f:
+            pickle.dump(fig, f)
+    except Exception:
+        if out.exists():
+            out.unlink()
+        return
+
+
 def render_figure(
     fig: matplotlib.figure.Figure,
     *,
@@ -118,10 +143,8 @@ def render_figure(
     if save:
         if save_name is None:
             raise ValueError("save_name must be provided when save=True")
-        save_figure_pdf(
-            fig,
-            save_name,
-        )
+        save_figure_pdf(fig, save_name)
+        _save_figure_pickle(fig, save_name)
 
     if show:
         import matplotlib.pyplot as plt

@@ -72,7 +72,7 @@ def plot_r6_fit(
     """
     r6_inv = 1.0 / fit_result["r_eff"] ** 6
     obs = fit_result["obs"]
-    labels = fit_result["labels"]
+    labels = fit_result.get("math_labels", fit_result["labels"])
     p1 = fit_result["p1"]
     p2 = fit_result["p2"]
     p1_err = fit_result["p1_err"]
@@ -112,15 +112,14 @@ def plot_r6_fit(
     )
 
     # Label each point
+    _fsize = glyphs.annotation_size if hasattr(glyphs, "annotation_size") else 7
     for x, y, lbl in zip(r6_inv, obs, labels):
         ax.annotate(
             lbl,
             xy=(x, y),
             xytext=(4, 4),
             textcoords="offset points",
-            fontsize=glyphs.annotation_size
-            if hasattr(glyphs, "annotation_size")
-            else 7,
+            fontsize=_fsize,
             color=palette.primary,
         )
 
