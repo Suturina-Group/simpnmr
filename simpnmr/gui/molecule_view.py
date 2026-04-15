@@ -29,6 +29,7 @@ Dependencies
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import tempfile
@@ -170,7 +171,7 @@ def assign_label_colors(labels: list[str],
 VIEWER_HTML_TEMPLATE = """\
 <!doctype html><html><head><meta charset="utf-8">
 <title>{title}</title>
-<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<script>{_3dmol_js}</script>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <style>
 html,body{{margin:0;height:100%;background:#fff;font-family:sans-serif}}
@@ -225,6 +226,20 @@ viewer.render();
 </script></body></html>"""
 
 
+@functools.lru_cache(maxsize=1)
+def _load_3dmol_js() -> str:
+    """Return the bundled 3Dmol.js source, loaded once and cached."""
+    bundled = Path(__file__).parent / "3Dmol-min.js"
+    if bundled.exists():
+        return bundled.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"Bundled 3Dmol.js not found at {bundled}. "
+        "Re-install simpnmr or run: "
+        "curl -sL https://3Dmol.org/build/3Dmol-min.js "
+        f"-o {bundled}"
+    )
+
+
 def build_viewer_html(mol: Molecule,
                       label_colors: Optional[dict[str, str]] = None,
                       rep_index: Optional[dict[str, int]] = None,
@@ -267,6 +282,7 @@ def build_viewer_html(mol: Molecule,
 
     return VIEWER_HTML_TEMPLATE.format(
         title=title,
+        _3dmol_js=_load_3dmol_js(),
         xyz_json=json.dumps(mol.to_xyz_string()),
         colored_json=json.dumps(colored),
         labels_json=json.dumps(labels),
