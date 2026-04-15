@@ -172,7 +172,7 @@ def get_sh_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
 
 def gui_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Launch the fit_susc graphical interface."""
-    from simpnmr.gui.fit_susc_app import main as _gui_main
+    from simpnmr.gui.app import main as _gui_main
     _gui_main()
     return 0
 
