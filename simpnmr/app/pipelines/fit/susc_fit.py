@@ -59,7 +59,7 @@ from simpnmr.viz.plots.r6_fit import (
     plot_tau_space_combined,
     plot_tau_space_multitemp,
 )
-from simpnmr.viz.plots.spect import plot_raw_deconv_pred
+from simpnmr.viz.plots.spect import plot_raw_deconv_pred, plot_vt_spectra
 from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
 
 # Visualisation
@@ -909,6 +909,34 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                             f" at {experiment.temperature:.2f} K"
                         ),
                     )
+
+    # VT stacked experimental spectra — one figure per isotope
+    if len(experiments) > 1 and any(
+        e.spectrum is not None or e.signals for e in experiments
+    ):
+        _vt_isotopes = list(dict.fromkeys(
+            s.isotope
+            for e in experiments
+            for s in e.signals
+            if s.isotope is not None
+        )) or list(dict.fromkeys(
+            nuc.isotope for nuc in molecules[0].nuclei
+        ))
+        for _iso in _vt_isotopes:
+            with spec.context():
+                plot_vt_spectra(
+                    experiments=experiments,
+                    isotope=_iso,
+                    spec=spec,
+                    save=True,
+                    show=options.runtime.show_plots,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"vt_spectra_{_iso}",
+                    ),
+                    verbose=True,
+                    window_title=f"VT Spectra ({_iso})",
+                )
 
     # Write shift data to file
     _comment_base = f"Hyperfines from file {config.hyperfine_file}\n"

@@ -9,7 +9,6 @@ logic for visualization workflows.
 
 from __future__ import annotations
 
-import pickle
 from pathlib import Path
 from typing import Any
 
@@ -96,28 +95,45 @@ def save_figure_pdf(
     return out
 
 
-def _save_figure_pickle(
+
+def save_figure_png(
     fig: matplotlib.figure.Figure,
     save_name: str | Path,
-) -> None:
-    """Save a Matplotlib figure as a pickle file for later interactive use.
+    *,
+    dpi: int = 600,
+    transparent: bool = False,
+    facecolor: str = "white",
+    close: bool = False,
+) -> Path:
+    """Export a Matplotlib figure to PNG at high resolution.
 
-    The pickle can be reopened with::
+    Args:
+        fig: Matplotlib figure to export.
+        save_name: Output path or base name. Extension is replaced with .png.
+        dpi: Resolution in dots per inch. Default 600 for print quality.
+        transparent: Whether to export with transparent background.
+        facecolor: Figure facecolor for export.
+        close: If True, closes the figure after saving.
 
-        import pickle, matplotlib.pyplot as plt
-        fig = pickle.load(open("figure.pkl", "rb"))
-        plt.show()
+    Returns:
+        The resolved Path to the written PNG.
     """
-    out = Path(f"{save_name}.pkl")
+    out = Path(save_name)
+    if not str(out).endswith(".png"):
+        out = Path(f"{out}.png")
     if out.parent and not out.parent.exists():
         out.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(out, "wb") as f:
-            pickle.dump(fig, f)
-    except Exception:
-        if out.exists():
-            out.unlink()
-        return
+
+    fig.savefig(
+        out, format="png", dpi=dpi,
+        transparent=transparent, facecolor=facecolor,
+    )
+
+    if close:
+        import matplotlib.pyplot as plt
+        plt.close(fig)
+
+    return out
 
 
 def render_figure(
@@ -126,6 +142,7 @@ def render_figure(
     save: bool,
     show: bool,
     save_name: str | Path | None = None,
+    fmt: str = "pdf",
 ) -> None:
     """Finalize a Matplotlib figure according to viz policy.
 
@@ -143,8 +160,10 @@ def render_figure(
     if save:
         if save_name is None:
             raise ValueError("save_name must be provided when save=True")
-        save_figure_pdf(fig, save_name)
-        _save_figure_pickle(fig, save_name)
+        if fmt == "png":
+            save_figure_png(fig, save_name)
+        else:
+            save_figure_pdf(fig, save_name)
 
     if show:
         import matplotlib.pyplot as plt

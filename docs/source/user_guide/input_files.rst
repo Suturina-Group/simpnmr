@@ -403,14 +403,14 @@ Magnetic Susceptibility
 ^^^^^^^^^^^^^^^^^^^^^^^
 Defines the magnetic susceptibility tensor(s) used for pNMR prediction.
 
-**Applicability:**  
+**Applicability:**
 Used in workflows involving pNMR prediction.
 
 .. code-block:: yaml
 
     # susceptibility block schema (reference):
     susceptibility:
-        # Susceptibility tensor source file [Required]
+        # Susceptibility tensor source file [Required unless method: spin_only]
         file: chi/orca.out # file containing magnetic susceptibility data
 
         # File format identifier [Optional]
@@ -418,8 +418,12 @@ Used in workflows involving pNMR prediction.
                 orca_cas # CASSCF-derived susceptibility data from ORCA output
                 csv # User-supplied susceptibility tensor data in CSV format
 
-        # Temperature to extract (K) [Required]
-        temperature: [298.00]
+        # Temperature(s) to extract or compute (K) [Required]
+        temperatures: [298.00]
+
+        # Susceptibility source method [Optional]
+        method: spin_only # Compute isotropic χ from quantum numbers via the Curie law;
+                          # no susceptibility file is needed (see note below)
 
 .. note::
 
@@ -432,6 +436,47 @@ Used in workflows involving pNMR prediction.
    The ``format`` field is optional. If omitted, the susceptibility backend and
    (for ORCA outputs) the most advanced available method are selected
    automatically from the input file (e.g. NEVPT2 preferred over CASSCF).
+
+.. note::
+
+   **Spin-only susceptibility (``method: spin_only``)**
+
+   When ``method: spin_only`` is set, no susceptibility file is required. The
+   isotropic susceptibility χ\ :sub:`iso` is computed analytically at each
+   requested temperature via the Curie law:
+
+   .. math::
+
+      \chi_\text{iso} = \frac{\mu_0 \mu_B^2 g_\text{eff}^2 S_\text{eff}(S_\text{eff}+1)}{3 k_B T}
+
+   where the effective g-factor g\ :sub:`eff` is the Landé g-factor computed
+   from the quantum numbers S, L, and J provided in the ``hyperfine`` block,
+   and S\ :sub:`eff` = J for lanthanides (J defined) or S for transition metals
+   (L = 0). The resulting susceptibility tensor is isotropic (diagonal, all
+   components equal to χ\ :sub:`iso`).
+
+   Because the tensor is isotropic, only the Fermi contact shift contributes
+   (isotropic A\ :sub:`iso` × χ\ :sub:`iso`); the pseudocontact contribution
+   (which requires tensor anisotropy) is identically zero. This mode is therefore
+   only meaningful when a QC-derived hyperfine file with non-zero A\ :sub:`iso` is
+   provided (e.g. ``hyperfine:method: dft``). Using ``hyperfine:method: pdip``
+   with ``method: spin_only`` will produce zero paramagnetic shifts and a warning
+   is emitted.
+
+   The quantum numbers S, L, J must be supplied in the ``hyperfine`` block:
+
+   .. code-block:: yaml
+
+       hyperfine:
+           method: dft
+           file: hfc/molecule.out
+           spin: 2.5           # S
+           orbit: 0            # L (0 for quenched orbital moment)
+           total_momentum_J: 2.5  # J (omit or set to null for pure spin-only)
+
+       susceptibility:
+           method: spin_only
+           temperatures: [298.00, 310.00]
 
 Fitting-only blocks
 ----------------------

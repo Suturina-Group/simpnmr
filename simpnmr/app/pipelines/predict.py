@@ -30,6 +30,8 @@ from simpnmr.app.loaders.susc_load import load_susceptibilities
 from simpnmr.app.params.options import PredictRunOptions
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import resolve_output_linewidths
+from simpnmr.core.domain.tensor import Susceptibility
+from simpnmr.core.phys.susc import get_spin_only_susc
 from simpnmr.app.policies.relax import resolve_relaxation_conditions
 from simpnmr.app.policies.susc import resolve_susceptibility_source
 
@@ -144,17 +146,46 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 exc,
             )
 
-    # Load magnetic susceptibility objects.
-    suscs = load_susceptibilities(
-        config.susceptibility_file,
-        config.susceptibility_format,
-        electronic=base_molecule.electronic,
-        g_tensor=base_molecule.sh.g_tensor_ab_initio,
-    )
-
-    suscs = [
-        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
-    ]
+    # Build magnetic susceptibility objects.
+    if getattr(config, "susceptibility_method", None) == "spin_only":
+        # Spin-only path: no file required. Build isotropic-only Susceptibility
+        # objects directly from quantum numbers (S, L, J) using the Curie law.
+        # This gives Fermi contact shifts only (isotropic A × isotropic χ).
+        spin = base_molecule.electronic.spin_S
+        orbit = base_molecule.electronic.orbit_L
+        total_J = base_molecule.electronic.total_J
+        suscs = []
+        for T in config.susceptibility_temperatures:
+            chi_iso = get_spin_only_susc(spin, orbit, total_J, T)
+            tensor = np.eye(3) * chi_iso
+            suscs.append(Susceptibility(tensor=tensor, temperature=T))
+        logger.info(
+            "Spin-only susceptibility built for %d temperature(s) "
+            "(S=%.1f, L=%.1f, J=%.1f)",
+            len(suscs),
+            spin,
+            orbit,
+            total_J if total_J is not None else float("nan"),
+        )
+        if config.hyperfine_method == "pdip":
+            logger.warning(
+                "susceptibility:method spin_only produces an isotropic susceptibility "
+                "tensor, so only the Fermi contact shift (A_iso × χ_iso) contributes. "
+                "The point-dipole hyperfine model (pdip) gives A_iso = 0, so all "
+                "predicted paramagnetic shifts will be zero. "
+                "Provide a contact hyperfine file (e.g. from DFT) and set "
+                "hyperfine:method to 'qc' or 'pdip+fc'."
+            )
+    else:
+        suscs = load_susceptibilities(
+            config.susceptibility_file,
+            config.susceptibility_format,
+            electronic=base_molecule.electronic,
+            g_tensor=base_molecule.sh.g_tensor_ab_initio,
+        )
+        suscs = [
+            susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
+        ]
 
     if not suscs:
         raise ValueError("No susceptibility data found for specified temperature(s)")

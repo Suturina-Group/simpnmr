@@ -13,6 +13,12 @@ nuclei:
   include: <insert nucleus>   # e.g. H or C
 
 susceptibility:
-  format: <insert format>
+  # Option 1: susceptibility tensor from QC output
+  format: <insert format>   # orca_nev | orca_cas | csv
   file: <insert filename>
   temperatures: [<insert temperature>]
+
+  # Option 2: spin-only (Curie law, no file required; Fermi contact shifts only)
+  # method: spin_only
+  # temperatures: [<insert temperature>]
+  # (requires hyperfine:spin, hyperfine:orbit, hyperfine:total_momentum_J)

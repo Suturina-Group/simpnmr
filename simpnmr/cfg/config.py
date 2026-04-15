@@ -1442,7 +1442,7 @@ class PredictConfig(FitSuscConfig):
             "file",
         ],
         "diamagnetic_ref": ["method", "file"],
-        "susceptibility": ["file", "format", "temperatures"],
+        "susceptibility": ["file", "format", "temperatures", "method"],
         "relaxation": [
             "model",
             "temperature",
@@ -1458,6 +1458,7 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_file = None
         self._susceptibility_format = None
         self._susceptibility_temperatures = []
+        self._susceptibility_method = None
         self._relaxation_model = ""
         self._hyperfine_paramagnetic_centre = None
         self._relaxation_temperature = None
@@ -1512,6 +1513,24 @@ class PredictConfig(FitSuscConfig):
             self._susceptibility_temperatures = [float(val) for val in value]
         else:
             raise ValueError(f"Cannot set temperature to {value}")
+        return None
+
+    @property
+    def susceptibility_method(self) -> str | None:
+        return self._susceptibility_method
+
+    @susceptibility_method.setter
+    def susceptibility_method(self, value: str | None):
+        if value is None or value == "":
+            self._susceptibility_method = None
+            return None
+        method = value.strip().lower()
+        allowed = {"spin_only"}
+        if method not in allowed:
+            raise ValueError(
+                f"Unknown susceptibility:method '{value}'. Allowed: {', '.join(sorted(allowed))}."
+            )
+        self._susceptibility_method = method
         return None
 
     @property
