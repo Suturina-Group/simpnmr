@@ -40,6 +40,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+try:
+    from simpnmr.gui.molecule_view import MoleculeView
+    _WEBENGINE_OK = True
+except ImportError:
+    _WEBENGINE_OK = False
+
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -756,9 +762,36 @@ class SimpNMRWindow(QMainWindow):
         left_layout.addWidget(QLabel("Log output:"))
         left_layout.addWidget(self._log)
 
-        # ── Right panel: placeholders ─────────────────────────────────
+        # ── Right panel: molecule viewer + placeholder ────────────────
         right_widget = QSplitter(Qt.Orientation.Vertical)
-        right_widget.addWidget(_make_placeholder())
+
+        if _WEBENGINE_OK:
+            mol_container = QWidget()
+            mol_layout = QVBoxLayout(mol_container)
+            mol_layout.setContentsMargins(0, 0, 0, 0)
+            mol_layout.setSpacing(2)
+
+            mol_toolbar = QWidget()
+            mol_tb_lay = QHBoxLayout(mol_toolbar)
+            mol_tb_lay.setContentsMargins(4, 2, 4, 2)
+            self._btn_load_mol = QPushButton("Load structure…")
+            self._lbl_mol_path = QLabel("No structure loaded")
+            self._lbl_mol_path.setStyleSheet("color: #888; font-size: 11px;")
+            mol_tb_lay.addWidget(self._btn_load_mol)
+            mol_tb_lay.addWidget(self._lbl_mol_path, 1)
+            self._btn_load_mol.clicked.connect(self._load_structure_manual)
+
+            self._mol_view = MoleculeView()
+            mol_layout.addWidget(mol_toolbar)
+            mol_layout.addWidget(self._mol_view, 1)
+            right_widget.addWidget(mol_container)
+        else:
+            self._mol_view = None
+            lbl = QLabel("Install PyQt6-WebEngine to enable molecule viewer")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("color:#888; background:#2a2a2a;")
+            right_widget.addWidget(lbl)
+
         right_widget.addWidget(_make_placeholder())
 
         # ── Main splitter ─────────────────────────────────────────────
@@ -899,8 +932,40 @@ class SimpNMRWindow(QMainWindow):
         self._update_title()
         if exit_code == 0:
             self._log.append_line("✓ Finished successfully", "#88cc88")
+            self._try_load_structure()
         else:
             self._log.append_line(f"✗ Exited with code {exit_code}", "#ff8888")
+
+    def _try_load_structure(self):
+        """Auto-load chemcraft_structure.xyz (or structure.xyz) after a run."""
+        if self._mol_view is None or self._yaml_path is None:
+            return
+        proj = self._project_name()
+        if proj is None:
+            return
+        work = self._yaml_path.parent
+        for candidate in ["chemcraft_structure.xyz", "structure.xyz"]:
+            path = work / proj / candidate
+            if path.exists():
+                self._load_structure(path)
+                return
+
+    def _load_structure(self, path: Path):
+        if self._mol_view is None:
+            return
+        try:
+            self._mol_view.load_xyz_file(path)
+            self._lbl_mol_path.setText(path.name)
+            self._log.append_line(f"Structure loaded: {path.name}", "#88cc88")
+        except Exception as e:
+            self._log.append_line(f"Could not load structure: {e}", "#ffcc66")
+
+    def _load_structure_manual(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open XYZ structure", "", "XYZ files (*.xyz)"
+        )
+        if path:
+            self._load_structure(Path(path))
 
     def closeEvent(self, event):
         if (self._process
