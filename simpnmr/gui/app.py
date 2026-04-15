@@ -157,9 +157,9 @@ class ConfigForm(QScrollArea):
         self._hfc_spin = QLineEdit()
         self._hfc_spin.setPlaceholderText("e.g. 2.5")
         self._hfc_orbit = QLineEdit()
-        self._hfc_orbit.setPlaceholderText("e.g. 0  (transition metal) or 5  (Dy)")
+        self._hfc_orbit.setPlaceholderText("e.g. 0  (TM) or 5  (Dy) — optional for spin_only")
         self._hfc_total_J = QLineEdit()
-        self._hfc_total_J.setPlaceholderText("e.g. 2.5  (leave blank = none)")
+        self._hfc_total_J.setPlaceholderText("e.g. 7.5  (lanthanide) — omit for pure spin Curie")
         self._hfc_centre = QLineEdit()
         self._hfc_centre.setPlaceholderText("x, y, z  (Å)  — required for pdip / relaxation")
         sec.layout().addRow("File:", self._hfc_file)
@@ -196,9 +196,30 @@ class ConfigForm(QScrollArea):
 
         # ── Diamagnetic ───────────────────────────────────────────────
         sec = _section("Diamagnetic shifts (optional)")
-        self._dia_file = _file_picker(self, "Diamagnetic shifts CSV")
+        self._dia_method = QComboBox()
+        self._dia_method.addItems(["csv", "dft"])
+        self._dia_file = _file_picker(self, "Diamagnetic shifts file")
+        sec.layout().addRow("Method:", self._dia_method)
         sec.layout().addRow("File:", self._dia_file)
+
+        # Reference sub-section
+        self._dia_ref_method = QComboBox()
+        self._dia_ref_method.addItems(["(none)", "dft", "csv", "values"])
+        self._dia_ref_file = _file_picker(self, "Reference file")
+        # values table: each row is "isotope: value", e.g. "1H: 31.74"
+        self._dia_ref_values = QTextEdit()
+        self._dia_ref_values.setPlaceholderText(
+            "One entry per line, e.g.:\n1H: 31.74\n13C: 188.07"
+        )
+        self._dia_ref_values.setFixedHeight(64)
+        self._dia_ref_method.currentTextChanged.connect(
+            self._on_dia_ref_method_changed
+        )
+        sec.layout().addRow("Ref method:", self._dia_ref_method)
+        sec.layout().addRow("Ref file:", self._dia_ref_file)
+        sec.layout().addRow("Ref values:", self._dia_ref_values)
         lay.addWidget(sec)
+        self._on_dia_ref_method_changed("(none)")
 
         # ── PREDICT-ONLY: Susceptibility source ───────────────────────
         self._sec_susc_src = _section("Susceptibility source  [predict only]")
@@ -314,6 +335,12 @@ class ConfigForm(QScrollArea):
         self._susc_file.setEnabled(is_file)
         self._susc_format.setEnabled(is_file)
 
+    def _on_dia_ref_method_changed(self, method: str):
+        is_none = method == "(none)"
+        is_values = method == "values"
+        self._dia_ref_file.setEnabled(not is_none and not is_values)
+        self._dia_ref_values.setEnabled(is_values)
+
     # ------------------------------------------------------------------
     # Public mode accessors
     # ------------------------------------------------------------------
@@ -387,7 +414,30 @@ class ConfigForm(QScrollArea):
         # Diamagnetic
         dia_file = self._dia_file._edit.text().strip()
         if dia_file:
-            d["diamagnetic"] = {"method": "csv", "file": dia_file}
+            d["diamagnetic"] = {
+                "method": self._dia_method.currentText(),
+                "file": dia_file,
+            }
+            ref_method = self._dia_ref_method.currentText()
+            if ref_method != "(none)":
+                ref_block: dict = {"method": ref_method}
+                if ref_method == "values":
+                    vals: dict = {}
+                    for line in self._dia_ref_values.toPlainText().splitlines():
+                        line = line.strip()
+                        if ":" in line:
+                            iso, val = line.split(":", 1)
+                            try:
+                                vals[iso.strip()] = float(val.strip())
+                            except ValueError:
+                                pass
+                    if vals:
+                        ref_block["values"] = vals
+                else:
+                    rf = self._dia_ref_file._edit.text().strip()
+                    if rf:
+                        ref_block["file"] = rf
+                d["diamagnetic_ref"] = ref_block
 
         # Predict-only: Susceptibility source
         if is_predict:
@@ -529,6 +579,24 @@ class ConfigForm(QScrollArea):
 
         dia = d.get("diamagnetic", {})
         self._dia_file._edit.setText(str(dia.get("file", "")))
+        dia_m = str(dia.get("method", "csv") or "csv")
+        idx = self._dia_method.findText(dia_m)
+        if idx >= 0:
+            self._dia_method.setCurrentIndex(idx)
+
+        dia_ref = d.get("diamagnetic_ref", {})
+        ref_m = str(dia_ref.get("method", "(none)") or "(none)")
+        idx = self._dia_ref_method.findText(ref_m)
+        self._dia_ref_method.setCurrentIndex(idx if idx >= 0 else 0)
+        ref_file = dia_ref.get("file", "")
+        self._dia_ref_file._edit.setText(str(ref_file) if ref_file else "")
+        ref_vals = dia_ref.get("values", {})
+        if ref_vals:
+            self._dia_ref_values.setPlainText(
+                "\n".join(f"{iso}: {val}" for iso, val in ref_vals.items())
+            )
+        else:
+            self._dia_ref_values.setPlainText("")
 
         # Susceptibility source (predict)
         susc = d.get("susceptibility", {})
