@@ -315,27 +315,66 @@ Optional. Used when diamagnetic shift data are provided explicitly.
 Diamagnetic Reference
 ^^^^^^^^^^^^^^^^^^^^^
 
-Defines a solvent-based diamagnetic reference used to calibrate diamagnetic shift
-values.
+Defines the reference compound used to convert absolute DFT shieldings into
+chemical shifts via δ\ :sup:`dia` = σ\ :sub:`ref` − σ.
 
-**Applicability:**  
+**Applicability:**
 Required when ``diamagnetic.method`` is set to ``dft``.
+
+Three modes are available:
+
+**Option 1 — explicit values per isotope (recommended)**
+
+Provide the averaged reference shielding for each isotope directly.
+No extra file is needed — just look up σ\ :sub:`ref` from your DFT output once
+and hardcode it. This is unambiguous when predicting multiple isotopes (1H and
+13C simultaneously).
 
 .. code-block:: yaml
 
-    # Diamagnetic schema (reference):
     diamagnetic_ref:
-      method: dft # DFT-derived diamagnetic reference shifts (e.g. solvent reference)
-              csv # User-supplied diamagnetic reference shifts in CSV format
-      file: dia_ref.csv # Reference file corresponding to the selected method
+      method: values
+      values:
+        1H: 31.74       # avg σ(H) in TMS at your DFT level
+        13C: 188.07     # avg σ(C) in TMS at your DFT level
+
+**Option 2 — single reference file (all isotopes)**
+
+A single DFT or CSV file is averaged per element and mapped to isotopes
+automatically (H → ``1H``, C → ``13C``, etc. via the default isotope table).
+Suitable when all predicted isotopes share the same reference compound and file.
+
+.. code-block:: yaml
+
+    diamagnetic_ref:
+      method: dft   # or csv
+      file: tms_shielding.log
+
+**Option 3 — per-isotope reference files**
+
+Supply a separate reference file for each isotope. Useful when different isotopes
+use different reference compounds or levels of theory.
+
+.. code-block:: yaml
+
+    diamagnetic_ref:
+      method: dft
+      file:
+        1H:  tms_1h.log
+        13C: tms_13c.log
 
 .. note::
 
-   The diamagnetic reference represents the solvent or reference environment used
-   to calibrate diamagnetic shifts.
+   The reference shielding and the diamagnetic shielding (``diamagnetic:file``)
+   must be computed at the same level of theory (functional and basis set).
 
-   When DFT-derived diamagnetic shifts are used, the reference must be computed at
-   the same level of theory (e.g. identical functional and basis set).
+   **Why per-isotope references matter:** a DFT NMR calculation on a diamagnetic
+   analogue produces shieldings for all atoms simultaneously (1H, 13C, etc.).
+   Each isotope requires its own reference shielding (e.g. TMS gives both
+   σ\ :sub:`ref`\ (1H) and σ\ :sub:`ref`\ (13C), which are numerically very
+   different). Using a single-file reference with ``method: dft`` maps these
+   correctly via element → isotope conversion. Use ``method: values`` when you
+   want to be explicit or when the automatic mapping is not sufficient.
 
 Relaxation Enhancement
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -463,16 +502,34 @@ Used in workflows involving pNMR prediction.
    with ``method: spin_only`` will produce zero paramagnetic shifts and a warning
    is emitted.
 
-   The quantum numbers S, L, J must be supplied in the ``hyperfine`` block:
+   The spin quantum number S must be supplied in the ``hyperfine`` block.
+   L and J are optional:
+
+   - If J is omitted (or ``null``), g = g\ :sub:`e` ≈ 2.0023 and S\ :sub:`eff` = S
+     (pure spin Curie law). Appropriate for transition metals with quenched orbital
+     angular momentum or organic radicals.
+   - If S, L, **and** J are all provided, the Landé g\ :sub:`J` factor is used and
+     S\ :sub:`eff` = J. Appropriate for lanthanides.
 
    .. code-block:: yaml
 
+       # Transition metal (spin-only, L quenched):
+       hyperfine:
+           method: dft
+           file: hfc/molecule.out
+           spin: 2.5           # S — required
+
+       susceptibility:
+           method: spin_only
+           temperatures: [298.00]
+
+       # Lanthanide (Landé g_J, S_eff = J):
        hyperfine:
            method: dft
            file: hfc/molecule.out
            spin: 2.5           # S
-           orbit: 0            # L (0 for quenched orbital moment)
-           total_momentum_J: 2.5  # J (omit or set to null for pure spin-only)
+           orbit: 5            # L
+           total_momentum_J: 7.5  # J
 
        susceptibility:
            method: spin_only

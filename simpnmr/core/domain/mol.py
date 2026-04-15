@@ -866,17 +866,19 @@ class Molecule:
         self,
         dia_by_key: dict[str, float],
         key_kind: str,
-        ref_avg_by_label_nn: dict[str, float] | None = None,
+        ref_avg_by_isotope: dict[str, float] | None = None,
     ) -> None:
         """Apply diamagnetic shifts to nuclei.
 
         Args:
-            dia_by_key: Mapping from label key -> dia shift.
-            key_kind: 'atom_label' (uses nuc.label) or 'chem_label'
-            (uses nuc.chem_label).
-            ref_avg_by_label_nn: Optional mapping nuc.label_nn -> averaged
-            reference shift.
-                If provided, applies: dia := ref - dia.
+            dia_by_key: Mapping from label key -> diamagnetic shielding (or
+                shift for pre-referenced CSV inputs).
+            key_kind: ``'atom_label'`` (uses ``nuc.label``) or
+                ``'chem_label'`` (uses ``nuc.chem_label``).
+            ref_avg_by_isotope: Optional mapping isotope -> averaged reference
+                shielding (e.g. ``{"1H": 31.74, "13C": 188.07}``).
+                When provided, applies: dia = ref - dia, converting absolute
+                DFT shieldings into chemical shifts relative to the reference.
 
         Raises:
             KeyError: If a required key is missing in the provided mapping(s).
@@ -894,16 +896,18 @@ class Molecule:
                     f"Cannot find {key} in diamagnetic shift mapping"
                 ) from exc
 
-        if ref_avg_by_label_nn is not None:
+        if ref_avg_by_isotope is not None:
             for nuc in self.nuclei:
                 try:
                     nuc.shift.dia = (
-                        float(ref_avg_by_label_nn[nuc.label_nn]) - nuc.shift.dia
+                        float(ref_avg_by_isotope[nuc.isotope]) - nuc.shift.dia
                     )
                 except KeyError as exc:
                     raise KeyError(
-                        f"Cannot find {nuc.label_nn} in reference diamagnetic "
-                        "shift mapping"
+                        f"Cannot find isotope {nuc.isotope!r} in reference "
+                        "diamagnetic shift mapping. "
+                        "Add it to diamagnetic_ref:values or provide a "
+                        "per-isotope reference file."
                     ) from exc
 
         return

@@ -203,16 +203,17 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
     # Load diamagnetic shift file
     if len(config.diamagnetic_file):
-        dia_by_key, key_kind, ref_avg_by_label_nn = load_diamagnetic_shifts(
+        dia_by_key, key_kind, ref_avg_by_isotope = load_diamagnetic_shifts(
             file_name=config.diamagnetic_file,
             file_type=config.diamagnetic_method,
             ref_file_name=config.diamagnetic_ref_file,
             ref_file_type=config.diamagnetic_ref_method,
+            ref_values=getattr(config, "diamagnetic_ref_values", None),
         )
         base_molecule.apply_diamagnetic_shifts(
             dia_by_key=dia_by_key,
             key_kind=key_kind,
-            ref_avg_by_label_nn=ref_avg_by_label_nn,
+            ref_avg_by_isotope=ref_avg_by_isotope,
         )
 
     # Rotationally average hyperfines

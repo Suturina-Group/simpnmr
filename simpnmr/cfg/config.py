@@ -174,7 +174,7 @@ class FitSuscConfig(Config):
             "method",
             "file",
         ],
-        "diamagnetic_ref": ["method", "file"],
+        "diamagnetic_ref": ["method", "file", "values"],
         "susc_vt": [
             "method",
             "variables",
@@ -220,6 +220,7 @@ class FitSuscConfig(Config):
         self._diamagnetic_method = ""
         self._diamagnetic_ref_method = ""
         self._diamagnetic_ref_file = ""
+        self._diamagnetic_ref_values = None
         self._assignment_method = ""
         self._assignment_groups = []
         self._assignment_search = ""
@@ -838,21 +839,47 @@ class FitSuscConfig(Config):
 
     @diamagnetic_ref_method.setter
     def diamagnetic_ref_method(self, value: str):
-        if value not in ["dft", "csv"]:
+        if value not in ["dft", "csv", "values"]:
             raise ValueError(f"Unknown diamagnetic_reference:method {value}")
         else:
             self._diamagnetic_ref_method = value
         return
 
     @property
-    def diamagnetic_ref_file(self) -> str:
+    def diamagnetic_ref_file(self) -> str | dict[str, str]:
         return self._diamagnetic_ref_file
 
     @diamagnetic_ref_file.setter
-    def diamagnetic_ref_file(self, value: str):
-        if not isinstance(value, str):
-            raise ValueError("Diamagnetic reference file should be string")
-        self._diamagnetic_ref_file = os.path.abspath(value)
+    def diamagnetic_ref_file(self, value: str | dict):
+        if isinstance(value, dict):
+            # Per-isotope file mapping: {isotope: path}
+            self._diamagnetic_ref_file = {
+                str(iso): os.path.abspath(str(path))
+                for iso, path in value.items()
+            }
+        elif isinstance(value, str):
+            self._diamagnetic_ref_file = os.path.abspath(value)
+        else:
+            raise ValueError("Diamagnetic reference file must be a string or dict")
+        return
+
+    @property
+    def diamagnetic_ref_values(self) -> dict[str, float] | None:
+        return self._diamagnetic_ref_values
+
+    @diamagnetic_ref_values.setter
+    def diamagnetic_ref_values(self, value: dict | None):
+        if value is None:
+            self._diamagnetic_ref_values = None
+            return
+        if not isinstance(value, dict):
+            raise ValueError(
+                "diamagnetic_ref:values must be a mapping of {isotope: float}, "
+                "e.g. {1H: 31.74, 13C: 188.07}"
+            )
+        self._diamagnetic_ref_values = {
+            str(iso): float(v) for iso, v in value.items()
+        }
         return
 
     @property
