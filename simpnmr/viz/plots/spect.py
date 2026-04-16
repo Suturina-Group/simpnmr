@@ -10,6 +10,7 @@ predicted spectra with deconvoluted and raw experimental spectra.
 import logging
 import os
 from collections.abc import Mapping
+from pathlib import Path
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -101,17 +102,24 @@ def plot_pred_spectrum(
     glyphs = spec.glyphs
     palette = spec.palette
 
-    # Labels
-    avg_shifts = {
+    # Labels — math labels for PDF rendering, plain labels for CSV metadata
+    avg_shifts_math = {
         nucleus.chem_math_label: nucleus.shift.avg
+        for nucleus in molecule.nuclei
+        if nucleus.isotope == isotope
+    }
+    # plain chem_label keyed separately so CSV lookup matches peak_data_*.csv
+    math_to_plain = {
+        nucleus.chem_math_label: nucleus.chem_label
         for nucleus in molecule.nuclei
         if nucleus.isotope == isotope
     }
 
     # Ensure labels match shifts in sorted order
-    sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
-    sorted_labels = [label for label, _ in sorted_shifts_labels]
+    sorted_shifts_labels = sorted(avg_shifts_math.items(), key=lambda x: x[1])
+    sorted_labels = [label for label, _ in sorted_shifts_labels]   # math
     sorted_shifts = [shift for _, shift in sorted_shifts_labels]
+    sorted_plain_labels = [math_to_plain[lbl] for lbl in sorted_labels]
 
     # Scale figure width and label density with number of peaks
     n_peaks = len(sorted_labels)
@@ -172,13 +180,19 @@ def plot_pred_spectrum(
     if save and verbose:
         logger.info("Predicted spectrum saved to %s", f"{save_name}.pdf")
 
-    # Write spectrum (ppm and normalized intensity) to CSV for external visualization
-    csv_path = os.path.join(
-        os.path.dirname(save_name),
-        f"shift_vs_intensity_{molecule.susc.temperature:.2f}_K.csv",
+    # Write spectrum CSV with full metadata so the GUI can reconstruct
+    # annotations without needing a Molecule object.
+    # Derive name from save_name so multi-isotope runs don't overwrite each
+    # other (save_name already carries the isotope suffix, e.g. _1H).
+    _stem = Path(save_name).name.replace("pred_spectrum", "shift_vs_intensity")
+    csv_path = os.path.join(os.path.dirname(save_name), f"{_stem}.csv")
+    write_spectrum(
+        csv_path, x_grid, y_intensity,
+        isotope=isotope,
+        temperature=molecule.susc.temperature,
+        peak_labels=sorted_plain_labels,
+        peak_shifts=sorted_shifts,
     )
-
-    write_spectrum(csv_path, x_grid, y_intensity)
 
     return fig, ax
 

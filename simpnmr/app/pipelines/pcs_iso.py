@@ -87,16 +87,17 @@ def run_calc_pcs_iso(
         raise ValueError(f"Center atom {central_atom} not found in labels")
 
     coords_bohr = coords_arr * 1.88973
-    coords_bohr = coords_bohr - coords_bohr[center_idx[0]]
+    centre_bohr = coords_bohr[center_idx[0]]
 
     for s in matched:
         s.calc_irred()
 
-        values, origin_bohr, step_bohr, grid_shape = compute_pcs_isosurface(
+        values, origin_bohr_rel, step_bohr, grid_shape = compute_pcs_isosurface(
             chi_dtensor=s.dtensor,
-            labels=labels_arr,
-            center_atom=central_atom,
             pdip_fn=Hyperfine.calc_pdip,
+        )
+        origin_bohr = tuple(
+            float(centre_bohr[i]) + origin_bohr_rel[i] for i in range(3)
         )
 
         file_name = f"pcs_isosurface_{s.temperature:.2f}_K.cube"

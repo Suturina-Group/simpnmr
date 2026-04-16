@@ -1469,7 +1469,10 @@ class PredictConfig(FitSuscConfig):
             "file",
         ],
         "diamagnetic_ref": ["method", "file"],
-        "susceptibility": ["file", "format", "temperatures", "method"],
+        "susceptibility": [
+            "file", "format", "temperatures", "method", "sh",
+            "reduced_chi",
+        ],
         "relaxation": [
             "model",
             "temperature",
@@ -1486,6 +1489,8 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_format = None
         self._susceptibility_temperatures = []
         self._susceptibility_method = None
+        self._susceptibility_sh = {}
+        self._susceptibility_reduced_chi = {}
         self._relaxation_model = ""
         self._hyperfine_paramagnetic_centre = None
         self._relaxation_temperature = None
@@ -1552,12 +1557,56 @@ class PredictConfig(FitSuscConfig):
             self._susceptibility_method = None
             return None
         method = value.strip().lower()
-        allowed = {"spin_only"}
+        allowed = {"spin_only", "sh", "reduced_chi"}
         if method not in allowed:
             raise ValueError(
-                f"Unknown susceptibility:method '{value}'. Allowed: {', '.join(sorted(allowed))}."
+                f"Unknown susceptibility:method '{value}'. "
+                f"Allowed: {', '.join(sorted(allowed))}."
             )
         self._susceptibility_method = method
+        return None
+
+    @property
+    def susceptibility_sh(self) -> dict:
+        return self._susceptibility_sh
+
+    @susceptibility_sh.setter
+    def susceptibility_sh(self, value):
+        if value is None:
+            self._susceptibility_sh = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:sh must be a mapping")
+        required = {"gx", "gy", "gz", "D", "E_over_D", "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:sh is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_sh = value
+        return None
+
+    @property
+    def susceptibility_reduced_chi(self) -> dict:
+        return self._susceptibility_reduced_chi
+
+    @susceptibility_reduced_chi.setter
+    def susceptibility_reduced_chi(self, value):
+        if value is None:
+            self._susceptibility_reduced_chi = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:reduced_chi must be a mapping")
+        required = {"chi_iso_T", "chi_ax_T", "rh_over_ax",
+                    "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:reduced_chi is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_reduced_chi = value
         return None
 
     @property

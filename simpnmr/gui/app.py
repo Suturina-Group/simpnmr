@@ -11,6 +11,7 @@ or:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -45,6 +47,17 @@ try:
     _WEBENGINE_OK = True
 except ImportError:
     _WEBENGINE_OK = False
+
+try:
+    from matplotlib.backends.backend_qtagg import (
+        FigureCanvasQTAgg as _FigureCanvas,
+        NavigationToolbar2QT as _NavigationToolbar,
+    )
+    from matplotlib.figure import Figure as _Figure
+    from simpnmr.io.csv.spec import read_spectrum_with_peaks as _read_spectrum
+    _MATPLOTLIB_QT_OK = True
+except ImportError:
+    _MATPLOTLIB_QT_OK = False
 
 
 # ---------------------------------------------------------------------------
@@ -230,17 +243,82 @@ class ConfigForm(QScrollArea):
         # ── PREDICT-ONLY: Susceptibility source ───────────────────────
         self._sec_susc_src = _section("Susceptibility source  [predict only]")
         self._susc_method = QComboBox()
-        self._susc_method.addItems(["file", "spin_only"])
+        self._susc_method.addItems(
+            ["file", "spin_only", "sh", "reduced_chi"]
+        )
         self._susc_file = _file_picker(self, "Susceptibility file")
         self._susc_format = QComboBox()
-        self._susc_format.addItems(["(auto)", "orca_nev", "orca_cas", "csv", "txt", "molcas"])
+        self._susc_format.addItems(
+            ["(auto)", "orca_nev", "orca_cas", "csv", "txt", "molcas"]
+        )
         self._susc_temps = QLineEdit()
-        self._susc_temps.setPlaceholderText("e.g. 298.15  or  298.15, 310.0")
-        self._susc_method.currentTextChanged.connect(self._on_susc_method_changed)
+        self._susc_temps.setPlaceholderText(
+            "e.g. 298.15  or  298.15, 310.0"
+        )
+
+        # SH parameter fields
+        self._susc_sh_widget = QWidget()
+        _sh_form = QFormLayout(self._susc_sh_widget)
+        _sh_form.setContentsMargins(0, 0, 0, 0)
+        self._sh_gx = QLineEdit()
+        self._sh_gx.setPlaceholderText("e.g. 2.0023")
+        self._sh_gy = QLineEdit()
+        self._sh_gy.setPlaceholderText("e.g. 2.0023")
+        self._sh_gz = QLineEdit()
+        self._sh_gz.setPlaceholderText("e.g. 2.100")
+        self._sh_D = QLineEdit()
+        self._sh_D.setPlaceholderText("cm⁻¹")
+        self._sh_E_over_D = QLineEdit()
+        self._sh_E_over_D.setPlaceholderText("0 – 1/3")
+        self._sh_alpha = QLineEdit("0.0")
+        self._sh_beta = QLineEdit("0.0")
+        self._sh_gamma = QLineEdit("0.0")
+        _sh_form.addRow("gx:", self._sh_gx)
+        _sh_form.addRow("gy:", self._sh_gy)
+        _sh_form.addRow("gz:", self._sh_gz)
+        _sh_form.addRow("D (cm⁻¹):", self._sh_D)
+        _sh_form.addRow("E/D:", self._sh_E_over_D)
+        _sh_form.addRow("α (°):", self._sh_alpha)
+        _sh_form.addRow("β (°):", self._sh_beta)
+        _sh_form.addRow("γ (°):", self._sh_gamma)
+
+        # Reduced-chiT parameter fields
+        self._susc_rc_widget = QWidget()
+        _rc_form = QFormLayout(self._susc_rc_widget)
+        _rc_form.setContentsMargins(0, 0, 0, 0)
+        self._rc_iso = QLineEdit()
+        self._rc_iso.setPlaceholderText(
+            "scalar or comma-separated (one per T)"
+        )
+        self._rc_ax = QLineEdit()
+        self._rc_ax.setPlaceholderText(
+            "scalar or comma-separated (one per T)"
+        )
+        self._rc_rh_over_ax = QLineEdit()
+        self._rc_rh_over_ax.setPlaceholderText("0 – 1/3")
+        self._rc_alpha = QLineEdit("0.0")
+        self._rc_beta = QLineEdit("0.0")
+        self._rc_gamma = QLineEdit("0.0")
+        _rc_form.addRow("Δχ_iso·T:", self._rc_iso)
+        _rc_form.addRow("Δχ_ax·T:", self._rc_ax)
+        _rc_form.addRow("Δχ_rh·T / Δχ_ax·T:", self._rc_rh_over_ax)
+        _rc_form.addRow("α (°):", self._rc_alpha)
+        _rc_form.addRow("β (°):", self._rc_beta)
+        _rc_form.addRow("γ (°):", self._rc_gamma)
+
+        self._susc_method.currentTextChanged.connect(
+            self._on_susc_method_changed
+        )
         self._sec_susc_src.layout().addRow("Method:", self._susc_method)
         self._sec_susc_src.layout().addRow("File:", self._susc_file)
         self._sec_susc_src.layout().addRow("Format:", self._susc_format)
-        self._sec_susc_src.layout().addRow("Temperature(s) (K):", self._susc_temps)
+        self._sec_susc_src.layout().addRow(
+            "Temperature(s) (K):", self._susc_temps
+        )
+        self._susc_sh_widget.setVisible(False)
+        self._susc_rc_widget.setVisible(False)
+        self._sec_susc_src.layout().addRow(self._susc_sh_widget)
+        self._sec_susc_src.layout().addRow(self._susc_rc_widget)
         lay.addWidget(self._sec_susc_src)
 
         # ── FIT-ONLY: Assignment ──────────────────────────────────────
@@ -340,6 +418,8 @@ class ConfigForm(QScrollArea):
         is_file = method == "file"
         self._susc_file.setEnabled(is_file)
         self._susc_format.setEnabled(is_file)
+        self._susc_sh_widget.setVisible(method == "sh")
+        self._susc_rc_widget.setVisible(method == "reduced_chi")
 
     def _on_dia_ref_method_changed(self, method: str):
         is_none = method == "(none)"
@@ -450,13 +530,83 @@ class ConfigForm(QScrollArea):
             susc_method = self._susc_method.currentText()
             temps_raw = self._susc_temps.text().strip()
             temps = (
-                [float(t.strip()) for t in temps_raw.replace(",", " ").split() if t.strip()]
+                [
+                    float(t.strip())
+                    for t in temps_raw.replace(",", " ").split()
+                    if t.strip()
+                ]
                 if temps_raw else []
             )
+            temps_val = temps[0] if len(temps) == 1 else temps
+
+            def _floats(text):
+                parts = [
+                    p.strip()
+                    for p in text.replace(",", " ").split()
+                    if p.strip()
+                ]
+                vals = [float(p) for p in parts]
+                return vals[0] if len(vals) == 1 else vals
+
             if susc_method == "spin_only":
                 susc_block: dict = {"method": "spin_only"}
                 if temps:
-                    susc_block["temperatures"] = temps[0] if len(temps) == 1 else temps
+                    susc_block["temperatures"] = temps_val
+            elif susc_method == "sh":
+                susc_block = {"method": "sh"}
+                if temps:
+                    susc_block["temperatures"] = temps_val
+                sh_params = {}
+                for key, widget in [
+                    ("gx", self._sh_gx), ("gy", self._sh_gy),
+                    ("gz", self._sh_gz), ("D", self._sh_D),
+                    ("alpha", self._sh_alpha),
+                    ("beta", self._sh_beta), ("gamma", self._sh_gamma),
+                ]:
+                    v = widget.text().strip()
+                    if v:
+                        sh_params[key] = float(v)
+                ed_text = self._sh_E_over_D.text().strip()
+                if ed_text:
+                    ed = float(ed_text)
+                    if not (0.0 <= ed <= 1.0 / 3.0):
+                        QMessageBox.warning(
+                            self, "Invalid E/D",
+                            f"E/D = {ed:.4f} is outside [0, 1/3]. "
+                            "Please enter a value between 0 and 0.3333.",
+                        )
+                        return None
+                    sh_params["E_over_D"] = ed
+                if sh_params:
+                    susc_block["sh"] = sh_params
+            elif susc_method == "reduced_chi":
+                susc_block = {"method": "reduced_chi"}
+                if temps:
+                    susc_block["temperatures"] = temps_val
+                rc_params = {}
+                for key, widget in [
+                    ("chi_iso_T", self._rc_iso),
+                    ("chi_ax_T", self._rc_ax),
+                    ("alpha", self._rc_alpha),
+                    ("beta", self._rc_beta),
+                    ("gamma", self._rc_gamma),
+                ]:
+                    v = widget.text().strip()
+                    if v:
+                        rc_params[key] = _floats(v)
+                roa_text = self._rc_rh_over_ax.text().strip()
+                if roa_text:
+                    roa = float(roa_text)
+                    if not (0.0 <= roa <= 1.0 / 3.0):
+                        QMessageBox.warning(
+                            self, "Invalid Δχ_rh/Δχ_ax",
+                            f"Δχ_rh/Δχ_ax = {roa:.4f} is outside [0, 1/3]. "
+                            "Please enter a value between 0 and 0.3333.",
+                        )
+                        return None
+                    rc_params["rh_over_ax"] = roa
+                if rc_params:
+                    susc_block["reduced_chi"] = rc_params
             else:
                 susc_block = {}
                 sf = self._susc_file._edit.text().strip()
@@ -466,7 +616,7 @@ class ConfigForm(QScrollArea):
                 if fmt != "(auto)":
                     susc_block["format"] = fmt
                 if temps:
-                    susc_block["temperatures"] = temps[0] if len(temps) == 1 else temps
+                    susc_block["temperatures"] = temps_val
             if susc_block:
                 d["susceptibility"] = susc_block
 
@@ -621,6 +771,33 @@ class ConfigForm(QScrollArea):
                 self._susc_temps.setText(", ".join(str(t) for t in temps))
             elif temps:
                 self._susc_temps.setText(str(temps))
+            sh = susc.get("sh", {})
+            for key, widget in [
+                ("gx", self._sh_gx), ("gy", self._sh_gy),
+                ("gz", self._sh_gz), ("D", self._sh_D),
+                ("alpha", self._sh_alpha),
+                ("beta", self._sh_beta), ("gamma", self._sh_gamma),
+            ]:
+                if key in sh:
+                    widget.setText(str(sh[key]))
+            if "E_over_D" in sh:
+                self._sh_E_over_D.setText(str(sh["E_over_D"]))
+            rc = susc.get("reduced_chi", {})
+            for key, widget in [
+                ("chi_iso_T", self._rc_iso),
+                ("chi_ax_T", self._rc_ax),
+                ("alpha", self._rc_alpha),
+                ("beta", self._rc_beta),
+                ("gamma", self._rc_gamma),
+            ]:
+                if key in rc:
+                    v = rc[key]
+                    if isinstance(v, list):
+                        widget.setText(", ".join(str(x) for x in v))
+                    else:
+                        widget.setText(str(v))
+            if "rh_over_ax" in rc:
+                self._rc_rh_over_ax.setText(str(rc["rh_over_ax"]))
 
         # Assignment (fit)
         assign = d.get("assignment", {})
@@ -777,8 +954,35 @@ class SimpNMRWindow(QMainWindow):
             self._btn_load_mol = QPushButton("Load structure…")
             self._lbl_mol_path = QLabel("No structure loaded")
             self._lbl_mol_path.setStyleSheet("color: #888; font-size: 11px;")
+            self._mol_elem_combo = QComboBox()
+            self._mol_elem_combo.addItem("All")
+            self._mol_elem_combo.setToolTip("Show labels for selected element only")
+            self._mol_elem_combo.setEnabled(False)
+            self._mol_elem_combo.currentTextChanged.connect(self._on_mol_elem_filter)
+
+            self._iso_check = QCheckBox("PCS iso:")
+            self._iso_check.setChecked(True)
+            self._iso_check.setEnabled(False)
+            self._iso_check.setToolTip("Show / hide PCS isosurface")
+            self._iso_spin = QDoubleSpinBox()
+            self._iso_spin.setRange(0.0, 100000.0)
+            self._iso_spin.setValue(100.0)
+            self._iso_spin.setSuffix(" ppm")
+            self._iso_spin.setSingleStep(10.0)
+            self._iso_spin.setDecimals(1)
+            self._iso_spin.setFixedWidth(95)
+            self._iso_spin.setToolTip(
+                "PCS isosurface isovalue (ppm). Blue = positive, red = negative."
+            )
+            self._iso_spin.setEnabled(False)
+            self._iso_check.toggled.connect(self._on_iso_toggled)
+            self._iso_spin.valueChanged.connect(self._on_isovalue_changed)
+
             mol_tb_lay.addWidget(self._btn_load_mol)
             mol_tb_lay.addWidget(self._lbl_mol_path, 1)
+            mol_tb_lay.addWidget(self._mol_elem_combo)
+            mol_tb_lay.addWidget(self._iso_check)
+            mol_tb_lay.addWidget(self._iso_spin)
             self._btn_load_mol.clicked.connect(self._load_structure_manual)
 
             self._mol_view = MoleculeView()
@@ -787,12 +991,32 @@ class SimpNMRWindow(QMainWindow):
             right_widget.addWidget(mol_container)
         else:
             self._mol_view = None
+            self._mol_elem_combo = None
+            self._iso_check = None
+            self._iso_spin = None
             lbl = QLabel("Install PyQt6-WebEngine to enable molecule viewer")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet("color:#888; background:#2a2a2a;")
             right_widget.addWidget(lbl)
 
-        right_widget.addWidget(_make_placeholder())
+        if _MATPLOTLIB_QT_OK:
+            self._spectrum_panel = _SpectrumPanel()
+            spec_container = QWidget()
+            spec_lay = QVBoxLayout(spec_container)
+            spec_lay.setContentsMargins(0, 0, 0, 0)
+            spec_lay.setSpacing(0)
+            spec_toolbar = _NavigationToolbar(
+                self._spectrum_panel, spec_container
+            )
+            spec_lay.addWidget(spec_toolbar)
+            spec_lay.addWidget(self._spectrum_panel)
+            right_widget.addWidget(spec_container)
+        else:
+            self._spectrum_panel = None
+            right_widget.addWidget(_make_placeholder())
+
+        right_widget.setStretchFactor(0, 3)   # molecule viewer
+        right_widget.setStretchFactor(1, 1)   # spectrum panel
 
         # ── Main splitter ─────────────────────────────────────────────
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -933,6 +1157,7 @@ class SimpNMRWindow(QMainWindow):
         if exit_code == 0:
             self._log.append_line("✓ Finished successfully", "#88cc88")
             self._try_load_structure()
+            self._try_load_spectrum()
         else:
             self._log.append_line(f"✗ Exited with code {exit_code}", "#ff8888")
 
@@ -943,22 +1168,85 @@ class SimpNMRWindow(QMainWindow):
         proj = self._project_name()
         if proj is None:
             return
-        work = self._yaml_path.parent
+        work = self._yaml_path.parent / proj
+        # Find the first available cube file to show PCS isosurface
+        cube_paths = sorted(work.glob("pcs_isosurf_*.cube"))
+        cube_data = Path(cube_paths[0]).read_text(encoding="utf-8") \
+            if cube_paths else None
         for candidate in ["chemcraft_structure.xyz", "structure.xyz"]:
-            path = work / proj / candidate
+            path = work / candidate
             if path.exists():
-                self._load_structure(path)
+                self._load_structure(path, cube_data=cube_data)
                 return
 
-    def _load_structure(self, path: Path):
+    def _try_load_spectrum(self):
+        """Load shift_vs_intensity CSVs from the output dir after a run."""
+        if self._spectrum_panel is None or self._yaml_path is None:
+            return
+        proj = self._project_name()
+        if proj is None:
+            return
+        self._spectrum_panel.load_output_dir(self._yaml_path.parent / proj)
+
+    def _load_structure(self, path: Path, cube_data: str | None = None):
         if self._mol_view is None:
             return
         try:
-            self._mol_view.load_xyz_file(path)
+            isoval_ppm = self._iso_spin.value() if self._iso_spin else 1.0
+            mol = self._mol_view.load_xyz_file(
+                path,
+                cube_data=cube_data,
+                default_isoval=isoval_ppm * 1000.0,  # ppm → ppb
+            )
             self._lbl_mol_path.setText(path.name)
             self._log.append_line(f"Structure loaded: {path.name}", "#88cc88")
+            self._populate_elem_combo(mol)
+            has_cube = cube_data is not None
+            if self._iso_check is not None:
+                self._iso_check.setEnabled(has_cube)
+            if self._iso_spin is not None:
+                self._iso_spin.setEnabled(has_cube)
         except Exception as e:
             self._log.append_line(f"Could not load structure: {e}", "#ffcc66")
+
+    def _on_iso_toggled(self, checked: bool) -> None:
+        if self._mol_view is None:
+            return
+        if checked and self._iso_spin is not None:
+            self._mol_view.set_isosurface_isovalue(
+                self._iso_spin.value() * 1000.0
+            )
+        else:
+            self._mol_view.set_isosurface_isovalue(0.0)
+
+    def _on_isovalue_changed(self, value: float) -> None:
+        if self._mol_view is None:
+            return
+        checked = self._iso_check.isChecked() if self._iso_check else True
+        if checked:
+            self._mol_view.set_isosurface_isovalue(value * 1000.0)
+
+    def _populate_elem_combo(self, mol) -> None:
+        if self._mol_elem_combo is None:
+            return
+        self._mol_elem_combo.blockSignals(True)
+        self._mol_elem_combo.clear()
+        self._mol_elem_combo.addItem("All")
+        self._mol_elem_combo.addItem("None")
+        labelled_elems = sorted({a.element for a in mol.atoms if a.label})
+        for elem in labelled_elems:
+            self._mol_elem_combo.addItem(elem)
+        self._mol_elem_combo.setEnabled(bool(labelled_elems))
+        self._mol_elem_combo.blockSignals(False)
+
+    def _on_mol_elem_filter(self, text: str) -> None:
+        if self._mol_view is None:
+            return
+        if text == "None":
+            self._mol_view.run_js("viewer.removeAllLabels(); viewer.render();")
+        else:
+            elem = "all" if text == "All" else text
+            self._mol_view.run_js(f"filterLabels({json.dumps(elem)})")
 
     def _load_structure_manual(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -975,13 +1263,230 @@ class SimpNMRWindow(QMainWindow):
 
 
 # ---------------------------------------------------------------------------
-# Placeholder panel
+# Spectrum panel
 # ---------------------------------------------------------------------------
 
 def _make_placeholder() -> QWidget:
     w = QWidget()
     w.setStyleSheet("background: #2a2a2a;")
     return w
+
+
+if _MATPLOTLIB_QT_OK:
+    class _SpectrumPanel(_FigureCanvas):
+        """Embedded matplotlib canvas showing predicted spectra."""
+
+        def __init__(self, parent=None):
+            self._fig = _Figure(tight_layout=True)
+            super().__init__(self._fig)
+            self.setParent(parent)
+            self.setMinimumHeight(180)
+            self._show_placeholder()
+
+        def _show_placeholder(self):
+            self._fig.clear()
+            ax = self._fig.add_subplot(111)
+            ax.text(0.5, 0.5, "Spectrum will appear here after run",
+                    ha='center', va='center', transform=ax.transAxes,
+                    color='gray', fontsize=10)
+            ax.set_axis_off()
+            self.draw()
+
+        def load_output_dir(self, out_dir: Path) -> None:
+            """Display spectra written by the pipeline in *out_dir*.
+
+            Reads ``shift_vs_intensity_*.csv`` files produced by
+            ``plot_pred_spectrum``.  Each file becomes one sub-panel.
+            Peak labels use the same ``_annotate_peaks_with_barrier``
+            logic as the saved PDF, and re-run on every zoom so labels
+            never overlap and always stay visible.
+            """
+            paths = sorted(out_dir.glob("shift_vs_intensity_*.csv"))
+            if not paths:
+                self._show_placeholder()
+                return
+
+            # Build {isotope: {chem_label: count}} from peak_data_*.csv
+            counts_map: dict[str, dict[str, int]] = {}
+            for pd_path in out_dir.glob("peak_data_*.csv"):
+                try:
+                    import pandas as _pd
+                    df = _pd.read_csv(pd_path, comment="#")
+                    if "chem_label" in df.columns and "count" in df.columns:
+                        iso_col = df.get("isotope")
+                        for _, row in df.iterrows():
+                            iso_key = (
+                                str(row["isotope"])
+                                if iso_col is not None
+                                else ""
+                            )
+                            counts_map.setdefault(iso_key, {})[
+                                str(row["chem_label"])
+                            ] = int(row["count"])
+                except Exception:
+                    pass
+
+            self._fig.clear()
+            n = len(paths)
+            axes = self._fig.subplots(1, n, squeeze=False)[0]
+
+            for ax, path in zip(axes, paths):
+                try:
+                    sp = _read_spectrum(str(path))
+                except Exception:
+                    ax.set_axis_off()
+                    continue
+
+                iso = sp["isotope"]
+                temp = sp["temperature"]
+                title_parts = []
+                if iso:
+                    title_parts.append(iso)
+                if temp is not None:
+                    title_parts.append(f"{temp:.1f} K")
+                subtitle = (
+                    "  ".join(title_parts) if title_parts else path.stem
+                )
+                xlabel = f"{iso} δ (ppm)" if iso else "δ (ppm)"
+
+                lbl_counts = counts_map.get(iso or "", {})
+                peak_n = [
+                    lbl_counts.get(lbl)
+                    for lbl in sp["peak_labels"]
+                ]
+
+                data = {
+                    "x": sp["shift"],
+                    "y": sp["intensity"],
+                    "peak_x": sp["peak_shifts"],
+                    "peak_lbl": sp["peak_labels"],
+                    "peak_n": peak_n,
+                    "subtitle": subtitle,
+                    "xlabel": xlabel,
+                    "_busy": False,
+                }
+                self._draw_ax(ax, data, invert=True)
+
+            self.draw()
+
+        # ── screen-optimised constants ────────────────────────────────
+        _TRACE_COLOR  = "#2c7bb6"
+        _LABEL_COLOR  = "#1a1a2e"
+        _TICK_COLOR   = "#2c7bb6"
+        _LABEL_FS     = 8          # pt — comfortable for screen
+        _TICK_FRAC    = 0.08       # tick height as fraction of y-range
+
+        def _draw_ax(self, ax, data: dict, invert: bool) -> None:
+            """Clear *ax* and redraw trace + screen-optimised annotations."""
+            import numpy as _np
+            xlim = ax.get_xlim()
+            ax.cla()
+            # ax.cla() resets the callback registry — reconnect immediately so
+            # subsequent zoom/pan events (including Home) keep labels live.
+            def _on_xlim(ax_=ax, data_=data):
+                if data_["_busy"]:
+                    return
+                data_["_busy"] = True
+                self._draw_ax(ax_, data_, invert=False)
+                data_["_busy"] = False
+            ax.callbacks.connect("xlim_changed", _on_xlim)
+            x, y = data["x"], data["y"]
+
+            # ── spectrum trace ────────────────────────────────────────
+            ax.plot(x, y, lw=1.0, color=self._TRACE_COLOR)
+            if invert:
+                ax.invert_xaxis()
+            else:
+                ax.set_xlim(xlim)
+
+            # ── chrome ───────────────────────────────────────────────
+            ax.set_yticks([])
+            ax.set_title(data["subtitle"], fontsize=9, pad=4)
+            ax.set_xlabel(data["xlabel"], fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.spines[["right", "top", "left"]].set_visible(False)
+
+            # ── peak annotations ─────────────────────────────────────
+            peak_x   = data["peak_x"]
+            peak_lbl = data["peak_lbl"]
+            peak_n   = data.get("peak_n") or []
+            if not (peak_x and peak_lbl):
+                self.draw_idle()
+                return
+
+            xmin, xmax = ax.get_xlim()
+            # keep only peaks visible in the current view
+            counts_full = peak_n if len(peak_n) == len(peak_x) else [None] * len(peak_x)
+            visible = [
+                (px, lbl, n)
+                for px, lbl, n in zip(peak_x, peak_lbl, counts_full)
+                if min(xmin, xmax) <= px <= max(xmin, xmax)
+            ]
+            if not visible:
+                self.draw_idle()
+                return
+
+            vis_px, vis_lbl, vis_n = zip(*visible)
+            vis_px  = list(vis_px)
+            vis_lbl = list(vis_lbl)
+            vis_n   = list(vis_n)
+
+            # compute minimum separation that avoids visual character overlap
+            # (labels are 90° rotated, so their horizontal footprint ≈ 1 em)
+            inv = ax.transData.inverted()
+            em_ppm = abs(
+                inv.transform((self._LABEL_FS / 72 * self._fig.dpi, 0))[0]
+                - inv.transform((0, 0))[0]
+            ) * 1.15
+
+            # resolve overlaps — nudge only when peaks are actually too close
+            adj = list(vis_px)
+            for _ in range(300):
+                moved = False
+                for i in range(len(adj) - 1):
+                    gap = adj[i] - adj[i + 1]   # reversed axis: left > right
+                    if abs(gap) < em_ppm:
+                        delta = (em_ppm - abs(gap)) / 2
+                        adj[i]     += delta
+                        adj[i + 1] -= delta
+                        moved = True
+                if not moved:
+                    break
+
+            # draw dashed line from peak to label + count below baseline
+            y_range = y.max() - y.min() if y.max() != y.min() else 1.0
+            tick_h  = self._TICK_FRAC * y_range
+            lbl_y   = y.max() + tick_h * 1.3
+            cnt_y   = y.min() - tick_h * 0.6   # sits between baseline and trace
+
+            for px, lx, lbl, n in zip(vis_px, adj, vis_lbl, vis_n):
+                peak_y = y[_np.argmin(_np.abs(x - px))]
+                ax.plot(
+                    [px, lx], [peak_y, lbl_y],
+                    color=self._TICK_COLOR, lw=0.6,
+                    linestyle="--", alpha=0.5, clip_on=False,
+                )
+                ax.text(
+                    lx, lbl_y, lbl,
+                    fontsize=self._LABEL_FS, rotation=90,
+                    va="bottom", ha="center",
+                    color=self._LABEL_COLOR, clip_on=False,
+                )
+                if n is not None:
+                    ax.text(
+                        px, cnt_y, str(n),
+                        fontsize=self._LABEL_FS - 1, rotation=0,
+                        va="top", ha="center",
+                        color=self._TICK_COLOR, clip_on=False,
+                        alpha=0.75,
+                    )
+
+            # give labels and counts headroom
+            ax.set_ylim(
+                bottom=y.min() - tick_h * 1.5,
+                top=lbl_y,
+            )
+            self.draw_idle()
 
 
 # ---------------------------------------------------------------------------

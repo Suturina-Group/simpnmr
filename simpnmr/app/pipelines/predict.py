@@ -31,7 +31,11 @@ from simpnmr.app.params.options import PredictRunOptions
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import resolve_output_linewidths
 from simpnmr.core.domain.tensor import Susceptibility
-from simpnmr.core.phys.susc import get_spin_only_susc
+from simpnmr.core.phys.susc import (
+    build_susceptibility_from_reduced_chi,
+    build_susceptibility_from_sh,
+    get_spin_only_susc,
+)
 from simpnmr.app.policies.relax import resolve_relaxation_conditions
 from simpnmr.app.policies.susc import resolve_susceptibility_source
 
@@ -169,13 +173,87 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         )
         if config.hyperfine_method == "pdip":
             logger.warning(
-                "susceptibility:method spin_only produces an isotropic susceptibility "
-                "tensor, so only the Fermi contact shift (A_iso × χ_iso) contributes. "
-                "The point-dipole hyperfine model (pdip) gives A_iso = 0, so all "
-                "predicted paramagnetic shifts will be zero. "
-                "Provide a contact hyperfine file (e.g. from DFT) and set "
-                "hyperfine:method to 'qc' or 'pdip+fc'."
+                "susceptibility:method spin_only produces an isotropic "
+                "susceptibility tensor, so only the Fermi contact shift "
+                "(A_iso × χ_iso) contributes. The point-dipole hyperfine "
+                "model (pdip) gives A_iso = 0, so all predicted paramagnetic "
+                "shifts will be zero. Provide a contact hyperfine file "
+                "(e.g. from DFT) and set hyperfine:method to 'qc' or "
+                "'pdip+fc'."
             )
+    elif getattr(config, "susceptibility_method", None) == "sh":
+        # Spin-Hamiltonian path: build chi tensors from g-tensor principal
+        # values, ZFS parameters (D, E in cm⁻¹), and ZYZ Euler angles
+        # (molecular frame → SH eigenframe).
+        orbit_L = base_molecule.electronic.orbit_L
+        if orbit_L != 0:
+            raise ValueError(
+                f"susceptibility:method sh requires L=0 (pure spin system), "
+                f"but L={orbit_L} was loaded. Use a file-based susceptibility "
+                "source for systems with orbital angular momentum."
+            )
+        spin = base_molecule.electronic.spin_S
+        sh = config.susceptibility_sh
+        D_cmm1 = float(sh["D"])
+        E_over_D = float(sh["E_over_D"])
+        if not (0.0 <= E_over_D <= 1.0 / 3.0):
+            raise ValueError(
+                f"susceptibility:sh E_over_D={E_over_D:.4f} is outside "
+                "[0, 1/3]. Rhombicity must satisfy 0 ≤ E/D ≤ 1/3."
+            )
+        suscs = build_susceptibility_from_sh(
+            gx=float(sh["gx"]),
+            gy=float(sh["gy"]),
+            gz=float(sh["gz"]),
+            D_cmm1=D_cmm1,
+            E_cmm1=E_over_D * D_cmm1,
+            alpha_deg=float(sh["alpha"]),
+            beta_deg=float(sh["beta"]),
+            gamma_deg=float(sh["gamma"]),
+            spin=spin,
+            temperatures=config.susceptibility_temperatures,
+        )
+        logger.info(
+            "SH susceptibility built for %d temperature(s) "
+            "(S=%.1f, D=%.4f cm⁻¹, E/D=%.4f)",
+            len(suscs),
+            spin,
+            D_cmm1,
+            E_over_D,
+        )
+    elif getattr(config, "susceptibility_method", None) == "reduced_chi":
+        # Reduced-chiT path: build tensors directly from the dimensionless
+        # Δχ·T/C components (as read from the isoaxrh plot after fit_susc)
+        # and ZYZ Euler angles.  No L=0 restriction — the Curie prefactor
+        # only scales the tensor, and the user is supplying fitted values.
+        rc = config.susceptibility_reduced_chi
+        rh_over_ax = float(rc["rh_over_ax"])
+        if not (0.0 <= rh_over_ax <= 1.0 / 3.0):
+            raise ValueError(
+                f"susceptibility:reduced_chi rh_over_ax={rh_over_ax:.4f} "
+                "is outside [0, 1/3]. Rhombicity must satisfy 0 ≤ rh/ax ≤ 1/3."
+            )
+        chi_ax_T = rc["chi_ax_T"]
+        if isinstance(chi_ax_T, list):
+            chi_rh_T = [rh_over_ax * v for v in chi_ax_T]
+        else:
+            chi_rh_T = rh_over_ax * float(chi_ax_T)
+        suscs = build_susceptibility_from_reduced_chi(
+            chi_iso_T=rc["chi_iso_T"],
+            chi_ax_T=chi_ax_T,
+            chi_rh_T=chi_rh_T,
+            alpha_deg=float(rc["alpha"]),
+            beta_deg=float(rc["beta"]),
+            gamma_deg=float(rc["gamma"]),
+            spin=base_molecule.electronic.spin_S,
+            temperatures=config.susceptibility_temperatures,
+        )
+        logger.info(
+            "Reduced-chiT susceptibility built for %d temperature(s) "
+            "(rh/ax=%.4f)",
+            len(suscs),
+            rh_over_ax,
+        )
     else:
         suscs = load_susceptibilities(
             config.susceptibility_file,
@@ -563,6 +641,55 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         linewidth_outputs.append(linewidth_output)
 
     # TODO If more than one temperature, then make a stacked plot of spectra
+
+    from simpnmr.core.domain.tensor import Hyperfine
+    from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
+    from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
+
+    for molecule in molecules:
+        molecule.susc.calc_irred()
+
+        if molecule.paramagnetic_centre is None:
+            logger.warning(
+                "paramagnetic_centre not set on molecule — "
+                "skipping PCS isosurface for T=%.2f K",
+                molecule.susc.temperature,
+            )
+            continue
+
+        labels_arr = np.asarray(molecule.labels)
+        coords_bohr = np.asarray(molecule.coords, dtype=float) * 1.88973
+
+        # Paramagnetic centre in bohr (from the molecule's Å coordinates).
+        centre_bohr = np.asarray(molecule.paramagnetic_centre, dtype=float) * 1.88973
+
+        values, origin_bohr_rel, step_bohr, grid_shape = compute_pcs_isosurface(
+            chi_dtensor=molecule.susc.dtensor,
+            pdip_fn=Hyperfine.calc_pdip,
+        )
+
+        # Grid origin in the molecule's absolute bohr frame.
+        origin_bohr = tuple(
+            float(centre_bohr[i]) + origin_bohr_rel[i] for i in range(3)
+        )
+
+        file_name = os.path.join(
+            config.project_name,
+            f"pcs_isosurf_{molecule.susc.temperature:.2f}_K.cube",
+        )
+
+        write_pcs_cube(
+            file_name=file_name,
+            comment=f"PCS Isosurface (T = {molecule.susc.temperature:.2f} K)",
+            labels=labels_arr,
+            coords_bohr=coords_bohr,
+            origin_bohr=origin_bohr,
+            step_bohr=step_bohr,
+            grid_shape=grid_shape,
+            values=values,
+        )
+
+        logger.info("PCS isosurface written to %s", file_name)
 
     # Save susceptibility data to file
     save_susc(

@@ -66,6 +66,15 @@ def save_peak_data_to_csv(
         None.
     """
     label_to_chem_label = {nuc.label: nuc.chem_label for nuc in molecule.nuclei}
+    # Map each chemical label to the isotope of the first nucleus that carries it
+    chem_label_to_isotope: dict[str, str] = {}
+    chem_label_count: dict[str, int] = {}
+    for nuc in molecule.nuclei:
+        if nuc.chem_label:
+            if nuc.chem_label not in chem_label_to_isotope:
+                chem_label_to_isotope[nuc.chem_label] = nuc.isotope
+            chem_label_count[nuc.chem_label] = chem_label_count.get(nuc.chem_label, 0) + 1
+
     if linewidth_by_label is None:
         lw_by_label = {
             nuc.label: nuc.shift.lw
@@ -250,9 +259,11 @@ def save_peak_data_to_csv(
 
     chem_labels = sorted(chem_labels)
 
-    # Base columns: chem_label only, then shift columns, then linewidth, then R1/R2 etc.
+    # Base columns: chem_label, isotope, count, then shift columns, linewidth, R1/R2
     out: dict[str, list] = {
         "chem_label": chem_labels,
+        "isotope": [chem_label_to_isotope.get(lbl, "") for lbl in chem_labels],
+        "count": [chem_label_count.get(lbl, 0) for lbl in chem_labels],
     }
 
     if avg_delta_total_avg_by_chem_label is not None:
@@ -271,9 +282,13 @@ def save_peak_data_to_csv(
         out[fc_column_name] = [
             avg_delta_fc_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
         ]
-    if avg_delta_fc_spin_only_by_chem_label is not None:
+    # Only write the dedicated spin-only column when the FC column above was
+    # named something else (has_fc_gcorr) — otherwise we'd get two columns
+    # with the same name "δ_fc_spin_only_avg (ppm)".
+    if avg_delta_fc_spin_only_by_chem_label is not None and not has_fc_spin_only:
         out["δ_fc_spin_only_avg (ppm)"] = [
-            avg_delta_fc_spin_only_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+            avg_delta_fc_spin_only_by_chem_label.get(lbl, np.nan)
+            for lbl in chem_labels
         ]
     if avg_delta_fc_g_corr_by_chem_label is not None:
         out["Δδ_fc_g_corr_avg (ppm)"] = [
@@ -325,5 +340,3 @@ def save_peak_data_to_csv(
 
     if verbose:
         logger.info("pNMR data written to %s", file_name)
-
-    return

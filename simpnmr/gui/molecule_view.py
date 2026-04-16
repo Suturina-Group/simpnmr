@@ -34,7 +34,7 @@ import json
 import re
 import tempfile
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -91,7 +91,9 @@ class Molecule:
     def to_xyz_string(self, comment: str = "") -> str:
         lines = [str(len(self.atoms)), comment]
         for a in self.atoms:
-            lines.append(f"{a.element:<3s} {a.x:14.6f} {a.y:14.6f} {a.z:14.6f}")
+            lines.append(
+                f"{a.element:<3s} {a.x:14.6f} {a.y:14.6f} {a.z:14.6f}"
+            )
         return "\n".join(lines) + "\n"
 
 
@@ -116,7 +118,8 @@ def parse_xyz(path: str | Path) -> Molecule:
 
     atoms: list[Atom] = []
     for i, ln in enumerate(body):
-        parts = ln.split(None, 4)             # keep remainder intact for the label
+        # keep remainder intact for the label
+        parts = ln.split(None, 4)
         if len(parts) < 4:
             continue
         col0 = parts[0]
@@ -131,7 +134,7 @@ def parse_xyz(path: str | Path) -> Molecule:
             if m:
                 label = m.group(1) or m.group(2)
             else:
-                # fall back: a bare token after the coords is treated as a label
+                # fall back: bare token after coords treated as label
                 token = parts[4].strip().split()
                 if token:
                     label = token[0]
@@ -184,19 +187,19 @@ const colored   = {colored_json};
 const labels    = {labels_json};
 const baseStyle = {base_style_json};
 const labelStyle= {label_style_json};
+const cubeData  = {cube_json};
 
 let viewer = $3Dmol.createViewer("v", {{backgroundColor:"white"}});
 viewer.addModel(xyz, "xyz");
 viewer.setStyle({{}}, baseStyle);
 
-// Override style for labelled hydrogens (color them by group)
+// Override style for labelled atoms (color them by group)
 colored.forEach(c => {{
   viewer.setStyle({{index: c.index}},
     {{sphere:{{scale: c.scale, color: c.color}}, stick:{{radius:0.12}}}});
 }});
 
-// Single framed label per group, on a representative atom
-labels.forEach(L => {{
+function addLabelToViewer(L) {{
   viewer.addLabel(L.text, {{
     position: {{x:L.x, y:L.y, z:L.z + 0.6}},
     fontSize: labelStyle.fontSize,
@@ -207,7 +210,33 @@ labels.forEach(L => {{
     borderColor: L.color,
     inFront: true
   }});
-}});
+}}
+
+function filterLabels(elem) {{
+  viewer.removeAllLabels();
+  const toShow = (elem === 'all')
+    ? labels : labels.filter(L => L.elem === elem);
+  toShow.forEach(addLabelToViewer);
+  viewer.render();
+}}
+
+// Single framed label per group, on a representative atom
+labels.forEach(addLabelToViewer);
+
+// PCS isosurface — positive lobe blue, negative lobe red
+let _isoShapes = [];
+function renderIsosurface(isoval) {{
+  _isoShapes.forEach(s => viewer.removeShape(s));
+  _isoShapes = [];
+  if (cubeData && isoval > 0) {{
+    _isoShapes.push(viewer.addVolumetricData(cubeData, "cube",
+      {{isoval:  isoval, color:"blue", opacity:0.75, wireframe:false}}));
+    _isoShapes.push(viewer.addVolumetricData(cubeData, "cube",
+      {{isoval: -isoval, color:"red",  opacity:0.75, wireframe:false}}));
+  }}
+  viewer.render();
+}}
+renderIsosurface({default_isoval});
 
 // QWebChannel bridge for click-back into Python
 new QWebChannel(qt.webChannelTransport, function(channel) {{
@@ -245,8 +274,10 @@ def build_viewer_html(mol: Molecule,
                       rep_index: Optional[dict[str, int]] = None,
                       base_sphere_scale: float = 0.25,
                       group_sphere_scale: float = 0.275,
-                      label_font_size: int = 28,
-                      title: str = "Molecule") -> str:
+                      label_font_size: int = 14,
+                      title: str = "Molecule",
+                      cube_data: Optional[str] = None,
+                      default_isoval: float = 100000.0) -> str:
     """Build a self-contained HTML page that renders `mol` with grouped
     label colors and one framed label per group.
 
@@ -257,6 +288,11 @@ def build_viewer_html(mol: Molecule,
     rep_index : dict[label -> int], optional
         Which member of the group to anchor the label on (0-based).
         Use this to break visual overlaps between groups.
+    cube_data : str, optional
+        Raw text of a Gaussian cube file. When provided, PCS isosurfaces
+        (±default_isoval) are rendered on top of the molecule.
+    default_isoval : float
+        Starting isovalue in the same units as the cube (ppb by default).
     """
     groups = mol.grouped_by_label()
     colors = assign_label_colors(list(groups.keys()), label_colors)
@@ -272,6 +308,7 @@ def build_viewer_html(mol: Molecule,
         idx = rep_index.get(tag, 0) % len(members)
         rep = members[idx]
         labels.append({'text': tag, 'color': colors[tag],
+                       'elem': rep.element,
                        'x': rep.x, 'y': rep.y, 'z': rep.z})
 
     base_style = {'sphere': {'scale': base_sphere_scale},
@@ -288,6 +325,8 @@ def build_viewer_html(mol: Molecule,
         labels_json=json.dumps(labels),
         base_style_json=json.dumps(base_style),
         label_style_json=json.dumps(label_style),
+        cube_json=json.dumps(cube_data),
+        default_isoval=json.dumps(default_isoval),
     )
 
 
@@ -350,8 +389,13 @@ class MoleculeView(QWidget):
         # Write to a temp file so the embedded qwebchannel.js loads correctly
         tmp = tempfile.NamedTemporaryFile('w', suffix='.html',
                                           delete=False, encoding='utf-8')
-        tmp.write(html); tmp.close()
+        tmp.write(html)
+        tmp.close()
         self._web.load(QUrl.fromLocalFile(tmp.name))
+
+    def set_isosurface_isovalue(self, isoval_ppb: float) -> None:
+        """Update the PCS isosurface isovalue (ppb) without page reload."""
+        self.run_js(f"renderIsosurface({json.dumps(isoval_ppb)});")
 
     def run_js(self, code: str, callback=None) -> None:
         page = self._web.page()

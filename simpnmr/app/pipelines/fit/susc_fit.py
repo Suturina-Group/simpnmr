@@ -980,23 +980,23 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             labels_arr = np.asarray(molecule.labels)
             coords_arr = np.asarray(molecule.coords, dtype=float)
 
-            center_atom = molecule.labels[0]
-            center_idx = np.where(labels_arr == center_atom)[0]
-            if center_idx.size == 0:
-                raise ValueError(
-                    f"Center atom {center_atom} not found in labels"
-                )
-
             coords_bohr = coords_arr * 1.88973
-            coords_bohr = coords_bohr - coords_bohr[center_idx[0]]
+            if molecule.paramagnetic_centre is not None:
+                centre_bohr = (
+                    np.asarray(molecule.paramagnetic_centre, dtype=float)
+                    * 1.88973
+                )
+            else:
+                centre_bohr = coords_bohr[0]
 
             (
-                values, origin_bohr, step_bohr, grid_shape
+                values, origin_bohr_rel, step_bohr, grid_shape
             ) = compute_pcs_isosurface(
                 chi_dtensor=molecule.susc.dtensor,
-                labels=labels_arr,
-                center_atom=center_atom,
                 pdip_fn=Hyperfine.calc_pdip,
+            )
+            origin_bohr = tuple(
+                float(centre_bohr[i]) + origin_bohr_rel[i] for i in range(3)
             )
 
             file_name = os.path.join(
