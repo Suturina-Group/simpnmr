@@ -259,6 +259,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             input_units=config.susc_fit_input_units,
             temperature=experiment.temperature,
             spin=spin,
+            total_J=base_molecule.electronic.total_J,
         )
         susc_models.append(model_to_use(fit_vars, fix_vars))
 
@@ -595,6 +596,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     f"Fitted shifts at {experiment.temperature:.2f} K"
                 ),
                 spin=spin,
+                total_J=base_molecule.electronic.total_J,
             )
 
         # Unique isotopes in molecule (insertion-ordered)

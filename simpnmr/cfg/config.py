@@ -272,13 +272,17 @@ class FitSuscConfig(Config):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            # Atom label (e.g. "Ni1") — resolved against molecule geometry at load time
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -288,7 +292,10 @@ class FitSuscConfig(Config):
                     "list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @property
     def hyperfine_orbital_contribution(self) -> str:
@@ -1471,7 +1478,7 @@ class PredictConfig(FitSuscConfig):
         "diamagnetic_ref": ["method", "file"],
         "susceptibility": [
             "file", "format", "temperatures", "method", "sh",
-            "reduced_chi",
+            "reduced_chi", "bleaney",
         ],
         "relaxation": [
             "model",
@@ -1491,6 +1498,7 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_method = None
         self._susceptibility_sh = {}
         self._susceptibility_reduced_chi = {}
+        self._susceptibility_bleaney = {}
         self._relaxation_model = ""
         self._hyperfine_paramagnetic_centre = None
         self._relaxation_temperature = None
@@ -1557,13 +1565,34 @@ class PredictConfig(FitSuscConfig):
             self._susceptibility_method = None
             return None
         method = value.strip().lower()
-        allowed = {"spin_only", "sh", "reduced_chi"}
+        allowed = {"spin_only", "sh", "reduced_chi", "bleaney"}
         if method not in allowed:
             raise ValueError(
                 f"Unknown susceptibility:method '{value}'. "
                 f"Allowed: {', '.join(sorted(allowed))}."
             )
         self._susceptibility_method = method
+        return None
+
+    @property
+    def susceptibility_bleaney(self) -> dict:
+        return self._susceptibility_bleaney
+
+    @susceptibility_bleaney.setter
+    def susceptibility_bleaney(self, value):
+        if value is None:
+            self._susceptibility_bleaney = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:bleaney must be a mapping")
+        required = {"B20", "B22", "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:bleaney is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_bleaney = value
         return None
 
     @property
@@ -1627,13 +1656,16 @@ class PredictConfig(FitSuscConfig):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -1643,7 +1675,10 @@ class PredictConfig(FitSuscConfig):
                     "list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @property
     def relaxation_temperature(self) -> float | None:
@@ -1942,13 +1977,16 @@ class FitCorrTimeConfig(FitSuscConfig):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -1958,7 +1996,10 @@ class FitCorrTimeConfig(FitSuscConfig):
                     "to list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @classmethod
     def from_file(cls, file_name: str) -> "FitCorrTimeConfig":

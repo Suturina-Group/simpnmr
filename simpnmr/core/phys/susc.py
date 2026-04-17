@@ -155,6 +155,96 @@ def build_susceptibility_from_sh(
     return suscs
 
 
+def build_susceptibility_from_bleaney(
+    B20_cmm1: float,
+    B22_cmm1: float,
+    alpha_deg: float,
+    beta_deg: float,
+    gamma_deg: float,
+    spin: float,
+    orbit_L: float,
+    total_J: float,
+    temperatures: list[float],
+) -> list:
+    """Build Susceptibility objects from Bleaney crystal-field parameters.
+
+    Uses the second-rank Stevens crystal-field parameters B²₀ and B²₂ (in
+    cm⁻¹) to parameterise the ZFS via D = 3·B²₀ and E = B²₂.  The g-tensor
+    is taken as isotropic with the Landé g_J value, which is appropriate for
+    lanthanide/actinide J-multiplet states where the orbital contribution is
+    quenched only by the total angular momentum.
+
+    Args:
+        B20_cmm1: Second-rank axial Stevens parameter B²₀ in cm⁻¹.
+        B22_cmm1: Second-rank rhombic Stevens parameter B²₂ in cm⁻¹.
+        alpha_deg: ZYZ Euler angle α (molecular → eigenframe) in degrees.
+        beta_deg:  ZYZ Euler angle β in degrees.
+        gamma_deg: ZYZ Euler angle γ in degrees.
+        spin:    Spin quantum number S.
+        orbit_L: Orbital angular momentum quantum number L.
+        total_J: Total angular momentum quantum number J (must be set).
+        temperatures: Sequence of temperatures in Kelvin.
+
+    Returns:
+        List of Susceptibility objects, one per temperature.
+
+    Raises:
+        ValueError: If ``total_J`` is zero or not provided (method requires L≠0).
+    """
+    if not total_J:
+        raise ValueError(
+            "susceptibility:method bleaney requires total_J to be set "
+            "(hyperfine:total_momentum_J must be provided for L≠0 systems)"
+        )
+
+    from simpnmr.core.domain.tensor import Susceptibility
+    from simpnmr.core.fitting.vt import (
+        compute_analytic_component,
+        compute_curie_prefactor,
+    )
+
+    g_J = calc_g_eff(spin, orbit_L, total_J)
+    # For a pure J state the g-tensor is isotropic: g_sq_ax = g_sq_rh = 0
+    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+
+    D_cmm1 = 3.0 * B20_cmm1
+    E_cmm1 = B22_cmm1
+
+    D_J_si = D_cmm1 * H * C * 100.0
+    E_J_si = E_cmm1 * H * C * 100.0
+
+    prefactor = compute_curie_prefactor(spin, total_J)
+    R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
+
+    def _analytic(comp, t):
+        return (
+            float(
+                compute_analytic_component(
+                    comp, t, g_sq, D_J_si, E_J_si, spin, total_J=total_J
+                )[0]
+            )
+            * prefactor
+        )
+
+    suscs = []
+    for T in temperatures:
+        t = np.asarray([float(T)], dtype=float)
+        chi_iso = _analytic("iso", t)
+        chi_ax  = _analytic("ax",  t)
+        chi_rh  = _analytic("rh",  t)
+
+        chi_zz = chi_iso + 2.0 / 3.0 * chi_ax
+        chi_xx = chi_iso - 1.0 / 3.0 * chi_ax + chi_rh
+        chi_yy = chi_iso - 1.0 / 3.0 * chi_ax - chi_rh
+
+        chi_eigen = np.diag([chi_xx, chi_yy, chi_zz])
+        chi_mol = R @ chi_eigen @ R.T
+
+        suscs.append(Susceptibility(tensor=chi_mol, temperature=float(T)))
+
+    return suscs
+
+
 def build_susceptibility_from_reduced_chi(
     chi_iso_T: float | list[float],
     chi_ax_T: float | list[float],
@@ -164,6 +254,7 @@ def build_susceptibility_from_reduced_chi(
     gamma_deg: float,
     spin: float,
     temperatures: list[float],
+    total_J: float | None = None,
 ) -> list:
     """Build Susceptibility objects from reduced ΔχT values and Euler angles.
 
@@ -182,8 +273,10 @@ def build_susceptibility_from_reduced_chi(
         alpha_deg: ZYZ Euler angle α (molecular → eigenframe) in degrees.
         beta_deg:  ZYZ Euler angle β in degrees.
         gamma_deg: ZYZ Euler angle γ in degrees.
-        spin:       Total spin quantum number S (used for Curie prefactor).
+        spin:       Spin quantum number S.
         temperatures: Sequence of temperatures in Kelvin.
+        total_J:   Total angular momentum J. When provided, J(J+1) replaces
+                   S(S+1) in the Curie prefactor.
 
     Returns:
         List of Susceptibility objects, one per temperature.
@@ -191,7 +284,7 @@ def build_susceptibility_from_reduced_chi(
     from simpnmr.core.domain.tensor import Susceptibility
     from simpnmr.core.fitting.vt import compute_curie_prefactor
 
-    prefactor = compute_curie_prefactor(spin)  # Å³·K
+    prefactor = compute_curie_prefactor(spin, total_J)  # Å³·K
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
 
     def _broadcast(val, n):

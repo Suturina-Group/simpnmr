@@ -67,6 +67,7 @@ def plot_fitted_shifts(
     susc_units: str = "A3",
     verbose: bool = True,
     spin: float | None = None,
+    total_J: float | None = None,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plots theoretical vs experimental shifts for a fitted susceptibility model.
 
@@ -84,6 +85,11 @@ def plot_fitted_shifts(
         susc_units: Units for reporting susceptibility values in the annotation.
             Supported: ``"A3"``, ``"A3 mol-1"``, ``"cm3"``, ``"cm3 mol-1"``.
         verbose: If ``True``, prints the output file name when saving.
+        spin: Spin quantum number S.  Used to normalise susceptibility values
+            in the annotation.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1) used for unit
+            conversion.
 
     Returns:
         A tuple ``(fig, ax)``.
@@ -218,7 +224,7 @@ def plot_fitted_shifts(
     if spin is not None:
         # Report canonical quantities as dimensionless reduced values
         # χ′T = χ · T / norm_factor  (norm_factor in Å³·K)
-        norm_factor = compute_curie_prefactor(spin)  # Å³·K
+        norm_factor = compute_curie_prefactor(spin, total_J)  # Å³·K
         T = float(molecule.susc.temperature)
         red_conv = T / norm_factor  # Å³ → dimensionless
 

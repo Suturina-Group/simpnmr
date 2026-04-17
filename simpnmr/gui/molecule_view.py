@@ -230,9 +230,9 @@ function renderIsosurface(isoval) {{
   _isoShapes = [];
   if (cubeData && isoval > 0) {{
     _isoShapes.push(viewer.addVolumetricData(cubeData, "cube",
-      {{isoval:  isoval, color:"blue", opacity:0.75, wireframe:false}}));
+      {{isoval:  isoval, color:"red",  opacity:0.75, wireframe:false}}));
     _isoShapes.push(viewer.addVolumetricData(cubeData, "cube",
-      {{isoval: -isoval, color:"red",  opacity:0.75, wireframe:false}}));
+      {{isoval: -isoval, color:"blue", opacity:0.75, wireframe:false}}));
   }}
   viewer.render();
 }}

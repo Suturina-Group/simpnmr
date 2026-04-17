@@ -131,6 +131,7 @@ def resolve_susc_fit_variables(
     input_units: str | None,
     temperature: float,
     spin: float,
+    total_J: float | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Convert YAML susceptibility-fit variables into canonical internal units.
 
@@ -143,6 +144,8 @@ def resolve_susc_fit_variables(
         input_units: Optional unit label from ``susc_fit:input_units``.
         temperature: Experiment temperature in kelvin. Used for ``reduced`` input.
         spin: Electronic spin quantum number. Used for ``reduced`` input.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor used for ``reduced`` units.
 
     Returns:
         Tuple ``(fit_vars, fix_vars)`` with canonical values in ``Å^3``.
@@ -156,6 +159,7 @@ def resolve_susc_fit_variables(
         input_units=units,
         temperature=temperature,
         spin=spin,
+        total_J=total_J,
     )
 
     fit_vars: dict[str, float] = {}
@@ -310,8 +314,22 @@ def _get_susc_fit_input_scale_to_a3(
     input_units: SuscFitInputUnits,
     temperature: float,
     spin: float,
+    total_J: float | None = None,
 ) -> float:
-    """Return the multiplicative factor that converts input values to ``Å^3``."""
+    """Return the multiplicative factor that converts input values to ``Å^3``.
+
+    Args:
+        input_units: Canonical unit label (``"A3"``, ``"cm3 mol-1"``,
+            ``"reduced"``).
+        temperature: Experiment temperature in Kelvin. Required for
+            ``"reduced"`` units.
+        spin: Spin quantum number S.  Required for ``"reduced"`` units.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor used for ``"reduced"`` units.
+
+    Returns:
+        Scale factor (float) such that ``input_value * scale == value_in_A3``.
+    """
 
     if input_units == "A3":
         return 1.0
@@ -330,10 +348,12 @@ def _get_susc_fit_input_scale_to_a3(
             "susc_fit:input_units='reduced' requires a positive experiment temperature"
         )
 
-    return _compute_curie_prefactor(spin) / float(temperature)
+    return _compute_curie_prefactor(spin, total_J) / float(temperature)
 
 
-def _compute_curie_prefactor(spin: float) -> float:
-    """Return the Curie prefactor in ``Å^3 K`` used by reduced susceptibility units."""
-
-    return (MU0 * MUB**2 * float(spin) * (float(spin) + 1.0)) / (3.0 * KB) * 1e30
+def _compute_curie_prefactor(
+    spin: float, total_J: float | None = None
+) -> float:
+    """Return the Curie prefactor in ``Å^3 K`` for reduced susc. units."""
+    J_eff = total_J if total_J is not None else spin
+    return (MU0 * MUB**2 * J_eff * (J_eff + 1.0)) / (3.0 * KB) * 1e30

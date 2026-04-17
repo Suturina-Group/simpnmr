@@ -19,6 +19,7 @@ def fit_chit_linear_model(
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
     susc_vt_variables: dict,
+    total_J: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Fit a linear chiT(T) = A + B / T + tip * T model to
@@ -27,14 +28,16 @@ def fit_chit_linear_model(
     If valid error estimates are provided, a weighted least-squares fit is performed
 
     Args:
-        spin (float): Total spin quantum number S.
-        fit_temps (np.ndarray): Temperature values.
-        chi_vals (np.ndarray): Susceptibility values for a single chi_component.
-        chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array
-        of the same shape.
-        susc_vt_variables (dict): Variables controlling fit modes and initial values.
-            Must include keys `intercept` and `slope`. The optional key `tip` may be
-            provided as `["fit", <guess>]` or `["fix", <value>]`.
+        spin: Spin quantum number S.
+        fit_temps: Temperature values in Kelvin.
+        chi_vals: Susceptibility values for a single chi component in Å³.
+        chi_errors: Uncertainties associated with ``chi_vals``.
+        susc_vt_variables: Variables controlling fit modes and initial values.
+            Must include keys ``intercept`` and ``slope``. The optional key
+            ``tip`` may be provided as ``["fit", <guess>]`` or
+            ``["fix", <value>]``.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
@@ -55,7 +58,7 @@ def fit_chit_linear_model(
 
         return Intercept + Slope / T + tip * T
 
-    norm_factor = compute_curie_prefactor(spin)
+    norm_factor = compute_curie_prefactor(spin, total_J)
 
     fit_param_names: list[str] = []
     x0: list[float] = []
@@ -270,6 +273,7 @@ def compute_chit_high_t_limit(
     fit_temps: np.ndarray,
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
+    total_J: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Evaluate the high-temperature chiT limit assuming a zero slope
@@ -279,10 +283,12 @@ def compute_chit_high_t_limit(
     returned fixed at 0.0.
 
     Args:
-        temperature (array_like): Temperature values
-        chi_value (array_like): Susceptibility values for a single chi_component
-        chi_errors: Uncertainties associated with `chi_vals` as an array
-        of the same shape
+        spin: Spin quantum number S.
+        fit_temps: Temperature values in Kelvin.
+        chi_vals: Susceptibility values for a single chi component in Å³.
+        chi_errors: Uncertainties associated with ``chi_vals``.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
@@ -295,7 +301,7 @@ def compute_chit_high_t_limit(
             `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
             for downstream visualization.
     """
-    norm_factor = compute_curie_prefactor(spin)
+    norm_factor = compute_curie_prefactor(spin, total_J)
 
     # chiT in internal units -> Curie-normalised (dimensionless)
     chiT_reduced = (chi_vals * fit_temps) / norm_factor
@@ -331,7 +337,36 @@ def compute_analytic_component(
     D_J: float,
     E_J: float,
     spin: float,
+    total_J: float | None = None,
 ) -> np.ndarray:
+    """Evaluate an analytic high-temperature susceptibility component.
+
+    Computes the second-order VT expansion of the iso, axial, or rhombic
+    susceptibility component in reduced Curie units (chiT / prefactor, units
+    of 1/K).  The ZFS second-order coefficient uses ``(2J−1)(2J+3)`` when
+    ``total_J`` is supplied (lanthanide/actinide J-multiplets) or
+    ``(2S−1)(2S+3)`` for pure spin systems.
+
+    Args:
+        chi_component: Which component to evaluate — ``"iso"``, ``"ax"``,
+            or ``"rh"``.
+        temperature: Temperature array in Kelvin.
+        g_sq: Dict of squared g-tensor invariants with keys ``g_sq_iso``,
+            ``g_sq_ax``, ``g_sq_rh``.
+        D_J: Axial ZFS parameter in Joules.
+        E_J: Rhombic ZFS parameter in Joules.
+        spin: Spin quantum number S.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the ZFS coefficient ``(2J_eff−1)(2J_eff+3)``.
+
+    Returns:
+        Array of analytic chi/prefactor values (units 1/K) evaluated on
+        ``temperature``.
+
+    Raises:
+        ValueError: If ``chi_component`` is not ``"iso"``, ``"ax"``, or
+            ``"rh"``.
+    """
     g_sq_iso = float(g_components_sq["g_sq_iso"])
     g_sq_ax = float(g_components_sq["g_sq_ax"])
     g_sq_rh = float(g_components_sq["g_sq_rh"])
@@ -342,8 +377,9 @@ def compute_analytic_component(
     # Accept both scalar and array temperatures.
     t = np.asarray(temperature, dtype=float)
 
-    # Compute Spin coefficient
-    f_S = (2 * spin - 1) * (2 * spin + 3)
+    # ZFS coefficient: use J when orbital angular momentum is present.
+    J_eff = total_J if total_J is not None else spin
+    f_S = (2 * J_eff - 1) * (2 * J_eff + 3)
 
     # Calculate chi component in reduced (Curie) units
     if chi_component == "iso":
@@ -443,8 +479,27 @@ def compute_tip_correction(
     ab_initio_chi: float,
     analytic_chi: float,
     spin: float,
+    total_J: float | None = None,
 ) -> float:
-    norm_factor = compute_curie_prefactor(spin)
+    """Compute the TIP correction as the residual between ab initio and analytic chi.
+
+    Converts the ab initio susceptibility to Curie-normalised units and
+    returns the difference from the analytic high-temperature value.  The
+    result is a dimensionless reduced TIP contribution suitable for use as a
+    fixed ``tip`` variable in :func:`fit_chit_linear_model`.
+
+    Args:
+        ab_initio_chi: Ab initio susceptibility component in Å³.
+        analytic_chi: Analytic chi/prefactor value (units 1/K) at the same
+            reference temperature.
+        spin: Spin quantum number S.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
+
+    Returns:
+        Dimensionless TIP correction (reduced units).
+    """
+    norm_factor = compute_curie_prefactor(spin, total_J)
 
     # Convert Å^3 to reduced units
     ab_initio_chi = ab_initio_chi / norm_factor
@@ -454,17 +509,23 @@ def compute_tip_correction(
     return chi_tip
 
 
-def compute_curie_prefactor(spin: float) -> float:
+def compute_curie_prefactor(
+    spin: float, total_J: float | None = None
+) -> float:
     """
-    Compute the Curie prefactor for a given spin quantum number.
+    Compute the Curie prefactor for a given spin or total-angular-momentum
+    quantum number.
 
     The prefactor is used to normalise susceptibility data and is returned in
     Å^3·K (using 1 Å^3 = 1e-30 m^3).
 
     Args:
-        spin (float): Total spin quantum number S.
+        spin (float): Spin quantum number S. Used when ``total_J`` is ``None``.
+        total_J (float | None): Total angular momentum quantum number J.
+            When provided, J replaces S in the prefactor S(S+1) → J(J+1).
 
     Returns:
         float: Curie prefactor in Å^3·K.
     """
-    return (MU0 * MUB**2 * spin * (spin + 1)) / (3 * KB) * 1e30  # [Å^3·K]
+    J_eff = total_J if total_J is not None else spin
+    return (MU0 * MUB**2 * J_eff * (J_eff + 1)) / (3 * KB) * 1e30  # [Å^3·K]

@@ -205,6 +205,7 @@ def fit_vt(
                     D_J,
                     E_J,
                     spin,
+                    total_J=molecules[0].electronic.total_J,
                 ),
                 dtype=float,
             )
@@ -225,6 +226,7 @@ def fit_vt(
                 ab_initio_value,
                 analytic_val_ref,
                 spin,
+                total_J=molecules[0].electronic.total_J,
             )
             susc_vt_variables[comp]["tip"] = ["fix", float(tip_ref)]
 
@@ -234,7 +236,9 @@ def fit_vt(
             ab_series[comp] = np.asarray(ab_series_full[comp], dtype=float)[ab_mask]
 
         # Normalise ab initio chiT series by the Curie prefactor for consistency
-        curie_prefactor = vt.compute_curie_prefactor(spin)
+        curie_prefactor = vt.compute_curie_prefactor(
+            spin, molecules[0].electronic.total_J
+        )
         for comp in fit_component:
             ab_series[comp] = ab_series[comp] / curie_prefactor
 
@@ -274,6 +278,7 @@ def fit_vt(
                 chi_vals=chi_vals[comp],
                 chi_errors=chi_errors[comp],
                 susc_vt_variables=susc_vt_variables[comp],
+                total_J=molecules[0].electronic.total_J,
             )
 
         if temps_fit.size == 1 or method == "ht_limit":
@@ -282,6 +287,7 @@ def fit_vt(
                 fit_temps=temps_fit,
                 chi_vals=chi_vals[comp],
                 chi_errors=chi_errors[comp],
+                total_J=molecules[0].electronic.total_J,
             )
 
         # Store results

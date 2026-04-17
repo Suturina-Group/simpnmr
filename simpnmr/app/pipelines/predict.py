@@ -32,6 +32,7 @@ from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import resolve_output_linewidths
 from simpnmr.core.domain.tensor import Susceptibility
 from simpnmr.core.phys.susc import (
+    build_susceptibility_from_bleaney,
     build_susceptibility_from_reduced_chi,
     build_susceptibility_from_sh,
     get_spin_only_susc,
@@ -41,6 +42,7 @@ from simpnmr.app.policies.susc import resolve_susceptibility_source
 
 # Core / domain
 from simpnmr.core.const.gammas import get_nuclear_gamma
+from simpnmr.core.phys.tau_c import get_viscosity, run_ellipsoid
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.domain.mol import Molecule
@@ -186,7 +188,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         # values, ZFS parameters (D, E in cm⁻¹), and ZYZ Euler angles
         # (molecular frame → SH eigenframe).
         orbit_L = base_molecule.electronic.orbit_L
-        if orbit_L != 0:
+        if orbit_L is not None and orbit_L != 0:
             raise ValueError(
                 f"susceptibility:method sh requires L=0 (pure spin system), "
                 f"but L={orbit_L} was loaded. Use a file-based susceptibility "
@@ -247,12 +249,41 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
             gamma_deg=float(rc["gamma"]),
             spin=base_molecule.electronic.spin_S,
             temperatures=config.susceptibility_temperatures,
+            total_J=base_molecule.electronic.total_J,
         )
         logger.info(
             "Reduced-chiT susceptibility built for %d temperature(s) "
             "(rh/ax=%.4f)",
             len(suscs),
             rh_over_ax,
+        )
+    elif getattr(config, "susceptibility_method", None) == "bleaney":
+        # Bleaney crystal-field path: D = 3·B²₀, E = B²₂, isotropic g_J.
+        # Requires total_J (L≠0 systems only).
+        total_J = base_molecule.electronic.total_J
+        if not total_J:
+            raise ValueError(
+                "susceptibility:method bleaney requires hyperfine:total_momentum_J "
+                "to be set (L≠0 systems only)"
+            )
+        bl = config.susceptibility_bleaney
+        suscs = build_susceptibility_from_bleaney(
+            B20_cmm1=float(bl["B20"]),
+            B22_cmm1=float(bl["B22"]),
+            alpha_deg=float(bl["alpha"]),
+            beta_deg=float(bl["beta"]),
+            gamma_deg=float(bl["gamma"]),
+            spin=base_molecule.electronic.spin_S,
+            orbit_L=base_molecule.electronic.orbit_L,
+            total_J=total_J,
+            temperatures=config.susceptibility_temperatures,
+        )
+        logger.info(
+            "Bleaney susceptibility built for %d temperature(s) "
+            "(B20=%.4f cm⁻¹, B22=%.4f cm⁻¹, g_J=computed)",
+            len(suscs),
+            float(bl["B20"]),
+            float(bl["B22"]),
         )
     else:
         suscs = load_susceptibilities(
@@ -742,11 +773,22 @@ def _apply_relaxation_linewidths(
     experiment,
 ):
     """
-    Apply linewidths using a user-specified relaxation model.
+    Apply linewidths using a relaxation model.
+
+    When ``relaxation_model`` is not set in *config*, the rotational
+    correlation time is estimated automatically from the molecular geometry
+    via the Perrin ellipsoid model (water viscosity, temperature-corrected).
+    Temperature defaults to 298 K and magnetic field to 11.75 T when not
+    available from the experiment.  The electronic correlation time defaults
+    to 1 ps and the SBM model is used.  All chosen parameters are logged at
+    INFO level.
+
+    When a ``relaxation_model`` is explicitly configured, the user-supplied
+    ``relaxation_tR``, ``relaxation_T1e``, and ``relaxation_T2e`` are used.
 
     This function updates `base_molecule` in-place by storing the computed
     relaxation evaluation in the domain object and by setting `nuc.shift.lw`
-    when relaxation inputs are provided in the config.
+    when relaxation inputs are available.
 
     Args:
         config (PredictConfig): Prediction configuration containing relaxation
@@ -760,22 +802,58 @@ def _apply_relaxation_linewidths(
         None
     """
 
-    if not getattr(config, "relaxation_model", None):
-        logger.warning(
-            "No relaxation model specified; linewidths will be scaled "
-            "automatically for plotting and CSV output"
-        )
-        base_molecule.relaxation = None
-        return
+    _DEFAULT_TAU_E = 1e-12  # 1 ps
+    _DEFAULT_SOLVENT = "water"
+    _DEFAULT_MODEL = "sbm"
+    _DEFAULT_TEMPERATURE = 298.0   # K
+    _DEFAULT_FIELD = 11.75         # T  (500 MHz ¹H)
+
+    auto_mode = not getattr(config, "relaxation_model", None)
 
     temperature, magnetic_field_tesla = resolve_relaxation_conditions(
         config,
         experiment,
     )
 
+    if auto_mode:
+        if temperature is None:
+            temperature = _DEFAULT_TEMPERATURE
+        if magnetic_field_tesla is None:
+            magnetic_field_tesla = _DEFAULT_FIELD
+
     if magnetic_field_tesla is None or temperature is None:
         base_molecule.relaxation = None
         return
+
+    if auto_mode:
+        eta = get_viscosity(_DEFAULT_SOLVENT, temperature)
+        atoms = [
+            (remove_numbers(lbl), coord)
+            for lbl, coord in zip(base_molecule.labels, base_molecule.coords)
+        ]
+        tau_r_result = run_ellipsoid(atoms, eta, temperature)
+        tau_r = tau_r_result["tau_iso"]
+        tau_e = _DEFAULT_TAU_E
+        relaxation_model = _DEFAULT_MODEL
+        logger.info(
+            "No relaxation model configured — auto τ_R = %.1f ps "
+            "(Perrin ellipsoid, η=%.3f mPa·s, T=%.1f K), τ_e = %.1f ps, "
+            "B0 = %.2f T, model = %s",
+            tau_r * 1e12, eta * 1e3, temperature, tau_e * 1e12,
+            magnetic_field_tesla, relaxation_model,
+        )
+        tau_c1 = 1.0 / (1.0 / tau_r + 1.0 / tau_e)
+        tau_c2 = tau_c1
+        tau_e1 = tau_e
+        tau_e2 = tau_e
+        tau_R = tau_r
+    else:
+        relaxation_model = config.relaxation_model
+        tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
+        tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
+        tau_e1 = config.relaxation_T1e
+        tau_e2 = config.relaxation_T2e
+        tau_R = config.relaxation_tR
 
     # Solomon linewidths if relaxation model is SBM
     nuclei_labels = (
@@ -823,11 +901,6 @@ def _apply_relaxation_linewidths(
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}
     omega_S = EGAMMA * B0 * 2 * np.pi * 1e6
-    tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
-    tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
-    tau_e1 = config.relaxation_T1e
-    tau_e2 = config.relaxation_T2e
-    tau_R = config.relaxation_tR
 
     # Load electronic states
     spin = base_molecule.electronic.spin_S
@@ -835,7 +908,7 @@ def _apply_relaxation_linewidths(
     total_momentum_J = base_molecule.electronic.total_J
 
     relaxation_eval = evaluate_relaxation_rates(
-        relaxation_model=config.relaxation_model,
+        relaxation_model=relaxation_model,
         nuclei_coords=nuclei_coords,
         electron_coords=base_molecule.paramagnetic_centre,
         gamma_I_dict=gamma_I_dict,

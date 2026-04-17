@@ -180,7 +180,7 @@ class ConfigForm(QScrollArea):
         self._hfc_total_J = QLineEdit()
         self._hfc_total_J.setPlaceholderText("e.g. 7.5  (lanthanide) — omit for pure spin Curie")
         self._hfc_centre = QLineEdit()
-        self._hfc_centre.setPlaceholderText("x, y, z  (Å)  — required for pdip / relaxation")
+        self._hfc_centre.setPlaceholderText("atom label (e.g. Ni1)  or  x, y, z  (Å)")
         sec.layout().addRow("File:", self._hfc_file)
         sec.layout().addRow("Method:", self._hfc_method)
         sec.layout().addRow("Spin S:", self._hfc_spin)
@@ -244,7 +244,7 @@ class ConfigForm(QScrollArea):
         self._sec_susc_src = _section("Susceptibility source  [predict only]")
         self._susc_method = QComboBox()
         self._susc_method.addItems(
-            ["file", "spin_only", "sh", "reduced_chi"]
+            ["file", "spin_only", "sh", "reduced_chi", "bleaney"]
         )
         self._susc_file = _file_picker(self, "Susceptibility file")
         self._susc_format = QComboBox()
@@ -306,6 +306,23 @@ class ConfigForm(QScrollArea):
         _rc_form.addRow("β (°):", self._rc_beta)
         _rc_form.addRow("γ (°):", self._rc_gamma)
 
+        # Bleaney crystal-field parameter fields
+        self._susc_bl_widget = QWidget()
+        _bl_form = QFormLayout(self._susc_bl_widget)
+        _bl_form.setContentsMargins(0, 0, 0, 0)
+        self._bl_B20 = QLineEdit()
+        self._bl_B20.setPlaceholderText("cm⁻¹")
+        self._bl_B22 = QLineEdit()
+        self._bl_B22.setPlaceholderText("cm⁻¹")
+        self._bl_alpha = QLineEdit("0.0")
+        self._bl_beta = QLineEdit("0.0")
+        self._bl_gamma = QLineEdit("0.0")
+        _bl_form.addRow("B₂⁰ (cm⁻¹):", self._bl_B20)
+        _bl_form.addRow("B₂² (cm⁻¹):", self._bl_B22)
+        _bl_form.addRow("α (°):", self._bl_alpha)
+        _bl_form.addRow("β (°):", self._bl_beta)
+        _bl_form.addRow("γ (°):", self._bl_gamma)
+
         self._susc_method.currentTextChanged.connect(
             self._on_susc_method_changed
         )
@@ -317,8 +334,10 @@ class ConfigForm(QScrollArea):
         )
         self._susc_sh_widget.setVisible(False)
         self._susc_rc_widget.setVisible(False)
+        self._susc_bl_widget.setVisible(False)
         self._sec_susc_src.layout().addRow(self._susc_sh_widget)
         self._sec_susc_src.layout().addRow(self._susc_rc_widget)
+        self._sec_susc_src.layout().addRow(self._susc_bl_widget)
         lay.addWidget(self._sec_susc_src)
 
         # ── FIT-ONLY: Assignment ──────────────────────────────────────
@@ -416,10 +435,15 @@ class ConfigForm(QScrollArea):
 
     def _on_susc_method_changed(self, method: str):
         is_file = method == "file"
-        self._susc_file.setEnabled(is_file)
-        self._susc_format.setEnabled(is_file)
+        form = self._sec_susc_src.layout()
+        for widget in (self._susc_file, self._susc_format):
+            widget.setVisible(is_file)
+            lbl = form.labelForField(widget)
+            if lbl:
+                lbl.setVisible(is_file)
         self._susc_sh_widget.setVisible(method == "sh")
         self._susc_rc_widget.setVisible(method == "reduced_chi")
+        self._susc_bl_widget.setVisible(method == "bleaney")
 
     def _on_dia_ref_method_changed(self, method: str):
         is_none = method == "(none)"
@@ -469,9 +493,11 @@ class ConfigForm(QScrollArea):
                     hfc[key] = float(val)
             centre = self._hfc_centre.text().strip()
             if centre:
-                hfc["paramagnetic_centre"] = [
-                    float(x) for x in centre.replace(",", " ").split()
-                ]
+                parts = centre.replace(",", " ").split()
+                try:
+                    hfc["paramagnetic_centre"] = [float(x) for x in parts]
+                except ValueError:
+                    hfc["paramagnetic_centre"] = centre
             d["hyperfine"] = hfc
 
         # Chem labels
@@ -607,6 +633,23 @@ class ConfigForm(QScrollArea):
                     rc_params["rh_over_ax"] = roa
                 if rc_params:
                     susc_block["reduced_chi"] = rc_params
+            elif susc_method == "bleaney":
+                susc_block = {"method": "bleaney"}
+                if temps:
+                    susc_block["temperatures"] = temps_val
+                bl_params = {}
+                for key, widget in [
+                    ("B20", self._bl_B20),
+                    ("B22", self._bl_B22),
+                    ("alpha", self._bl_alpha),
+                    ("beta", self._bl_beta),
+                    ("gamma", self._bl_gamma),
+                ]:
+                    v = widget.text().strip()
+                    if v:
+                        bl_params[key] = float(v)
+                if bl_params:
+                    susc_block["bleaney"] = bl_params
             else:
                 susc_block = {}
                 sf = self._susc_file._edit.text().strip()
@@ -711,7 +754,10 @@ class ConfigForm(QScrollArea):
             field.setText(str(val) if val != "" else "")
         centre = hfc.get("paramagnetic_centre")
         if centre:
-            self._hfc_centre.setText(", ".join(str(x) for x in centre))
+            if isinstance(centre, str):
+                self._hfc_centre.setText(centre)
+            else:
+                self._hfc_centre.setText(", ".join(str(x) for x in centre))
 
         cl = d.get("chem_labels", {})
         self._chem_labels._edit.setText(str(cl.get("file", "")))
@@ -798,6 +844,16 @@ class ConfigForm(QScrollArea):
                         widget.setText(str(v))
             if "rh_over_ax" in rc:
                 self._rc_rh_over_ax.setText(str(rc["rh_over_ax"]))
+            bl = susc.get("bleaney", {})
+            for key, widget in [
+                ("B20", self._bl_B20),
+                ("B22", self._bl_B22),
+                ("alpha", self._bl_alpha),
+                ("beta", self._bl_beta),
+                ("gamma", self._bl_gamma),
+            ]:
+                if key in bl:
+                    widget.setText(str(bl[key]))
 
         # Assignment (fit)
         assign = d.get("assignment", {})
