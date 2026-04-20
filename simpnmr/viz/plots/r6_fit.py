@@ -18,11 +18,12 @@ from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
 logger = logging.getLogger(__name__)
 
 
-def _fmt_sci(val: float, err: float) -> str:
+def _fmt_sci(val: float, err: float | None) -> str:
     """Format ``val ± err`` as compact scientific notation, e.g. ``4.2(3)e5``."""
     exp = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
     scale = 10**exp
-    return f"{format_compact_uncertainty(val / scale, err / scale)}e{exp}"
+    scaled_err = err / scale if err is not None else None
+    return f"{format_compact_uncertainty(val / scale, scaled_err)}e{exp}"
 
 
 _OBS_LABELS = {
@@ -330,23 +331,24 @@ def plot_tau_space(
     # CI boundary contours
     z = _norm.ppf(0.5 + confidence / 2.0)
     ci_pct = int(round(confidence * 100))
-    if p1_fit != 0:
+    if p1_err is not None and p1_fit != 0:
         rel_err = z * abs(p1_err / p1_fit)
         log_lo = np.log10(max(1.0 - rel_err, 1e-6))
         log_hi = np.log10(1.0 + rel_err)
     else:
+        rel_err = None
         log_lo, log_hi = -0.1, 0.1
 
     logger.debug(
         "tau_space CI contours: log_lo=%.4f  log_hi=%.4f  "
-        "p1_err/p1_fit=%.4f",
+        "p1_err/p1_fit=%s",
         log_lo, log_hi,
-        abs(p1_err / p1_fit) if p1_fit != 0 else float("nan"),
+        f"{abs(p1_err / p1_fit):.4f}" if (p1_err is not None and p1_fit != 0) else "n/a",
     )
     logger.info(
-        "p1 relative uncertainty (%.0f%% CI): ±%.1f%%",
+        "p1 relative uncertainty (%.0f%% CI): %s",
         confidence * 100,
-        rel_err * 100 if p1_fit != 0 else float("nan"),
+        f"±{rel_err * 100:.1f}%" if rel_err is not None else "n/a",
     )
 
     # Ensure contour levels are within the clipped log_ratio range
@@ -645,7 +647,7 @@ def plot_tau_space_combined(
     def _ci_levels(fit_result):
         p1_fit = fit_result["p1"]
         p1_err = fit_result["p1_err"]
-        if p1_fit == 0:
+        if p1_err is None or p1_fit == 0:
             return -0.1, 0.1
         rel = z * abs(p1_err / p1_fit)
         return np.log10(max(1.0 - rel, 1e-6)), np.log10(1.0 + rel)
@@ -968,7 +970,7 @@ def plot_tau_space_multitemp(
         hi_val = float(lr.max())
 
         # CI band
-        if p1_fit != 0:
+        if p1_err is not None and p1_fit != 0:
             rel = z * abs(p1_err / p1_fit)
             log_lo = np.log10(max(1.0 - rel, 1e-6))
             log_hi = np.log10(1.0 + rel)

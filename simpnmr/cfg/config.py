@@ -192,6 +192,7 @@ class FitSuscConfig(Config):
             "tau_r_eta",
             "tau_r_shell",
             "tau_r_sigma",
+            "distance_power",
         ],
     }
 
@@ -258,6 +259,7 @@ class FitSuscConfig(Config):
         self._fit_relaxation_tau_r_eta = None
         self._fit_relaxation_tau_r_shell = None
         self._fit_relaxation_tau_r_sigma = None
+        self._fit_relaxation_distance_power = 0.0
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -1325,6 +1327,18 @@ class FitSuscConfig(Config):
         if v <= 0:
             raise ValueError("fit_relaxation:tau_r_sigma must be positive")
         self._fit_relaxation_tau_r_sigma = v
+
+    @property
+    def fit_relaxation_distance_power(self) -> float:
+        """Exponent k for distance-based r^-6 fit weighting (w = r**k)."""
+        return self._fit_relaxation_distance_power
+
+    @fit_relaxation_distance_power.setter
+    def fit_relaxation_distance_power(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_distance_power = 0.0
+            return
+        self._fit_relaxation_distance_power = float(value)
 
     @classmethod
     def from_file(cls, file_name) -> "FitSuscConfig":

@@ -720,134 +720,6 @@ class SusceptibilityModel(ABC):
         return
 
 
-class LinearSusceptibilityModel(SusceptibilityModel):
-    def fit_to(
-        self,
-        molecule: Molecule,
-        experiment: Experiment,
-        verbose: bool = True,
-        average_labels: list[list[str]] = [],
-    ) -> None:
-        """Fits the linear model to experimental susceptibility data.
-
-        Uses a linear least-squares formulation ``A x = b``.
-
-        Args:
-            molecule: Molecule providing nuclei and geometric information.
-            experiment: Experimental data object.
-            verbose: If ``False``, suppresses terminal output.
-            average_labels: Optional groups of atom labels whose shifts are averaged
-                prior to residual computation.
-
-        Returns:
-            None.
-        """
-
-        # Get bounds for variables to be fitted
-        bounds = np.array([self.BOUNDS[name] for name in self.fit_vars.keys()]).T
-
-        _missing = sorted({
-            nuc.chem_label for nuc in molecule.nuclei
-            if nuc.chem_label not in experiment
-        })
-        if _missing:
-            logger.warning(
-                "Nuclei skipped in fit (no experimental signal): %s",
-                ", ".join(_missing),
-            )
-        _fit_nuclei = [
-            nuc for nuc in molecule.nuclei if nuc.chem_label in experiment
-        ]
-
-        curr_fit = lsq_linear(
-            A=self.design_matrix(_fit_nuclei, self.fix_vars),
-            b=self.target_vector(_fit_nuclei, experiment, self.fix_vars),
-            bounds=bounds,
-        )
-
-        self.temperature = experiment.temperature
-
-        fit_var_names = [name for name in self.VARNAMES if name in self.fit_vars.keys()]
-
-        # Fitted parameters
-        curr_fit_dict = {name: value for name, value in zip(fit_var_names, curr_fit.x)}
-
-        if curr_fit.status == 0:
-            if verbose:
-                logger.warning(
-                    "Fit at %s K failed - Too many iterations", self.temperature
-                )
-            self.final_var_values = copy.deepcopy(curr_fit_dict)
-            self.fit_stdev = {label: np.nan for label in self.fit_vars.keys()}
-            self.fit_status = False
-            self.rmse = np.NaN
-            self.r2 = np.NaN
-            self.adj_r2 = np.NaN
-        else:
-            # Calculate Jacobian, here equal to the design matrix
-            curr_fit.jac = self.design_matrix(_fit_nuclei, self.fix_vars)
-
-            # Calculate standard deviation error on the parameters
-            stdev, _ = svd_stdev(curr_fit)
-
-            # Standard deviation error on the parameters
-            self.fit_stdev = {
-                label: val for label, val in zip(self.fit_vars.keys(), stdev)
-            }
-            self.fit_status = True
-
-            # Set fitted values
-            self.final_var_values = copy.deepcopy(curr_fit_dict)
-            # and fixed values
-            for key, val in self.fix_vars.items():
-                self.final_var_values[key] = val
-
-            # R2
-            ss_res = np.sum(curr_fit.fun**2)
-            self.rmse = np.sqrt(ss_res / len(curr_fit.fun))
-            ecs = [experiment[nuc.chem_label].shift for nuc in _fit_nuclei]
-            ss_tot = np.sum((ecs - np.mean(ecs)) ** 2)
-            self.r2 = 1 - (ss_res / ss_tot)
-            self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
-                len(ecs) - len(self.fit_vars) - 1
-            )
-
-        return
-
-    @staticmethod
-    @abstractmethod
-    def design_matrix(nuclei: list[Nucleus], fix_vars: dict[str, float]):
-        """Builds the design matrix for the linear model.
-
-        Args:
-            nuclei: Nuclei for which the model is evaluated.
-            fix_vars: Fixed model parameters.
-
-        Returns:
-            The design matrix ``A`` in the linear system ``A x = b``.
-        """
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def target_vector(
-        nuclei: list[Nucleus],
-        experiment: Experiment,
-        fix_vars: dict[str, float],
-    ):
-        """Builds the target vector for the linear model.
-
-        Args:
-            nuclei: Nuclei for which the model is evaluated.
-            experiment: Experimental data object.
-            fix_vars: Fixed model parameters.
-
-        Returns:
-            The target vector ``b`` in the linear system ``A x = b``.
-        """
-        raise NotImplementedError
-
-
 class SplitFitter(SusceptibilityModel):
     NAME = "Split Isotropic and Anisotropic Components of Susceptibility"
 
@@ -991,379 +863,240 @@ class SplitFitter(SusceptibilityModel):
         self.fit_stdev["rh"] = float(sig_out[1])
         return
 
+    def fit_to(
+        self,
+        molecule: Molecule,
+        experiment: Experiment,
+        verbose: bool = True,
+        average_labels: list[list[str]] = [],
+    ) -> None:
+        """Fit using a direct linear solver (lsq_linear).
+
+        The model is linear in all six parameters, so the Jacobian is constant
+        and the solution is exact in one step.  ``lsq_linear`` is used rather
+        than ``lstsq`` so the ``iso ≥ 0`` bound is enforced.
+        """
+        _missing = sorted({
+            nuc.chem_label for nuc in molecule.nuclei
+            if nuc.chem_label not in experiment
+        })
+        if _missing:
+            logger.warning(
+                "Nuclei skipped in fit (no experimental signal): %s",
+                ", ".join(_missing),
+            )
+        _fit_nuclei = [
+            nuc for nuc in molecule.nuclei if nuc.chem_label in experiment
+        ]
+
+        self.temperature = experiment.temperature
+
+        # Full design matrix (n × 6) and target vector
+        A_full = self._design_matrix(_fit_nuclei)
+        b_full = np.array([
+            experiment[nuc.chem_label].shift - nuc.shift.dia
+            for nuc in _fit_nuclei
+        ], dtype=float)
+
+        # Apply group averaging: replace rows for each group with the mean
+        # row, scaled by 1/sqrt(n) so the group contributes as one signal.
+        label_to_idx = {nuc.label: i for i, nuc in enumerate(_fit_nuclei)}
+        for group in average_labels:
+            idxs = [label_to_idx[lab] for lab in group if lab in label_to_idx]
+            if len(idxs) < 2:
+                continue
+            n = len(idxs)
+            mean_row = A_full[idxs].mean(axis=0)
+            for i in idxs:
+                A_full[i] = mean_row / np.sqrt(n)
+                b_full[i] = b_full[i] / np.sqrt(n)
+
+        # Subtract fixed-variable contributions from the target
+        b = b_full.copy()
+        for k, v in self.fix_vars.items():
+            col = self.VARNAMES.index(k)
+            b -= A_full[:, col] * v
+
+        # Keep only columns for fitted variables
+        fit_col_idxs = [self.VARNAMES.index(k) for k in self.fit_vars]
+        A = A_full[:, fit_col_idxs]
+
+        bounds = np.array(
+            [self.BOUNDS[name] for name in self.fit_vars.keys()]
+        ).T
+
+        curr_fit = lsq_linear(A, b, bounds=bounds)
+
+        fit_var_names = list(self.fit_vars.keys())
+        curr_fit_dict = {
+            name: val for name, val in zip(fit_var_names, curr_fit.x)
+        }
+
+        if curr_fit.status == 0:
+            if verbose:
+                logger.warning(
+                    "Fit at %s K failed - Too many iterations", self.temperature
+                )
+            self.final_var_values = copy.deepcopy(curr_fit_dict)
+            self.fit_stdev = {label: np.nan for label in fit_var_names}
+            self.fit_status = False
+            self.mae = np.NaN
+            self.rmse = np.NaN
+            self.r2 = np.NaN
+            self.adj_r2 = np.NaN
+        else:
+            curr_fit.jac = A
+            stdev, _ = svd_stdev(curr_fit)
+
+            self.fit_stdev = {
+                label: val for label, val in zip(fit_var_names, stdev)
+            }
+            self.fit_status = True
+            self.final_var_values = copy.deepcopy(curr_fit_dict)
+            for key, val in self.fix_vars.items():
+                self.final_var_values[key] = val
+
+            self._post_fit()
+            self._compute_canonical_stdev()
+            self._compute_euler_stdev()
+
+            self.mae = np.sum(np.abs(curr_fit.fun)) / len(curr_fit.fun)
+            ss_res = np.sum(curr_fit.fun ** 2)
+            self.rmse = np.sqrt(ss_res / len(curr_fit.fun))
+            al_to_para = {
+                nuc.label: experiment[nuc.chem_label].shift - nuc.shift.dia
+                for nuc in _fit_nuclei
+            }
+            ecs = [al_to_para[nuc.label] for nuc in _fit_nuclei]
+            ss_tot = np.sum((np.asarray(ecs) - np.mean(ecs)) ** 2)
+            self.r2 = 1 - (ss_res / ss_tot)
+            self.adj_r2 = 1 - (1 - self.r2) * (len(ecs) - 1) / (
+                len(ecs) - len(self.fit_vars) - 1
+            )
+
+    @staticmethod
+    def _design_matrix(nuclei: list[Nucleus]) -> np.ndarray:
+        """Build design matrix; columns: [iso, dxx, dyy, dxy, dxz, dyz]."""
+        rows = []
+        for nuc in nuclei:
+            A = nuc.A.tensor_full
+            rows.append([
+                (A[0, 0] + A[1, 1] + A[2, 2]) / 3.0,   # iso: Tr(A)/3
+                (A[0, 0] - A[2, 2]) / 3.0,              # dxx
+                (A[1, 1] - A[2, 2]) / 3.0,              # dyy
+                (A[0, 1] + A[1, 0]) / 3.0,              # dxy
+                (A[0, 2] + A[2, 0]) / 3.0,              # dxz
+                (A[1, 2] + A[2, 1]) / 3.0,              # dyz
+            ])
+        return np.array(rows, dtype=float)
+
 
 class IsoAxRhFitter(SusceptibilityModel):
     NAME = "Isotropic, Axial, and Rhombic over Axial Components of Susceptibility"
 
-    VARNAMES = [
-        "iso",
-        "ax",
-        "rh_over_ax",
-    ]
+    VARNAMES = ["iso", "ax", "rh_over_ax", "alpha", "beta", "gamma"]
 
     VARNAMES_MM = {
         "iso": r"$\chi_\mathregular{iso}$",
         "ax": r"$\Delta\chi_\mathregular{ax}$",
         "rh_over_ax": r"$\Delta\chi_\mathregular{rh} / \Delta\chi_\mathregular{ax}$",
+        "alpha": r"$\alpha$",
+        "beta": r"$\beta$",
+        "gamma": r"$\gamma$",
     }
 
     UNITS_MM = {
         "iso": r"Å$^3$",
         "ax": r"Å$^3$",
         "rh_over_ax": "",
+        "alpha": r"°",
+        "beta": r"°",
+        "gamma": r"°",
     }
 
     BOUNDS = {
         "iso": [0.0, np.inf],
         "ax": [-np.inf, np.inf],
         "rh_over_ax": [0.0, 1 / 3],
+        "alpha": [0.0, 360.0],
+        "beta": [0.0, 180.0],
+        "gamma": [0.0, 360.0],
     }
 
     @staticmethod
-    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
-        """Computes predicted paramagnetic shifts for the iso/ax/rh model.
+    def _zyz_rotation(alpha_deg: float, beta_deg: float, gamma_deg: float) -> NDArray:
+        """ZYZ rotation matrix R = Rz(α) · Ry(β) · Rz(γ).
 
-        The anisotropic part is parameterized by axiality and a rhombicity ratio
-        ``rh_over_ax``.
-
-        Args:
-            parameters: Model parameters. Keys are `VARNAMES`.
-            nuclei: Nuclei for which shifts will be computed.
-
-        Returns:
-            Mapping from nucleus labels to predicted paramagnetic shifts.
+        Consistent with ``Susceptibility.calc_euler``: the rotation maps the
+        lab frame to the principal-axis frame, so
+        ``χ_lab = R · χ_paf · Rᵀ``.
         """
+        a = np.deg2rad(alpha_deg)
+        b = np.deg2rad(beta_deg)
+        g = np.deg2rad(gamma_deg)
+        ca, sa = np.cos(a), np.sin(a)
+        cb, sb = np.cos(b), np.sin(b)
+        cg, sg = np.cos(g), np.sin(g)
+        Rza = np.array([[ca, -sa, 0.0], [sa, ca, 0.0], [0.0, 0.0, 1.0]])
+        Ryb = np.array([[cb, 0.0, sb], [0.0, 1.0, 0.0], [-sb, 0.0, cb]])
+        Rzg = np.array([[cg, -sg, 0.0], [sg, cg, 0.0], [0.0, 0.0, 1.0]])
+        return Rza @ Ryb @ Rzg
 
-        delta_params = copy.deepcopy(parameters)
-        tnsr = IsoAxRhFitter.totensor(delta_params)
-
-        shifts = {
-            nuc.label: 1.0 / 3.0 * np.trace(tnsr @ nuc.A.tensor_full) for nuc in nuclei
+    @staticmethod
+    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
+        """Predicted paramagnetic shifts for the iso/ax/rh/Euler model."""
+        tnsr = IsoAxRhFitter.totensor(parameters)
+        return {
+            nuc.label: 1.0 / 3.0 * np.trace(tnsr @ nuc.A.tensor_full)
+            for nuc in nuclei
         }
-
-        return shifts
 
     @staticmethod
     def totensor(params: dict[str, float]) -> NDArray:
-        """Converts iso/ax/rh parameters to a susceptibility tensor.
+        """Build χ_lab = R(α,β,γ) · χ_paf · R(α,β,γ)ᵀ.
 
-        Args:
-            params: Model parameters. Keys are `VARNAMES`.
-
-        Returns:
-            Susceptibility tensor as a ``(3, 3)`` NumPy array.
+        χ_paf is the diagonal principal-axis-frame tensor parameterised by
+        ``iso``, ``ax``, and ``rh_over_ax``.  The ZYZ rotation R then maps
+        it to the lab frame.
         """
-
-        tensor = np.array(
+        chi_paf = np.array(
             [
                 [-params["ax"] / 3 + params["rh_over_ax"] * params["ax"], 0.0, 0.0],
                 [0.0, -params["ax"] / 3 - params["rh_over_ax"] * params["ax"], 0.0],
-                [0.0, 0.0, 2 / 3 * params["ax"]],
+                [0.0, 0.0, 2.0 / 3.0 * params["ax"]],
             ]
+        ) + np.eye(3) * params["iso"]
+        R = IsoAxRhFitter._zyz_rotation(
+            params["alpha"], params["beta"], params["gamma"]
         )
-        tensor += np.eye(3) * params["iso"]
-
-        return tensor
+        return R @ chi_paf @ R.T
 
     def _post_fit(self) -> None:
-        """Adds derived uncertainty for chi_rh.
-
-        The fit uses `rh_over_ax`, but reporting prefers `rh = ax * rh_over_ax`.
-
-        Notes:
-            - If `rh_over_ax` is fixed, treat its uncertainty as zero and propagate
-              only the `ax` uncertainty.
-            - If `ax` is fixed (no `ax` stdev available), `rh` uncertainty cannot be
-              propagated reliably and is omitted.
-        """
+        """Propagate rh = ax * rh_over_ax uncertainty."""
         ax = self.final_var_values.get("ax")
         rh_over_ax = self.final_var_values.get("rh_over_ax")
         ax_st_dev = self.fit_stdev.get("ax")
         rh_over_ax_st_dev = self.fit_stdev.get("rh_over_ax")
 
-        # Require values for rh computation
         if ax is None or rh_over_ax is None:
             self.fit_stdev.pop("rh", None)
             return
-
-        # If ax is fixed, we cannot propagate an uncertainty for rh.
         if ax_st_dev is None:
             self.fit_stdev.pop("rh", None)
             return
-
-        # If rh_over_ax is fixed, assume sigma_rh_over_ax = 0.
         if rh_over_ax_st_dev is None:
             if "rh_over_ax" in self.fix_vars:
                 self.fit_stdev["rh"] = float(np.abs(rh_over_ax) * ax_st_dev)
-                return
-            self.fit_stdev.pop("rh", None)
+            else:
+                self.fit_stdev.pop("rh", None)
             return
-
-        # General case: first-order propagation under independence.
         self.fit_stdev["rh"] = float(
             np.hypot(rh_over_ax * ax_st_dev, ax * rh_over_ax_st_dev)
         )
+
+    def _compute_euler_stdev(self) -> None:
+        """No-op: α, β, γ standard deviations come directly from the fit."""
         return
-
-
-class EigenFitter(SusceptibilityModel):
-    NAME = "Eigenvalue model of Susceptibility"
-
-    VARNAMES = ["x", "y", "z"]
-
-    VARNAMES_MM = {
-        "x": r"$\chi_\mathregular{x}$",
-        "y": r"$\chi_\mathregular{y}$",
-        "z": r"$\chi_\mathregular{z}$",
-    }
-
-    UNITS_MM = {"x": r"Å$^3$", "y": r"Å$^3$", "z": r"Å$^3$"}
-
-    BOUNDS = {"x": [-np.inf, np.inf], "y": [-np.inf, np.inf], "z": [-np.inf, np.inf]}
-
-    @staticmethod
-    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
-        """Computes predicted paramagnetic shifts for the eigenvalue model.
-
-        Args:
-            parameters: Model parameters (principal values). Keys are `VARNAMES`.
-            nuclei: Nuclei for which shifts will be computed.
-
-        Returns:
-            Mapping from nucleus labels to predicted paramagnetic shifts.
-        """
-        chix = parameters["x"]
-        chiy = parameters["y"]
-        chiz = parameters["z"]
-
-        tnsr = np.array(
-            [
-                [chix, 0, 0],
-                [0, chiy, 0],
-                [0, 0, chiz],
-            ]
-        )
-
-        shifts = {
-            nuc.label: 1.0 / 3.0 * np.trace(tnsr @ nuc.A.tensor_full) for nuc in nuclei
-        }
-
-        return shifts
-
-    @staticmethod
-    def totensor(params: dict[str, float]) -> NDArray:
-        """Converts eigenvalue parameters to a diagonal susceptibility tensor.
-
-        Args:
-            params: Model parameters. Keys are `VARNAMES`.
-
-        Returns:
-            Susceptibility tensor as a ``(3, 3)`` NumPy array.
-        """
-
-        chix = params["x"]
-        chiy = params["y"]
-        chiz = params["z"]
-
-        tensor = np.array(
-            [
-                [chix, 0, 0],
-                [0, chiy, 0],
-                [0, 0, chiz],
-            ]
-        )
-
-        return tensor
-
-
-class IsoEigenFitter(SusceptibilityModel):
-    NAME = "Eigenvalue model of Susceptibility"
-
-    VARNAMES = ["dxx", "dyy", "iso"]
-
-    VARNAMES_MM = {
-        "dxx": r"$\Delta\chi_\mathregular{xx}$",
-        "dyy": r"$\Delta\chi_\mathregular{yy}$",
-        "iso": r"$\chi_\mathregular{iso}$",
-    }
-
-    UNITS_MM = {"dxx": r"Å$^3$", "dyy": r"Å$^3$", "iso": r"Å$^3$"}
-
-    BOUNDS = {"dxx": [-np.inf, np.inf], "dyy": [-np.inf, np.inf], "iso": [0, np.inf]}
-
-    @staticmethod
-    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
-        """Computes predicted paramagnetic shifts for the iso + deviatoric eigen model.
-
-        Args:
-            parameters: Model parameters. Keys are `VARNAMES`.
-            nuclei: Nuclei for which shifts will be computed.
-
-        Returns:
-            Mapping from nucleus labels to predicted paramagnetic shifts.
-        """
-        dxx = parameters["dxx"]
-        dyy = parameters["dyy"]
-        iso = parameters["iso"]
-        shifts = {
-            nuc.label: (1.0 / 3.0 * np.trace(nuc.A.fc)) * iso
-            + nuc.shift.dia
-            + 1.0 / 3.0 * dxx * (nuc.A.sd[0, 0] - nuc.A.sd[2, 2])
-            + 1.0 / 3.0 * dyy * (nuc.A.sd[1, 1] - nuc.A.sd[2, 2])
-            for nuc in nuclei
-        }
-
-        return shifts
-
-    @staticmethod
-    def totensor(params: dict[str, float]) -> NDArray:
-        """Converts iso + deviatoric eigen parameters to a susceptibility tensor.
-
-        Args:
-            params: Model parameters. Keys are `VARNAMES`.
-
-        Returns:
-            Susceptibility tensor as a ``(3, 3)`` NumPy array.
-        """
-
-        dxx = params["dxx"]
-        dyy = params["dyy"]
-        iso = params["iso"]
-
-        tensor = np.array(
-            [
-                [dxx + iso, 0, 0],
-                [0, dyy + iso, 0],
-                [0, 0, -(dxx + dyy) + iso],
-            ]
-        )
-
-        return tensor
-
-
-class FullSuscFitter(SusceptibilityModel):
-    NAME = "Full Susceptibility"
-
-    VARNAMES = ["xx", "xy", "xz", "yy", "yz", "zz"]
-
-    VARNAMES_MM = {
-        "xx": r"$\chi_{xx}$",
-        "yy": r"$\chi_{yy}$",
-        "zz": r"$\chi_{zz}$",
-        "xy": r"$\chi_{xy}$",
-        "xz": r"$\chi_{xz}$",
-        "yz": r"$\chi_{yz}$",
-    }
-
-    UNITS_MM = {
-        "xx": r"Å$^3$",
-        "yy": r"Å$^3$",
-        "zz": r"Å$^3$",
-        "xy": r"Å$^3$",
-        "xz": r"Å$^3$",
-        "yz": r"Å$^3$",
-    }
-
-    BOUNDS = {
-        "xx": [-np.inf, np.inf],
-        "yy": [-np.inf, np.inf],
-        "zz": [-np.inf, np.inf],
-        "xy": [-np.inf, np.inf],
-        "xz": [-np.inf, np.inf],
-        "yz": [-np.inf, np.inf],
-    }
-
-    @staticmethod
-    def model(parameters: dict[str, float], nuclei: list[Nucleus]) -> dict[str, float]:
-        """Computes predicted paramagnetic shifts for the full susceptibility model.
-
-        Args:
-            parameters: Model parameters. Keys are `VARNAMES`.
-            nuclei: Nuclei for which shifts will be computed.
-
-        Returns:
-            Mapping from nucleus labels to predicted paramagnetic shifts.
-        """
-
-        tnsr = FullSuscFitter.totensor(parameters)
-
-        shifts = {
-            nuc.label: 1.0 / 3.0 * np.trace(tnsr @ nuc.A.tensor_full) for nuc in nuclei
-        }
-
-        return shifts
-
-    @staticmethod
-    def design_matrix(nuclei: list[Nucleus], fix_vars: dict[str, float]):
-        """Builds the design matrix for the full susceptibility linear model.
-
-        Args:
-            nuclei: Nuclei for which the model is evaluated.
-            fix_vars: Fixed model parameters.
-
-        Returns:
-            The design matrix ``A`` in the linear system ``A x = b``.
-        """
-        to_pop = {"xx": 0, "xy": 1, "xz": 2, "yy": 3, "yz": 4, "zz": 5}
-
-        design = []
-
-        for nuc in nuclei:
-            _vec = [
-                nuc.A.tensor_full[0, 0],
-                nuc.A.tensor_full[1, 0] + nuc.A.tensor_full[0, 1],
-                nuc.A.tensor_full[0, 2] + nuc.A.tensor_full[2, 0],
-                nuc.A.tensor_full[1, 1],
-                nuc.A.tensor_full[2, 1] + nuc.A.tensor_full[1, 2],
-                nuc.A.tensor_full[2, 2],
-            ]
-
-            for var in fix_vars.keys():
-                _vec.pop(to_pop[var])
-            design.append(_vec)
-
-        design = 1.0 / 3.0 * np.asarray(design)
-
-        return design
-
-    @staticmethod
-    def target_vector(
-        nuclei: list[Nucleus],
-        experiment: Experiment,
-        fix_vars: dict[str, float],
-    ):
-        """Builds the target vector for the full susceptibility linear model.
-
-        Args:
-            nuclei: Nuclei for which the model is evaluated.
-            experiment: Experimental data object.
-            fix_vars: Fixed model parameters.
-
-        Returns:
-            The target vector ``b`` in the linear system ``A x = b``.
-        """
-
-        target = []
-
-        for nuc in nuclei:
-            _tgt = experiment[nuc.chem_label].shift
-            to_subtract = {
-                "xx": nuc.A.tensor_full[0, 0],
-                "xy": nuc.A.tensor_full[1, 0] + nuc.A.tensor_full[0, 1],
-                "xz": nuc.A.tensor_full[0, 2] + nuc.A.tensor_full[2, 0],
-                "yy": nuc.A.tensor_full[1, 1],
-                "yz": nuc.A.tensor_full[2, 1] + nuc.A.tensor_full[1, 2],
-                "zz": nuc.A.tensor_full[2, 2],
-            }
-            for key, val in fix_vars.items():
-                _tgt -= 1.0 / 3.0 * to_subtract[key] * val
-
-            _tgt -= nuc.shift.dia
-            target.append(_tgt)
-
-        target = np.asarray(target)
-
-        return target
 
 
 def svd_stdev(curr_fit: OptimizeResult) -> tuple[list[float], list[bool]]:

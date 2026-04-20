@@ -95,9 +95,9 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
     Shows the (τ\ :sub:`e`, τ\ :sub:`R`) plane as a colour-mapped heatmap of
     :math:`\log_{10}(p_1^\mathrm{calc} / p_1^\mathrm{fit})`. The contour where
     :math:`p_1^\mathrm{calc} = p_1^\mathrm{fit}` (exact match) is drawn as a
-    solid black line. Dashed white lines mark the boundary of the confidence
-    interval (default 95%). Both axes are logarithmic and labelled in
-    auto-selected units (fs, ps, ns, or µs).
+    solid black line. Dashed lines mark the boundary of the bootstrap
+    confidence interval (default 95%). Both axes are logarithmic and labelled
+    in auto-selected units (fs, ps, ns, or µs).
 
     The relaxation model (``sbm``, ``curie``, or ``sbm curie``), temperature,
     and fitted :math:`p_1` value are shown in an annotation box.
@@ -107,9 +107,9 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
 
     The exact-match contour for each observable is drawn as a solid line in a
     distinct colour (primary palette for R\ :sub:`1`, highlight colour for
-    linewidth). Dashed lines of the same colour show the confidence interval
-    boundaries. The region where both observables are simultaneously consistent
-    with their fitted values is where the two contours intersect.
+    linewidth). Dashed lines of the same colour show the bootstrap confidence
+    interval boundaries. The region where both observables are simultaneously
+    consistent with their fitted values is where the two contours intersect.
 
     Generated only when both linewidth and R\ :sub:`1` fits are available.
 

@@ -209,6 +209,7 @@ def plot_raw_deconv_pred(
     save_name: str = "pred_and_exp_spectrum.pdf",
     window_title: str = "Raw, Deconvoluted, and Predicted Spectra",
     verbose: bool = True,
+    label_colors: dict | None = None,
 ) -> tuple[plt.Figure, np.ndarray]:
     """Plots raw, deconvoluted, and predicted spectra.
 
@@ -358,10 +359,39 @@ def plot_raw_deconv_pred(
             _map_assignment_to_latex(s.assignment)
         ) is not None
     }
+    # Build chem_label → group color and math_label → group color lookups.
+    _chem_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in molecule.nuclei:
+            if nuc.isotope == isotope and nuc.chem_label in label_colors:
+                _chem_to_color[nuc.chem_label] = label_colors[nuc.chem_label]
+    _math_to_color: dict[str, str] = {
+        nuc.chem_math_label: _chem_to_color.get(nuc.chem_label, palette.primary)
+        for nuc in molecule.nuclei
+        if nuc.isotope == isotope
+    }
+
     _sim_label_colors = {
-        lab: ("red" if lab not in _matched_pred_labels else palette.primary)
+        lab: (
+            "red" if lab not in _matched_pred_labels
+            else _math_to_color.get(lab, palette.primary)
+        )
         for lab in labels
     }
+
+    # Per-group Lorentzian contributions (summed over equivalent nuclei).
+    _group_y: dict[str, np.ndarray] = {}
+    if _chem_to_color:
+        for nuc in molecule.nuclei:
+            if nuc.isotope != isotope:
+                continue
+            contrib = lorentzian(
+                x_grid, nuc.shift.lw, nuc.shift.avg, 1
+            )
+            if nuc.chem_label in _group_y:
+                _group_y[nuc.chem_label] += contrib
+            else:
+                _group_y[nuc.chem_label] = contrib.copy()
 
     # ------------------------------------------------------------------
     # Axis-break: find spectral segments and build the figure grid
@@ -433,6 +463,19 @@ def plot_raw_deconv_pred(
     _lw_barrier = max(0.2, 0.4 * glyphs.line_lw)
 
     for _at in _ax_top:
+        # Individual per-group Lorentzians (drawn first, behind composite)
+        for chem_lbl, y_grp in _group_y.items():
+            col = _chem_to_color.get(chem_lbl, palette.primary)
+            y_grp_norm = y_grp / _sim_max
+            _at.fill_between(
+                x_grid, y_grp_norm,
+                alpha=0.18, color=col, linewidth=0,
+            )
+            _at.plot(
+                x_grid, y_grp_norm,
+                lw=_lw_line * 0.65, color=col, alpha=0.75,
+            )
+        # Composite trace on top
         _at.plot(
             x_grid, y_sim_intensity,
             lw=_lw_line, color=palette.primary,
@@ -474,6 +517,27 @@ def plot_raw_deconv_pred(
     # ------------------------------------------------------------------
     # Bottom panel — deconvoluted + raw experimental spectrum
     # ------------------------------------------------------------------
+
+    # Individual Lorentzian/Gaussian components (thin dashed, behind sum)
+    _lw_comp = max(0.3, _lw_line * 0.7)
+    for signal in _iso_signals:
+        exp_width_ppm = signal.width / (
+            get_nuclear_gamma(isotope) * experiment.magnetic_field
+        )
+        y_comp = (
+            signal.l_to_g
+            * lorentzian(x_grid, exp_width_ppm, signal.shift, signal.area)
+            + (1 - signal.l_to_g)
+            * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
+        )
+        y_comp_norm = y_comp / _deconv_max
+        for _ab in _ax_bot:
+            _ab.plot(
+                x_grid, y_comp_norm,
+                lw=_lw_comp, color=palette.primary,
+                alpha=0.35, linestyle="--",
+            )
+
     for _ab in _ax_bot:
         _ab.plot(
             x_grid, y_deconv_intensity,
@@ -594,9 +658,10 @@ def plot_raw_deconv_pred(
         fontsize=spec.typography.axis_label, clip_on=False,
     )
 
-    # x-label on the middle bottom axis
-    _ax_bot[_n // 2].set_xlabel(
-        r"{} $\delta$ (ppm)".format(isotope_format(isotope))
+    # Centred x-label spanning the full figure width (works with axis breaks)
+    fig.supxlabel(
+        r"{} $\delta$ (ppm)".format(isotope_format(isotope)),
+        fontsize=spec.typography.axis_label,
     )
     # Per-segment tick density: at most ~3 major ticks per segment
     for i, (slo, shi) in enumerate(_segments):

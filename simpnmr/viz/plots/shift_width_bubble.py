@@ -118,7 +118,7 @@ def plot_shift_width_bubble(
     exp_assignments: set[str] = set()
 
     for sig in experiment.signals:
-        if isotope_filter is not None and sig.isotope != isotope_filter:
+        if isotope_filter is not None and sig.isotope is not None and sig.isotope != isotope_filter:
             continue
         cl = sig.assignment
         exp_assignments.add(cl)

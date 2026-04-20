@@ -841,6 +841,22 @@ are present in the experiment files.
 
 .. note::
 
+   **Fitting algorithm**
+
+   The r\ :sup:`−6` model :math:`p_1 r^{-6} + p_2` is fitted using **Huber
+   regression** (``epsilon = 1.35``).  Residuals smaller than 1.35 σ are
+   treated as inliers with an ordinary least-squares (L2) penalty; larger
+   residuals are down-weighted with an L1 penalty.  This makes the fit
+   resistant to outliers — for example a mis-assigned nucleus or an unusually
+   flexible side-chain close to the metal — while leaving well-behaved points
+   unaffected.
+
+   Parameter uncertainties are estimated by bootstrap (1000 resamples with
+   replacement) and reported as ``p1_err`` / ``p2_err`` in the output CSV
+   and annotation boxes.
+
+.. note::
+
    **Overlaying a known τ\ :sub:`R` on τ-space plots**
 
    When ``tau_r_fixed`` is provided, each τ-space heatmap plot receives an

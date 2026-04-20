@@ -59,7 +59,9 @@ _SUSC_FIT_INPUT_UNIT_ALIASES: Final[dict[str, SuscFitInputUnits]] = {
     "cm3/mol": "cm3 mol-1",
     "reduced": "reduced",
 }
-_DIMENSIONLESS_SUSC_FIT_VARIABLES: Final[frozenset[str]] = frozenset({"rh_over_ax"})
+_DIMENSIONLESS_SUSC_FIT_VARIABLES: Final[frozenset[str]] = frozenset(
+    {"rh_over_ax", "alpha", "beta", "gamma"}
+)
 
 
 def resolve_susceptibility_backend(susceptibility_file: str) -> SusceptibilityBackend:

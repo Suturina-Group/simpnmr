@@ -11,7 +11,7 @@ an assigned experiment.
 import logging
 
 import numpy as np
-from scipy.optimize import curve_fit
+from scipy.optimize import least_squares
 
 from simpnmr.core.build.eff_factors import calc_g_eff, choose_S_eff
 from simpnmr.core.const.gammas import get_nuclear_gamma
@@ -126,19 +126,22 @@ def compute_p1_theoretical(
     return p1_si * ang6
 
 
-def _r6_model(r6_inv: np.ndarray, p1: float, p2: float) -> np.ndarray:
-    """Evaluate ``p1 / r**6 + p2`` given pre-computed ``1/r**6`` values."""
-    return p1 * r6_inv + p2
-
-
 def fit_r6(
     molecule: Molecule,
     experiment: Experiment,
     observable: str = "r1",
     tau_e: float | None = None,
     isotope_filter: str | None = None,
+    distance_power: float = 0.0,
 ) -> dict:
     """Fit linewidth or R1 to the model ``p1 / r**6 + p2``.
+
+    Uses Huber regression (``epsilon=1.35``) rather than ordinary least
+    squares, making the fit robust to outliers: residuals smaller than
+    1.35 σ are treated as inliers (L2 penalty) while larger residuals are
+    down-weighted (L1 penalty).  Parameter uncertainties (``p1_err``,
+    ``p2_err``) are estimated by bootstrap (1000 resamples with
+    replacement).
 
     For each assigned signal the effective ``1/r**6`` is computed as the mean
     over all nuclei sharing the same chemical label (equivalent nuclei). This
@@ -170,13 +173,18 @@ def fit_r6(
         isotope_filter: If given, restrict the fit to signals whose chem_label
             corresponds to this isotope (e.g. ``"1H"``).  ``None`` includes
             all signals.
+        distance_power: Exponent ``k`` for distance-based weighting.  Each
+            data point is weighted by ``r_eff**k``, so larger values give
+            more influence to distant (small-linewidth) peaks.  ``k=0``
+            (default) gives equal weights; ``k=6`` normalises by the
+            expected dipolar signal scale.
 
     Returns:
         A dict with keys:
 
         - ``"p1"`` / ``"p2"`` — fitted parameters.
-        - ``"p1_err"`` / ``"p2_err"`` — one-sigma uncertainties from the
-          covariance matrix.
+        - ``"p1_err"`` / ``"p2_err"`` — bootstrap standard errors (1000
+          resamples with replacement).
         - ``"r_eff"`` — effective distances ``(mean(1/r**6))**(-1/6)`` in Å,
           one per signal, in the same order as ``labels``.
         - ``"obs"`` — observed values used in the fit (contact-corrected when
@@ -247,10 +255,13 @@ def fit_r6(
 
         r6_inv_group = []
         for nuc in nuclei_in_group:
-            r = float(np.linalg.norm(np.asarray(nuc.coord, dtype=float) - centre))
+            r = float(
+                np.linalg.norm(np.asarray(nuc.coord, dtype=float) - centre)
+            )
             if r < 1e-6:
                 logger.warning(
-                    "Nucleus '%s' is at the paramagnetic centre, skipping", nuc.label
+                    "Nucleus '%s' is at the paramagnetic centre, skipping",
+                    nuc.label,
                 )
                 continue
             r6_inv_group.append(1.0 / r**6)
@@ -352,11 +363,50 @@ def fit_r6(
     obs = obs_raw - contact
     # -------------------------------------------------------------------------
 
-    popt, pcov = curve_fit(_r6_model, r6_inv, obs, p0=[1.0, 0.0])
-    perr = np.sqrt(np.diag(pcov))
+    # Distance-based weights: w_i = r_eff_i ** distance_power.
+    # Residuals are pre-scaled by sqrt(w) so that least_squares minimises
+    # sum w_i * rho(resid_i) rather than sum rho(resid_i).
+    r_eff_raw = r6_inv ** (-1.0 / 6.0)
+    if distance_power != 0.0:
+        sqrt_w = r_eff_raw ** (distance_power / 2.0)
+        sqrt_w /= sqrt_w.mean()   # normalise so f_scale stays in obs units
+    else:
+        sqrt_w = np.ones(len(obs))
 
-    pred = _r6_model(r6_inv, *popt)
+    # f_scale sets the Huber transition threshold in units of the residual.
+    # Using the data std gives "residuals > 1σ are outliers".
+    f_scale = float(np.std(obs)) or 1.0
+
+    def _resid(params):
+        return (params[0] * r6_inv + params[1] - obs) * sqrt_w
+
+    result = least_squares(
+        _resid, [1.0, 0.0], loss="huber", f_scale=f_scale
+    )
+    p1_val = float(result.x[0])
+    p2_val = float(result.x[1])
+
+    pred = p1_val * r6_inv + p2_val
     rmse = float(np.sqrt(np.mean((obs - pred) ** 2)))
+
+    # Bootstrap standard errors (1000 resamples with replacement)
+    rng = np.random.default_rng(0)
+    n = len(obs)
+    boot_p1 = np.empty(1000)
+    boot_p2 = np.empty(1000)
+    for i in range(1000):
+        idx = rng.integers(0, n, size=n)
+        x_b, y_b, sw_b = r6_inv[idx], obs[idx], sqrt_w[idx]
+        f_b = float(np.std(y_b)) or f_scale
+
+        def _resid_b(params, xb=x_b, yb=y_b, swb=sw_b):
+            return (params[0] * xb + params[1] - yb) * swb
+
+        r_b = least_squares(_resid_b, [p1_val, p2_val], loss="huber", f_scale=f_b)
+        boot_p1[i] = r_b.x[0]
+        boot_p2[i] = r_b.x[1]
+    p1_err = float(np.std(boot_p1, ddof=1))
+    p2_err = float(np.std(boot_p2, ddof=1))
 
     # Effective distance for plotting: (mean(1/r^6))^(-1/6)
     r_eff = (r6_inv) ** (-1.0 / 6.0)
@@ -364,10 +414,10 @@ def fit_r6(
     logger.info(
         "r^-6 fit (%s): p1 = %.4g ± %.4g, p2 = %.4g ± %.4g, RMSE = %.4g",
         observable,
-        popt[0],
-        perr[0],
-        popt[1],
-        perr[1],
+        p1_val,
+        p1_err,
+        p2_val,
+        p2_err,
         rmse,
     )
 
@@ -378,10 +428,10 @@ def fit_r6(
     ]
 
     return {
-        "p1": popt[0],
-        "p2": popt[1],
-        "p1_err": perr[0],
-        "p2_err": perr[1],
+        "p1": p1_val,
+        "p2": p2_val,
+        "p1_err": p1_err,
+        "p2_err": p2_err,
         "r_eff": r_eff,
         "obs": obs,
         "obs_raw": obs_raw,

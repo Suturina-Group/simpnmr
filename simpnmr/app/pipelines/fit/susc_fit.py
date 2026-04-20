@@ -36,7 +36,6 @@ from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.domain.tensor import Hyperfine
 from simpnmr.core.fitting import models
-from simpnmr.core.util.strings import remove_numbers
 from simpnmr.core.fitting.assign import (
     fit_with_hungarian_assignment,
     fit_with_hungarian_assignment_multi,
@@ -66,6 +65,15 @@ from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spect import plot_pred_spectrum
 from simpnmr.viz.style.theme import apply_profile
+
+try:
+    from simpnmr.gui.molecule_view import (
+        assign_label_colors, _CPK_COLORS,
+    )
+    from simpnmr.tools.coords.xyz_fmt import remove_label_indices
+    _HAS_VIEWER = True
+except ImportError:
+    _HAS_VIEWER = False
 
 logger = logging.getLogger(__name__)
 
@@ -240,11 +248,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     molecules = [copy.deepcopy(base_molecule) for _ in range(len(experiments))]
 
     name_to_susc_fit: dict[str, models.SusceptibilityModel] = {
-        "full": models.FullSuscFitter,
         "split": models.SplitFitter,
         "isoaxrh": models.IsoAxRhFitter,
-        "eigen": models.EigenFitter,
-        "isoeigen": models.IsoEigenFitter,
     }
 
     model_to_use = name_to_susc_fit[config.susc_fit_type]
@@ -675,6 +680,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         observable=_obs,
                         tau_e=config.fit_relaxation_tau_e,
                         isotope_filter=_iso_r6,
+                        distance_power=getattr(
+                            config, "fit_relaxation_distance_power", 0.0
+                        ) or 0.0,
                     )
                 except ValueError as err:
                     logger.warning(
@@ -881,6 +889,30 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             if nuc.shift.avg is not None
         ]
         if _avgs and experiment.signals:
+            # Compute label → color once for ALL chem_labels, mirroring the
+            # molecular viewer: same sorted order, same reserved-color logic.
+            # Slice per-isotope later so positions in the palette are identical.
+            _mol_label_colors: dict[str, str] | None = None
+            if _HAS_VIEWER:
+                _nuc_atom_labels: set[str] = set()
+                _all_chem_labels_set: set[str] = set()
+                for _n in molecule.nuclei:
+                    _nuc_atom_labels.add(_n.label)
+                    _all_chem_labels_set.add(_n.chem_label)
+                _unlabeled_elems = {
+                    remove_label_indices(lbl)[0]
+                    for lbl in molecule.labels
+                    if lbl not in _nuc_atom_labels
+                }
+                _reserved = {
+                    _CPK_COLORS[e]
+                    for e in _unlabeled_elems
+                    if e in _CPK_COLORS
+                }
+                _mol_label_colors = assign_label_colors(
+                    sorted(_all_chem_labels_set), reserved_colors=_reserved
+                )
+
             _isotopes_present = list(
                 dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
             )
@@ -892,11 +924,25 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 ]
                 if not _avgs_iso:
                     continue
+                _iso_chem_labels = {
+                    nuc.chem_label
+                    for nuc in molecule.nuclei
+                    if nuc.isotope == _iso
+                }
+                _label_colors = (
+                    {
+                        lbl: c for lbl, c in _mol_label_colors.items()
+                        if lbl in _iso_chem_labels
+                    }
+                    if _mol_label_colors else None
+                )
                 with spec.context():
                     plot_raw_deconv_pred(
                         molecule=molecule,
                         isotope=_iso,
-                        shift_range=[np.min(_avgs_iso), np.max(_avgs_iso)],
+                        shift_range=[
+                            np.min(_avgs_iso), np.max(_avgs_iso)
+                        ],
                         experiment=experiment,
                         spec=spec,
                         save=True,
@@ -908,9 +954,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         ),
                         verbose=True,
                         window_title=(
-                            f"Predicted and Experimental Spectra ({_iso})"
-                            f" at {experiment.temperature:.2f} K"
+                            f"Predicted and Experimental Spectra"
+                            f" ({_iso}) at"
+                            f" {experiment.temperature:.2f} K"
                         ),
+                        label_colors=_label_colors,
                     )
 
     # VT stacked experimental spectra — one figure per isotope

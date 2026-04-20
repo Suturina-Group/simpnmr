@@ -154,14 +154,56 @@ DEFAULT_PALETTE = [
     '#bcbd22', '#8c564b', '#e377c2', '#7f7f7f', '#2ca02c',
 ]
 
+# 3Dmol.js default CPK element colors (used for unlabelled atoms).
+# Kept in sync with $3Dmol.defaultElementColors in the bundled JS.
+_CPK_COLORS: dict[str, str] = {
+    'H':  '#ffffff', 'He': '#d9ffff', 'Li': '#cc80ff', 'Be': '#c2ff00',
+    'B':  '#ffb5b5', 'C':  '#909090', 'N':  '#3050f8', 'O':  '#ff0d0d',
+    'F':  '#90e050', 'Ne': '#b3e3f5', 'Na': '#ab5cf2', 'Mg': '#8aff00',
+    'Al': '#bfa6a6', 'Si': '#f0c8a0', 'P':  '#ff8000', 'S':  '#ffff30',
+    'Cl': '#1ff01f', 'Ar': '#80d1e3', 'K':  '#8f40d4', 'Ca': '#3dff00',
+    'Fe': '#e06633', 'Cu': '#c88033', 'Zn': '#7d80b0', 'Br': '#a62929',
+    'I':  '#940094',
+}
 
-def assign_label_colors(labels: list[str],
-                        custom: Optional[dict[str, str]] = None
-                        ) -> dict[str, str]:
-    """Map labels to hex colors. Honors any user-supplied overrides."""
+_COLOR_CLASH_THRESHOLD = 60  # Euclidean RGB distance below which colors clash
+
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip('#')
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _rgb_distance(a: str, b: str) -> float:
+    ra, ga, ba = _hex_to_rgb(a)
+    rb, gb, bb = _hex_to_rgb(b)
+    return ((ra - rb) ** 2 + (ga - gb) ** 2 + (ba - bb) ** 2) ** 0.5
+
+
+def assign_label_colors(
+    labels: list[str],
+    custom: Optional[dict[str, str]] = None,
+    reserved_colors: Optional[set[str]] = None,
+) -> dict[str, str]:
+    """Map labels to hex colors, avoiding reserved element CPK colors.
+
+    Args:
+        labels: Label strings to assign colors to.
+        custom: Optional explicit overrides ``{label: "#rrggbb"}``.
+        reserved_colors: CPK hex colors of unlabelled atom elements.
+            Palette entries too close to any reserved color are skipped.
+    """
     custom = custom or {}
+    reserved = reserved_colors or set()
+    available = [
+        c for c in DEFAULT_PALETTE
+        if not any(
+            _rgb_distance(c, r) < _COLOR_CLASH_THRESHOLD
+            for r in reserved
+        )
+    ] or DEFAULT_PALETTE  # fall back to full palette if everything is reserved
     out: dict[str, str] = {}
-    pal_iter = iter(DEFAULT_PALETTE * 4)
+    pal_iter = iter(available * 4)
     for lbl in sorted(labels):
         out[lbl] = custom[lbl] if lbl in custom else next(pal_iter)
     return out
@@ -201,11 +243,11 @@ colored.forEach(c => {{
 
 function addLabelToViewer(L) {{
   viewer.addLabel(L.text, {{
-    position: {{x:L.x, y:L.y, z:L.z + 0.6}},
+    position: {{x:L.x, y:L.y, z:L.z}},
     fontSize: labelStyle.fontSize,
     fontColor: labelStyle.fontColor,
     backgroundColor: 'white',
-    backgroundOpacity: 0.95,
+    backgroundOpacity: 1.0,
     borderThickness: labelStyle.borderThickness,
     borderColor: L.color,
     inFront: true
@@ -274,7 +316,7 @@ def build_viewer_html(mol: Molecule,
                       rep_index: Optional[dict[str, int]] = None,
                       base_sphere_scale: float = 0.25,
                       group_sphere_scale: float = 0.275,
-                      label_font_size: int = 14,
+                      label_font_size: int = 20,
                       title: str = "Molecule",
                       cube_data: Optional[str] = None,
                       default_isoval: float = 100000.0) -> str:
@@ -295,7 +337,13 @@ def build_viewer_html(mol: Molecule,
         Starting isovalue in the same units as the cube (ppb by default).
     """
     groups = mol.grouped_by_label()
-    colors = assign_label_colors(list(groups.keys()), label_colors)
+    unlabelled_elems = {a.element for a in mol.atoms if not a.label}
+    reserved = {
+        _CPK_COLORS[e] for e in unlabelled_elems if e in _CPK_COLORS
+    }
+    colors = assign_label_colors(
+        list(groups.keys()), label_colors, reserved_colors=reserved
+    )
     rep_index = rep_index or {}
 
     colored = [{'index': a.index,
@@ -403,6 +451,19 @@ class MoleculeView(QWidget):
             page.runJavaScript(code, callback)
         else:
             page.runJavaScript(code)
+
+    def save_png(self, path: str) -> None:
+        """Capture the current 3D view and save it as a PNG file."""
+        import base64
+
+        def _received(data_uri: str) -> None:
+            if not data_uri or "base64," not in data_uri:
+                return
+            b64 = data_uri.split("base64,", 1)[1]
+            with open(path, "wb") as fh:
+                fh.write(base64.b64decode(b64))
+
+        self.run_js("viewer.pngURI()", _received)
 
     def highlight_atom(self, index: int, color: str = 'yellow') -> None:
         self.run_js(f"""

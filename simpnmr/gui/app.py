@@ -356,19 +356,42 @@ class ConfigForm(QScrollArea):
         # ── FIT-ONLY: Susceptibility fit ──────────────────────────────
         self._sec_susc_fit = _section("Susceptibility fit  [fit only]")
         self._susc_type = QComboBox()
-        self._susc_type.addItems(["isoaxrh", "full", "split", "eigen", "isoeigen"])
+        self._susc_type.addItems(["isoaxrh", "split"])
+        self._susc_input_units = QComboBox()
+        self._susc_input_units.addItems(["A3", "cm3 mol-1", "reduced"])
         self._susc_iso = _var_row()
         self._susc_ax = _var_row()
-        self._susc_rh = _var_row(fix_val="0.0")
         self._susc_rh_over_ax = _var_row(fix_val="0.0")
+        self._susc_alpha = _var_row(fix_val="0.0")
+        self._susc_beta = _var_row(fix_val="0.0")
+        self._susc_gamma = _var_row(fix_val="0.0")
+        self._susc_dxx = _var_row()
+        self._susc_dyy = _var_row()
+        self._susc_dxy = _var_row(fix_val="0.0")
+        self._susc_dxz = _var_row(fix_val="0.0")
+        self._susc_dyz = _var_row(fix_val="0.0")
         self._average_shifts = QCheckBox("Average equivalent shift groups")
+        self._pcs_isosurface = QCheckBox("Generate PCS isosurface (cube file)")
         self._sec_susc_fit.layout().addRow("Fit type:", self._susc_type)
+        self._sec_susc_fit.layout().addRow(
+            "Input units:", self._susc_input_units)
         self._sec_susc_fit.layout().addRow("iso:", self._susc_iso)
         self._sec_susc_fit.layout().addRow("ax:", self._susc_ax)
-        self._sec_susc_fit.layout().addRow("rh:", self._susc_rh)
-        self._sec_susc_fit.layout().addRow("rh/ax (fixed ratio):", self._susc_rh_over_ax)
+        self._sec_susc_fit.layout().addRow(
+            "rh/ax (fixed ratio):", self._susc_rh_over_ax)
+        self._sec_susc_fit.layout().addRow("alpha (°):", self._susc_alpha)
+        self._sec_susc_fit.layout().addRow("beta (°):", self._susc_beta)
+        self._sec_susc_fit.layout().addRow("gamma (°):", self._susc_gamma)
+        self._sec_susc_fit.layout().addRow("dxx:", self._susc_dxx)
+        self._sec_susc_fit.layout().addRow("dyy:", self._susc_dyy)
+        self._sec_susc_fit.layout().addRow("dxy:", self._susc_dxy)
+        self._sec_susc_fit.layout().addRow("dxz:", self._susc_dxz)
+        self._sec_susc_fit.layout().addRow("dyz:", self._susc_dyz)
         self._sec_susc_fit.layout().addRow("", self._average_shifts)
+        self._sec_susc_fit.layout().addRow("", self._pcs_isosurface)
         lay.addWidget(self._sec_susc_fit)
+        self._susc_type.currentIndexChanged.connect(self._on_susc_fit_type_changed)
+        self._on_susc_fit_type_changed()
 
         # ── Relaxation ────────────────────────────────────────────────
         sec = _section("Relaxation (optional)")
@@ -409,10 +432,13 @@ class ConfigForm(QScrollArea):
         self._tau_r_eta.setPlaceholderText("Pa·s  (overrides solvent)")
         self._tau_r_fixed = QLineEdit()
         self._tau_r_fixed.setPlaceholderText("s  (manual overlay)")
+        self._r6_distance_power = QLineEdit()
+        self._r6_distance_power.setPlaceholderText("0  (equal weights); 6 = w∝r⁶")
         self._sec_fit_relax.layout().addRow("τR method:", self._tau_r_method)
         self._sec_fit_relax.layout().addRow("Solvent:", self._tau_r_solvent)
         self._sec_fit_relax.layout().addRow("η (Pa·s):", self._tau_r_eta)
         self._sec_fit_relax.layout().addRow("τR fixed (s):", self._tau_r_fixed)
+        self._sec_fit_relax.layout().addRow("r⁻⁶ distance weight:", self._r6_distance_power)
         lay.addWidget(self._sec_fit_relax)
 
     # ------------------------------------------------------------------
@@ -433,17 +459,41 @@ class ConfigForm(QScrollArea):
         if is_predict:
             self._on_susc_method_changed(self._susc_method.currentText())
 
+    @staticmethod
+    def _set_row_visible(form, widget, visible: bool) -> None:
+        """Show or hide a form row (widget + its label) together."""
+        widget.setVisible(visible)
+        lbl = form.labelForField(widget)
+        if lbl:
+            lbl.setVisible(visible)
+
     def _on_susc_method_changed(self, method: str):
         is_file = method == "file"
         form = self._sec_susc_src.layout()
         for widget in (self._susc_file, self._susc_format):
-            widget.setVisible(is_file)
-            lbl = form.labelForField(widget)
-            if lbl:
-                lbl.setVisible(is_file)
+            self._set_row_visible(form, widget, is_file)
         self._susc_sh_widget.setVisible(method == "sh")
         self._susc_rc_widget.setVisible(method == "reduced_chi")
         self._susc_bl_widget.setVisible(method == "bleaney")
+
+    def _on_susc_fit_type_changed(self):
+        susc_type = self._susc_type.currentText()
+        form = self._sec_susc_fit.layout()
+        is_isoaxrh = susc_type == "isoaxrh"
+        is_split = susc_type == "split"
+        for widget, visible in (
+            (self._susc_ax, is_isoaxrh),
+            (self._susc_rh_over_ax, is_isoaxrh),
+            (self._susc_alpha, is_isoaxrh),
+            (self._susc_beta, is_isoaxrh),
+            (self._susc_gamma, is_isoaxrh),
+            (self._susc_dxx, is_split),
+            (self._susc_dyy, is_split),
+            (self._susc_dxy, is_split),
+            (self._susc_dxz, is_split),
+            (self._susc_dyz, is_split),
+        ):
+            self._set_row_visible(form, widget, visible)
 
     def _on_dia_ref_method_changed(self, method: str):
         is_none = method == "(none)"
@@ -681,15 +731,24 @@ class ConfigForm(QScrollArea):
                 return [row._combo.currentText(), float(row._edit.text() or "0")]
 
             susc_type = self._susc_type.currentText()
-            variables: dict = {
-                "iso": _var(self._susc_iso),
-                "ax": _var(self._susc_ax),
-            }
+            variables: dict = {"iso": _var(self._susc_iso)}
             if susc_type == "isoaxrh":
+                variables["ax"] = _var(self._susc_ax)
                 variables["rh_over_ax"] = _var(self._susc_rh_over_ax)
-            else:
-                variables["rh"] = _var(self._susc_rh)
-            susc_fit: dict = {"type": susc_type, "variables": variables}
+                variables["alpha"] = _var(self._susc_alpha)
+                variables["beta"] = _var(self._susc_beta)
+                variables["gamma"] = _var(self._susc_gamma)
+            elif susc_type == "split":
+                variables["dxx"] = _var(self._susc_dxx)
+                variables["dyy"] = _var(self._susc_dyy)
+                variables["dxy"] = _var(self._susc_dxy)
+                variables["dxz"] = _var(self._susc_dxz)
+                variables["dyz"] = _var(self._susc_dyz)
+            susc_fit: dict = {
+                "type": susc_type,
+                "input_units": self._susc_input_units.currentText(),
+                "variables": variables,
+            }
             if self._average_shifts.isChecked():
                 susc_fit["average_shifts"] = "all"
             d["susc_fit"] = susc_fit
@@ -725,6 +784,9 @@ class ConfigForm(QScrollArea):
                 fixed = self._tau_r_fixed.text().strip()
                 if fixed:
                     fit_relax["tau_r_fixed"] = float(fixed)
+                dp = self._r6_distance_power.text().strip()
+                if dp:
+                    fit_relax["distance_power"] = float(dp)
                 d["fit_relaxation"] = fit_relax
 
         return d
@@ -869,10 +931,24 @@ class ConfigForm(QScrollArea):
         idx = self._susc_type.findText(str(susc_fit.get("type", "isoaxrh")))
         if idx >= 0:
             self._susc_type.setCurrentIndex(idx)
+        idx = self._susc_input_units.findText(
+            str(susc_fit.get("input_units", "A3"))
+        )
+        if idx >= 0:
+            self._susc_input_units.setCurrentIndex(idx)
         variables = susc_fit.get("variables", {})
         for key, row in [
-            ("iso", self._susc_iso), ("ax", self._susc_ax),
-            ("rh", self._susc_rh), ("rh_over_ax", self._susc_rh_over_ax),
+            ("iso", self._susc_iso),
+            ("ax", self._susc_ax),
+            ("rh_over_ax", self._susc_rh_over_ax),
+            ("alpha", self._susc_alpha),
+            ("beta", self._susc_beta),
+            ("gamma", self._susc_gamma),
+            ("dxx", self._susc_dxx),
+            ("dyy", self._susc_dyy),
+            ("dxy", self._susc_dxy),
+            ("dxz", self._susc_dxz),
+            ("dyz", self._susc_dyz),
         ]:
             val = variables.get(key)
             if val and isinstance(val, list) and len(val) == 2:
@@ -881,6 +957,7 @@ class ConfigForm(QScrollArea):
                     row._combo.setCurrentIndex(idx)
                 row._edit.setText(str(val[1]))
         self._average_shifts.setChecked(bool(susc_fit.get("average_shifts")))
+        self._pcs_isosurface.setChecked(bool(susc_fit.get("pcs_isosurface")))
 
         # Relaxation (shared)
         relax = d.get("relaxation", {})
@@ -904,6 +981,8 @@ class ConfigForm(QScrollArea):
         self._tau_r_solvent.setCurrentIndex(idx if idx >= 0 else 0)
         self._tau_r_eta.setText(str(fit_relax.get("tau_r_eta", "")))
         self._tau_r_fixed.setText(str(fit_relax.get("tau_r_fixed", "")))
+        dp = fit_relax.get("distance_power", "")
+        self._r6_distance_power.setText("" if dp == "" else str(dp))
 
 
 # ---------------------------------------------------------------------------
@@ -1034,12 +1113,22 @@ class SimpNMRWindow(QMainWindow):
             self._iso_check.toggled.connect(self._on_iso_toggled)
             self._iso_spin.valueChanged.connect(self._on_isovalue_changed)
 
+            self._btn_save_mol_png = QPushButton("Save PNG…")
+            self._btn_save_mol_png.setEnabled(False)
+            self._btn_save_mol_png.setToolTip(
+                "Save current 3D view as a PNG image"
+            )
+
             mol_tb_lay.addWidget(self._btn_load_mol)
             mol_tb_lay.addWidget(self._lbl_mol_path, 1)
             mol_tb_lay.addWidget(self._mol_elem_combo)
             mol_tb_lay.addWidget(self._iso_check)
             mol_tb_lay.addWidget(self._iso_spin)
+            mol_tb_lay.addWidget(self._btn_save_mol_png)
             self._btn_load_mol.clicked.connect(self._load_structure_manual)
+            self._btn_save_mol_png.clicked.connect(
+                self._save_mol_png
+            )
 
             self._mol_view = MoleculeView()
             mol_layout.addWidget(mol_toolbar)
@@ -1050,6 +1139,7 @@ class SimpNMRWindow(QMainWindow):
             self._mol_elem_combo = None
             self._iso_check = None
             self._iso_spin = None
+            self._btn_save_mol_png = None
             lbl = QLabel("Install PyQt6-WebEngine to enable molecule viewer")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet("color:#888; background:#2a2a2a;")
@@ -1173,10 +1263,19 @@ class SimpNMRWindow(QMainWindow):
 
         hide = self._hide_cb.isChecked()
         entry = "from simpnmr.cli.main import interface; interface()"
-        if hide:
-            cmd = [sys.executable, "-c", entry, "--hide", mode, str(self._yaml_path)]
-        else:
-            cmd = [sys.executable, "-c", entry, mode, str(self._yaml_path)]
+        extra_flags: list[str] = []
+        if (
+            mode == "fit_susc"
+            and hasattr(self._form, "_pcs_isosurface")
+            and self._form._pcs_isosurface.isChecked()
+        ):
+            extra_flags.append("--pcs_isosurface")
+        base = ["--hide", mode] if hide else [mode]
+        cmd = (
+            [sys.executable, "-c", entry]
+            + base + extra_flags
+            + [str(self._yaml_path)]
+        )
 
         self._process = QProcess(self)
         self._process.setWorkingDirectory(work_dir)
@@ -1257,6 +1356,8 @@ class SimpNMRWindow(QMainWindow):
             self._lbl_mol_path.setText(path.name)
             self._log.append_line(f"Structure loaded: {path.name}", "#88cc88")
             self._populate_elem_combo(mol)
+            if self._btn_save_mol_png is not None:
+                self._btn_save_mol_png.setEnabled(True)
             has_cube = cube_data is not None
             if self._iso_check is not None:
                 self._iso_check.setEnabled(has_cube)
@@ -1310,6 +1411,22 @@ class SimpNMRWindow(QMainWindow):
         )
         if path:
             self._load_structure(Path(path))
+
+    def _save_mol_png(self):
+        if self._mol_view is None:
+            return
+        default = ""
+        if self._yaml_path is not None:
+            proj = self._project_name()
+            default = str(
+                self._yaml_path.parent / (proj or "") / "molecule_view.png"
+            )
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save PNG", default, "PNG images (*.png)"
+        )
+        if path:
+            self._mol_view.save_png(path)
+            self._log.append_line(f"Molecule view saved: {path}", "#88cc88")
 
     def closeEvent(self, event):
         if (self._process
