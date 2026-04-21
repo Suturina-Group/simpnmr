@@ -434,11 +434,17 @@ class ConfigForm(QScrollArea):
         self._tau_r_fixed.setPlaceholderText("s  (manual overlay)")
         self._r6_distance_power = QLineEdit()
         self._r6_distance_power.setPlaceholderText("0  (equal weights); 6 = w∝r⁶")
+        self._tau_e_range = QLineEdit()
+        self._tau_e_range.setPlaceholderText("e.g. 1e-14 1e-10  (s, auto if blank)")
+        self._tau_r_range = QLineEdit()
+        self._tau_r_range.setPlaceholderText("e.g. 1e-12 1e-5  (s, auto if blank)")
         self._sec_fit_relax.layout().addRow("τR method:", self._tau_r_method)
         self._sec_fit_relax.layout().addRow("Solvent:", self._tau_r_solvent)
         self._sec_fit_relax.layout().addRow("η (Pa·s):", self._tau_r_eta)
         self._sec_fit_relax.layout().addRow("τR fixed (s):", self._tau_r_fixed)
         self._sec_fit_relax.layout().addRow("r⁻⁶ distance weight:", self._r6_distance_power)
+        self._sec_fit_relax.layout().addRow("τe range (s):", self._tau_e_range)
+        self._sec_fit_relax.layout().addRow("τR range (s):", self._tau_r_range)
         lay.addWidget(self._sec_fit_relax)
 
     # ------------------------------------------------------------------
@@ -787,6 +793,16 @@ class ConfigForm(QScrollArea):
                 dp = self._r6_distance_power.text().strip()
                 if dp:
                     fit_relax["distance_power"] = float(dp)
+                for key, widget in (
+                    ("tau_e_range", self._tau_e_range),
+                    ("tau_r_range", self._tau_r_range),
+                ):
+                    parts = widget.text().strip().split()
+                    if len(parts) == 2:
+                        try:
+                            fit_relax[key] = [float(parts[0]), float(parts[1])]
+                        except ValueError:
+                            pass
                 d["fit_relaxation"] = fit_relax
 
         return d
@@ -983,6 +999,15 @@ class ConfigForm(QScrollArea):
         self._tau_r_fixed.setText(str(fit_relax.get("tau_r_fixed", "")))
         dp = fit_relax.get("distance_power", "")
         self._r6_distance_power.setText("" if dp == "" else str(dp))
+        for key, widget in (
+            ("tau_e_range", self._tau_e_range),
+            ("tau_r_range", self._tau_r_range),
+        ):
+            val = fit_relax.get(key)
+            widget.setText(
+                f"{val[0]} {val[1]}" if isinstance(val, list) and len(val) == 2
+                else ""
+            )
 
 
 # ---------------------------------------------------------------------------

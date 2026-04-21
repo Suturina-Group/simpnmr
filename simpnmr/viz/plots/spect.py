@@ -127,7 +127,9 @@ def plot_pred_spectrum(
     fig_width = max(base_width, base_width * n_peaks / 8)
     base_height = 2.40
     label_mindist = max(0.005, 0.03 / max(1, n_peaks / 8))
-    label_fontsize = max(4, round(spec.typography.label * min(1.0, 8 / max(1, n_peaks))))
+    label_fontsize = max(
+        4, round(spec.typography.label * min(1.0, 8 / max(1, n_peaks)))
+    )
 
     # Make plot
     fig, ax = plt.subplots(
@@ -139,7 +141,9 @@ def plot_pred_spectrum(
     spec.skin_axes(ax)
 
     # Spectrum trace
-    ax.plot(x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75)
+    ax.plot(
+        x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75
+    )
 
     _annotate_peaks_with_barrier(
         ax,
@@ -219,7 +223,8 @@ def plot_raw_deconv_pred(
         shift_range: Two-element sequence specifying the initial min/max ppm.
             The final plotting window is expanded to include the experimental
             peak range with additional padding.
-        experiment: Experiment containing the raw spectrum and deconvolution results.
+        experiment: Experiment containing the raw spectrum and
+            deconvolution results.
         spec: Plot styling contract.
         effective_linewidths_by_label: Optional per-nucleus linewidths in ppm
             resolved by the application pipeline.
@@ -297,7 +302,7 @@ def plot_raw_deconv_pred(
         if nucleus.isotope == isotope
     }
 
-    # Ensure nucleus text-label match simulated (predicted) shifts in sorted order
+    # Ensure nucleus text-label match simulated (predicted) shifts in order
     sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
     labels = [label for label, _ in sorted_shifts_labels]
     shifts = [shift for _, shift in sorted_shifts_labels]
@@ -307,7 +312,7 @@ def plot_raw_deconv_pred(
         y_sim_intensity[find_index_of_nearest(x_grid, sh)] for sh in shifts
     ]
 
-    # Construct deconvoluted (processed experimental) spectrum intensities (y-axis)
+    # Construct deconvoluted (processed experimental) spectrum intensities
     y_deconv_intensity = _build_deconv_spectrum(experiment, isotope, x_grid)
 
     # Normalise both spectra to max = 1 so barriers land at the same
@@ -323,12 +328,12 @@ def plot_raw_deconv_pred(
     palette = spec.palette
 
     # After normalisation max=1, so:
-    #   top panel y-top  = barrier(1.1) * labels_above(1.05) * headroom(1.5) = 1.7325
+    #   top panel y-top  = 1.1 * 1.05 * 1.5 = 1.733
     #   bottom panel y-top = barrier(1.1)
     # height_ratios must equal these y-ranges so that the 0→1.1 spectrum
     # region occupies the same physical height on both panels.
     _y_top_sim = 1.1 * 1.05 * 1.5    # 1.7325
-    _y_top_exp = 1.1                  # = _label_barrier_exp after normalisation
+    _y_top_exp = 1.1  # = _label_barrier_exp after normalisation
 
     # Pre-compute barriers (spectra normalised to max=1)
     _sim_barrier = 1.1
@@ -366,7 +371,8 @@ def plot_raw_deconv_pred(
             if nuc.isotope == isotope and nuc.chem_label in label_colors:
                 _chem_to_color[nuc.chem_label] = label_colors[nuc.chem_label]
     _math_to_color: dict[str, str] = {
-        nuc.chem_math_label: _chem_to_color.get(nuc.chem_label, palette.primary)
+        nuc.chem_math_label: _chem_to_color.get(
+            nuc.chem_label, palette.primary)
         for nuc in molecule.nuclei
         if nuc.isotope == isotope
     }
@@ -663,16 +669,21 @@ def plot_raw_deconv_pred(
         r"{} $\delta$ (ppm)".format(isotope_format(isotope)),
         fontsize=spec.typography.axis_label,
     )
-    # Per-segment tick density: at most ~3 major ticks per segment
+    # Per-segment tick density scaled by fraction of total figure width.
+    # A segment occupying fraction f of the axis gets round(f * 4) ticks,
+    # clamped to [1, 4]. prune='both' removes edge ticks at break points.
+    _total_width = sum(_seg_widths)
+    _prune = "both" if _n > 1 else None
     for i, (slo, shi) in enumerate(_segments):
         _ab = _ax_bot[i]
         _at = _ax_top[i]
-        _nbins = max(2, min(3, int(abs(shi - slo) / 5)))
-        _loc = ticker.MaxNLocator(nbins=_nbins, integer=False)
+        _frac = _seg_widths[i] / _total_width if _total_width > 0 else 1.0
+        _nbins = max(1, min(4, round(_frac * 4)))
+        _loc = ticker.MaxNLocator(nbins=_nbins, prune=_prune, integer=False)
         _ab.xaxis.set_major_locator(_loc)
         _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
         _at.xaxis.set_major_locator(ticker.MaxNLocator(
-            nbins=_nbins, integer=False
+            nbins=_nbins, prune=_prune, integer=False
         ))
 
     render_figure(fig, save=save, show=show, save_name=save_name)
@@ -737,8 +748,10 @@ def _build_deconv_spectrum(
         exp_width_ppm = signal.width / (
             get_nuclear_gamma(isotope) * experiment.magnetic_field
         )
-        y += signal.l_to_g * lorentzian(x_grid, exp_width_ppm, signal.shift, signal.area)
-        y += (1 - signal.l_to_g) * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
+        y += signal.l_to_g * lorentzian(
+            x_grid, exp_width_ppm, signal.shift, signal.area)
+        y += (1 - signal.l_to_g) * gaussian(
+            x_grid, exp_width_ppm, signal.shift, signal.area)
     return y
 
 
@@ -800,7 +813,9 @@ def plot_vt_spectra(
                 _lo = min(_lo, s.shift)
                 _hi = max(_hi, s.shift)
     if _lo == float("inf"):
-        logger.warning("plot_vt_spectra: no shift data for isotope %s.", isotope)
+        logger.warning(
+            "plot_vt_spectra: no shift data for isotope %s.", isotope
+        )
         return None, None
 
     ppm_lo, ppm_hi = _lo, _hi
@@ -835,7 +850,9 @@ def plot_vt_spectra(
     fig_w, fig_h_base = get_figsize(spec.profile, "standard")
     fig_h = fig_h_base + 0.5 * (n - 1)
 
-    fig = plt.figure(figsize=(fig_w, fig_h), num=window_title, layout="constrained")
+    fig = plt.figure(
+        figsize=(fig_w, fig_h), num=window_title, layout="constrained"
+    )
     fig.get_layout_engine().set(w_pad=0, wspace=0.004)
     _gs = fig.add_gridspec(1, _n_seg, width_ratios=_seg_widths)
     axes = [fig.add_subplot(_gs[0, i]) for i in range(_n_seg)]
@@ -889,7 +906,9 @@ def plot_vt_spectra(
     )
     for i, (slo, shi) in enumerate(_segments):
         _nbins = max(2, min(3, int(abs(shi - slo) / 5)))
-        axes[i].xaxis.set_major_locator(ticker.MaxNLocator(nbins=_nbins, integer=False))
+        axes[i].xaxis.set_major_locator(
+            ticker.MaxNLocator(nbins=_nbins, integer=False)
+        )
         axes[i].xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     render_figure(fig, save=save, show=show, save_name=save_name, fmt="png")
@@ -961,25 +980,20 @@ def _find_spectral_segments(
 def _draw_break_markers(
     ax_l: plt.Axes,
     ax_r: plt.Axes,
-    d_pts: float = 3.0,
+    dx: float = 0.025,
+    dy: float = 0.03,
     lw: float = 0.6,
 ) -> None:
-    """Draw parallel diagonal break markers at y=0 with fixed physical size.
+    """Draw parallel diagonal break markers using fixed axes fractions.
 
-    Using display coordinates ensures identical slope regardless of axis width.
+    Using fixed fractions of each axis guarantees identical marker
+    appearance at every break regardless of segment width.
     """
     kw = dict(clip_on=False, color="k", lw=lw, zorder=10)
     for ax, x_anchor in [(ax_l, 1.0), (ax_r, 0.0)]:
-        # Anchor point in display (pixel) coordinates
-        anchor = ax.transAxes.transform((x_anchor, 0))
-        p0 = anchor + np.array([-d_pts, -d_pts])
-        p1 = anchor + np.array([+d_pts, +d_pts])
-        # Convert back to axes fraction coordinates for plotting
-        inv = ax.transAxes.inverted()
-        p0_ax = inv.transform(p0)
-        p1_ax = inv.transform(p1)
         ax.plot(
-            [p0_ax[0], p1_ax[0]], [p0_ax[1], p1_ax[1]],
+            [x_anchor - dx, x_anchor + dx],
+            [-dy, dy],
             transform=ax.transAxes, **kw,
         )
 
@@ -1006,7 +1020,7 @@ def _annotate_peaks_with_barrier(
     line_scale: float = 1.0,
     label_colors: dict[str, str] | None = None,
 ) -> None:
-    """Annotate a spectrum with a horizontal barrier, vertical labels, and connectors.
+    """Annotate a spectrum with barrier, vertical labels, and connectors.
 
     The function also resolves label overlaps by shifting label x-positions and
     enforces a monotonic label ordering to prevent connector crossings.

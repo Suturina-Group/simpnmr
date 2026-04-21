@@ -27,14 +27,15 @@ class FigureSize:
 
 _FIGURE_SIZES: dict[PlotProfile, dict[FigureVariant, FigureSize]] = {
     "paper": {
-        "standard": FigureSize(width=3.54, height=2.40),  # 9.00 × 6.10 cm
-        "vertical": FigureSize(width=3.54, height=4.05),  # 9.00 x 10.28 cm
-        "vertical_extended": FigureSize(width=3.54, height=4.33),  # 9.00 x 11.00 cm
+        # ACS single-column: 3.25 in (8.26 cm) wide
+        "standard": FigureSize(width=3.25, height=2.20),
+        "vertical": FigureSize(width=3.25, height=3.10),
+        "vertical_extended": FigureSize(width=3.25, height=3.50),
     },
     "poster": {
-        "standard": FigureSize(width=3.54, height=2.40),  # 9.00 × 6.10 cm
-        "vertical": FigureSize(width=3.54, height=4.05),  # 9.00 x 10.28 cm
-        "vertical_extended": FigureSize(width=3.54, height=4.33),  # 9.00 x 11.00 cm
+        "standard": FigureSize(width=3.54, height=2.40),
+        "vertical": FigureSize(width=3.54, height=4.05),
+        "vertical_extended": FigureSize(width=3.54, height=4.33),
     },
 }
 

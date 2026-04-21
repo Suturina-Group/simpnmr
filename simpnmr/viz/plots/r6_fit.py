@@ -18,8 +18,18 @@ from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
 logger = logging.getLogger(__name__)
 
 
+def _fmt_ps(t_s: float) -> str:
+    """Format a time in seconds as a plain ps string without sci notation."""
+    val = t_s * 1e12
+    if val >= 10:
+        return f"{val:.0f} ps"
+    if val >= 1:
+        return f"{val:.1f} ps"
+    return f"{val:.2g} ps"
+
+
 def _fmt_sci(val: float, err: float | None) -> str:
-    """Format ``val ± err`` as compact scientific notation, e.g. ``4.2(3)e5``."""
+    """Format ``val ± err`` as compact scientific notation, e.g. ``4.2(3)e5``."""  # noqa: E501
     exp = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
     scale = 10**exp
     scaled_err = err / scale if err is not None else None
@@ -113,7 +123,9 @@ def plot_r6_fit(
     )
 
     # Label each point
-    _fsize = glyphs.annotation_size if hasattr(glyphs, "annotation_size") else 7
+    _fsize = (
+        glyphs.annotation_size if hasattr(glyphs, "annotation_size") else 7
+    )
     for x, y, lbl in zip(r6_inv, obs, labels):
         ax.annotate(
             lbl,
@@ -286,22 +298,8 @@ def plot_tau_space(
     # z[row, col] where row ~ y and col ~ x.
     # With indexing="ij": axis-0 = tau_e (→ x), axis-1 = tau_R (→ y)
     # so we transpose before plotting.
-    # Choose display units based on grid range
-    _tau_e_mid = np.sqrt(tau_e[0] * tau_e[-1])
-    if _tau_e_mid < 1e-12:
-        _tau_e_scale, _tau_e_unit = 1e15, "fs"
-    elif _tau_e_mid < 1e-9:
-        _tau_e_scale, _tau_e_unit = 1e12, "ps"
-    else:
-        _tau_e_scale, _tau_e_unit = 1e9, "ns"
-
-    _tau_r_mid = np.sqrt(tau_R[0] * tau_R[-1])
-    if _tau_r_mid < 1e-9:
-        _tau_r_scale, _tau_r_unit = 1e12, "ps"
-    elif _tau_r_mid < 1e-6:
-        _tau_r_scale, _tau_r_unit = 1e9, "ns"
-    else:
-        _tau_r_scale, _tau_r_unit = 1e6, "µs"
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
 
     TAU_E_2D, TAU_R_2D = np.meshgrid(
         tau_e * _tau_e_scale, tau_R * _tau_r_scale
@@ -343,7 +341,8 @@ def plot_tau_space(
         "tau_space CI contours: log_lo=%.4f  log_hi=%.4f  "
         "p1_err/p1_fit=%s",
         log_lo, log_hi,
-        f"{abs(p1_err / p1_fit):.4f}" if (p1_err is not None and p1_fit != 0) else "n/a",
+        f"{abs(p1_err / p1_fit):.4f}"
+        if (p1_err is not None and p1_fit != 0) else "n/a",
     )
     logger.info(
         "p1 relative uncertainty (%.0f%% CI): %s",
@@ -464,19 +463,8 @@ def plot_tau_space(
 
         if tau_e_intersections:
             # Format τ_e values for annotation
-            def _fmt_tau(t_s: float) -> str:
-                if t_s < 1e-12:
-                    return f"{t_s * 1e15:.2g} fs"
-                if t_s < 1e-9:
-                    return f"{t_s * 1e12:.2g} ps"
-                return f"{t_s * 1e9:.2g} ns"
-
-            def _fmt_tau_r(t_s: float) -> str:
-                if t_s < 1e-9:
-                    return f"{t_s * 1e12:.2g} ps"
-                if t_s < 1e-6:
-                    return f"{t_s * 1e9:.2g} ns"
-                return f"{t_s * 1e6:.2g} µs"
+            _fmt_tau = _fmt_ps
+            _fmt_tau_r = _fmt_ps
 
             te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
             ann_tau = (
@@ -589,21 +577,8 @@ def plot_tau_space_combined(
     tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
     tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
 
-    _tau_e_mid = np.sqrt(tau_e[0] * tau_e[-1])
-    if _tau_e_mid < 1e-12:
-        _tau_e_scale, _tau_e_unit = 1e15, "fs"
-    elif _tau_e_mid < 1e-9:
-        _tau_e_scale, _tau_e_unit = 1e12, "ps"
-    else:
-        _tau_e_scale, _tau_e_unit = 1e9, "ns"
-
-    _tau_r_mid = np.sqrt(tau_R[0] * tau_R[-1])
-    if _tau_r_mid < 1e-9:
-        _tau_r_scale, _tau_r_unit = 1e12, "ps"
-    elif _tau_r_mid < 1e-6:
-        _tau_r_scale, _tau_r_unit = 1e9, "ns"
-    else:
-        _tau_r_scale, _tau_r_unit = 1e6, "µs"
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
 
     TAU_E_2D, TAU_R_2D = np.meshgrid(
         tau_e * _tau_e_scale, tau_R * _tau_r_scale
@@ -745,19 +720,8 @@ def plot_tau_space_combined(
             zorder=10,
         )
 
-        def _fmt_tau(t_s: float) -> str:
-            if t_s < 1e-12:
-                return f"{t_s * 1e15:.2g} fs"
-            if t_s < 1e-9:
-                return f"{t_s * 1e12:.2g} ps"
-            return f"{t_s * 1e9:.2g} ns"
-
-        def _fmt_tau_r(t_s: float) -> str:
-            if t_s < 1e-9:
-                return f"{t_s * 1e12:.2g} ps"
-            if t_s < 1e-6:
-                return f"{t_s * 1e9:.2g} ns"
-            return f"{t_s * 1e6:.2g} µs"
+        _fmt_tau = _fmt_ps
+        _fmt_tau_r = _fmt_ps
 
         r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
         ann_lines = [f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}"]
@@ -900,21 +864,8 @@ def plot_tau_space_multitemp(
     tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
     tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
 
-    _tau_e_mid = np.sqrt(tau_e[0] * tau_e[-1])
-    if _tau_e_mid < 1e-12:
-        _tau_e_scale, _tau_e_unit = 1e15, "fs"
-    elif _tau_e_mid < 1e-9:
-        _tau_e_scale, _tau_e_unit = 1e12, "ps"
-    else:
-        _tau_e_scale, _tau_e_unit = 1e9, "ns"
-
-    _tau_r_mid = np.sqrt(tau_R[0] * tau_R[-1])
-    if _tau_r_mid < 1e-9:
-        _tau_r_scale, _tau_r_unit = 1e12, "ps"
-    elif _tau_r_mid < 1e-6:
-        _tau_r_scale, _tau_r_unit = 1e9, "ns"
-    else:
-        _tau_r_scale, _tau_r_unit = 1e6, "µs"
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
 
     TAU_E_2D, TAU_R_2D = np.meshgrid(
         tau_e * _tau_e_scale, tau_R * _tau_r_scale
