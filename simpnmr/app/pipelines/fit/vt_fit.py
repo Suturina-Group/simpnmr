@@ -378,6 +378,8 @@ def fit_vt(
                 ),
                 zeta_eff_tol=config.susc_vt_zeta_eff_tol,
                 orca_point=orca_point,
+                hfc_file=config.hyperfine_file or "",
+                tip_correction=chiT_fit_params.get("iso", {}).get("tip"),
                 spec=spec,
                 show=show_plots,
                 save=True,

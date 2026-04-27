@@ -12,7 +12,9 @@ candidate g_iso estimates:
   2.  From the highest-temperature data point (most direct high-T estimate).
 """
 
+import csv
 import logging
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,6 +42,8 @@ def plot_g_iso_solution_lines(
     zeta_eff: float | None = None,
     zeta_eff_tol: float = 0.15,
     orca_point: tuple[float, float, float] | None = None,
+    hfc_file: str = "",
+    tip_correction: float | None = None,
     spec: PlotSpec | None = None,
     show: bool = True,
     save: bool = True,
@@ -343,6 +347,36 @@ def plot_g_iso_solution_lines(
 
     g_iso_cross: float | None = crossings[0] if crossings else None
 
+    # Expand g_iso_arr to include the ζ crossing, then recompute all curves
+    if g_iso_cross is not None:
+        _lo = min(float(g_iso_arr[0]), g_iso_cross)
+        _hi = max(float(g_iso_arr[-1]), g_iso_cross)
+        if _lo < g_iso_arr[0] or _hi > g_iso_arr[-1]:
+            g_iso_arr = np.linspace(_lo, _hi, 400)
+            sqrt_arg = ax_intercept / 3.0 + g_iso_arr ** 2
+            sqrt_term = np.sqrt(np.maximum(sqrt_arg, 0.0))
+            g_perp = 2.0 * g_iso_arr - sqrt_term
+            g_par = -g_iso_arr + 2.0 * sqrt_term
+            g_ax_curve = g_par - g_perp
+            valid = (g_perp > 0) & (g_par > 0) & np.isfinite(g_ax_curve)
+            denom = f_S * (2.0 * g_par ** 2 + g_perp ** 2)
+            D_J = np.where(
+                np.abs(denom) > 1e-30,
+                -ax_slope * 30.0 * KB / denom,
+                np.nan,
+            )
+            D_cm = D_J / (H * C * 100.0)
+            zeta_curve = np.where(
+                valid & np.isfinite(D_cm) & (np.abs(g_ax_curve) > 1e-10),
+                -4.0 * J_spin * D_cm / g_ax_curve,
+                np.nan,
+            )
+            zeta_valid = np.isfinite(zeta_curve)
+
+    # x-axis limits for panels 1 & 2: full expanded scan range
+    _x12_lo = float(g_iso_arr[0])
+    _x12_hi = float(g_iso_arr[-1])
+
     # ── Helpers ───────────────────────────────────────────────────────────────
     _ap = dict(lw=0.8, mutation_scale=5)   # shared arrow style kwargs
 
@@ -423,7 +457,21 @@ def plot_g_iso_solution_lines(
             return str(v)
         return f"{v}({int(round(sigma))})"
 
+    # --- 1-σ bands: propagate fit-parameter errors across the scan axis -------
+    _errs = [_propagate_errors(float(g), 0.0) for g in g_iso_arr]
+    sigma_g_ax_arr = np.array([e[0] for e in _errs])
+    sigma_D_arr    = np.array([e[1] for e in _errs])
+    sigma_zeta_arr = np.array(
+        [_zeta_sigma(float(g), 0.0) for g in g_iso_arr]
+    )
+
     # ── Panel 1: Δg vs g_iso ─────────────────────────────────────────────────
+    ax1.fill_between(
+        g_iso_arr[valid],
+        (g_ax_curve - sigma_g_ax_arr)[valid],
+        (g_ax_curve + sigma_g_ax_arr)[valid],
+        color=col_curve, alpha=0.20, lw=0, zorder=2,
+    )
     ax1.plot(g_iso_arr[valid], g_ax_curve[valid], color=col_curve, lw=1.4, zorder=3)
 
     p1_entries: list[tuple[str, str]] = []
@@ -457,12 +505,19 @@ def plot_g_iso_solution_lines(
     if p1_entries:
         _in_panel_legend(ax1, p1_entries, loc="upper right")
 
+    ax1.set_xlim(_x12_lo, _x12_hi)
     ax1.set_xlabel(r"$g_\mathrm{iso}$", fontsize=label_fs)
     ax1.set_ylabel(r"$g_\mathrm{ax} = g_\parallel - g_\perp$", fontsize=label_fs)
     ax1.tick_params(labelsize=tick_fs)
 
     # ── Panel 2: D vs g_iso ──────────────────────────────────────────────────
     D_valid = valid & np.isfinite(D_cm)
+    ax2.fill_between(
+        g_iso_arr[D_valid],
+        (D_cm - sigma_D_arr)[D_valid],
+        (D_cm + sigma_D_arr)[D_valid],
+        color=col_curve, alpha=0.20, lw=0, zorder=2,
+    )
     ax2.plot(g_iso_arr[D_valid], D_cm[D_valid], color=col_curve, lw=1.4, zorder=3)
 
     p2_entries: list[tuple[str, str]] = []
@@ -496,12 +551,25 @@ def plot_g_iso_solution_lines(
     if p2_entries:
         _in_panel_legend(ax2, p2_entries, loc="lower right", y_pad=0.10)
 
+    ax2.set_xlim(_x12_lo, _x12_hi)
     ax2.set_xlabel(r"$g_\mathrm{iso}$", fontsize=label_fs)
     ax2.set_ylabel(r"$D$ (cm$^{-1}$)", fontsize=label_fs)
     ax2.tick_params(labelsize=tick_fs)
 
     # ── Panel 3: ζ̄_eff vs g_iso (optional) ──────────────────────────────────
     if ax3 is not None and zeta_eff is not None:
+        # 1-σ band for ζ (recompute on z3_arr which may be wider than g_iso_arr)
+        _sz3 = sigma_zeta_arr
+        if not np.array_equal(z3_arr, g_iso_arr):
+            _sz3 = np.array(
+                [_zeta_sigma(float(g), 0.0) for g in z3_arr]
+            )
+        ax3.fill_between(
+            z3_arr[z3_valid],
+            (z3_curve - _sz3)[z3_valid],
+            (z3_curve + _sz3)[z3_valid],
+            color=col_curve, alpha=0.20, lw=0, zorder=2,
+        )
         ax3.plot(
             z3_arr[z3_valid], z3_curve[z3_valid],
             color=col_curve, lw=1.4, zorder=3,
@@ -590,6 +658,87 @@ def plot_g_iso_solution_lines(
             fontsize=label_fs,
         )
         ax3.tick_params(labelsize=tick_fs)
+
+    # --- CSV export of all SH parameters with confidence intervals -----------
+    if save:
+        _rows: list[dict] = []
+        for _label, _g_ref, _gi_err in [
+            ("iso",    g_iso_intercept, g_iso_err_intercept),
+            ("high_T", g_iso_high_t,    g_iso_err_high_t),
+        ]:
+            _ga, _D = _point(_g_ref)
+            _s_ga, _s_D = _propagate_errors(_g_ref, _gi_err)
+            _z = _zeta_point(_g_ref) if zeta_eff is not None else float("nan")
+            _sz = (
+                _zeta_sigma(_g_ref, _gi_err)
+                if zeta_eff is not None else float("nan")
+            )
+            _rows.append({
+                "point":       _label,
+                "g_iso":       _g_ref,
+                "g_iso_err":   _gi_err,
+                "g_ax":        _ga,
+                "g_ax_err":    _s_ga,
+                "D_cm1":       _D,
+                "D_cm1_err":   _s_D,
+                "zeta_cm1":    _z,
+                "zeta_cm1_err": _sz,
+            })
+        if g_iso_cross is not None:
+            _ga_c, _D_c = _point(g_iso_cross)
+            _s_ga_c, _s_D_c = _propagate_errors(g_iso_cross, 0.0)
+            _s_gi_c = _cross_g_iso_sigma(g_iso_cross)
+            _z_c = (
+                _zeta_point(g_iso_cross)
+                if zeta_eff is not None else float("nan")
+            )
+            _rows.append({
+                "point":       "zeta_cross",
+                "g_iso":       g_iso_cross,
+                "g_iso_err":   _s_gi_c,
+                "g_ax":        _ga_c,
+                "g_ax_err":    _s_ga_c,
+                "D_cm1":       _D_c,
+                "D_cm1_err":   _s_D_c,
+                "zeta_cm1":    _z_c,
+                "zeta_cm1_err": 0.0,
+            })
+        if orca_point is not None:
+            _gi_o, _ga_o, _D_o = orca_point
+            _z_o = (
+                -4.0 * J_spin * _D_o / _ga_o
+                if abs(_ga_o) > 1e-10 else float("nan")
+            ) if zeta_eff is not None else float("nan")
+            _rows.append({
+                "point":       "nevpt2",
+                "g_iso":       _gi_o,
+                "g_iso_err":   float("nan"),
+                "g_ax":        _ga_o,
+                "g_ax_err":    float("nan"),
+                "D_cm1":       _D_o,
+                "D_cm1_err":   float("nan"),
+                "zeta_cm1":    _z_o,
+                "zeta_cm1_err": float("nan"),
+            })
+
+        _csv_path = Path(save_name).with_suffix(".csv")
+        _fields = [
+            "point",
+            "g_iso", "g_iso_err",
+            "g_ax", "g_ax_err",
+            "D_cm1", "D_cm1_err",
+            "zeta_cm1", "zeta_cm1_err",
+        ]
+        with open(_csv_path, "w", newline="") as _fh:
+            _fh.write(f"# hfc_file: {hfc_file}\n")
+            _fh.write(
+                f"# tip_correction: "
+                f"{tip_correction if tip_correction is not None else 'N/A'}\n"
+            )
+            _writer = csv.DictWriter(_fh, fieldnames=_fields)
+            _writer.writeheader()
+            _writer.writerows(_rows)
+        logger.info("SH parameters saved to %s", _csv_path)
 
     render_figure(fig, save=save, show=show, save_name=save_name)
     if save:
