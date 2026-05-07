@@ -337,7 +337,7 @@ def _generate_surface_beads(
             if not keep[i]:
                 continue
             dists = np.linalg.norm(beads[i + 1:] - beads[i], axis=1)
-            keep[np.where(dists < sigma)[0] + i + 1] = False
+            keep[np.where(dists < 2 * sigma)[0] + i + 1] = False
         beads = beads[keep]
     return beads
 

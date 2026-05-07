@@ -1,17 +1,16 @@
-def read_gaussian_log_spin(file_name: str) -> int:
+def read_gaussian_log_spin(file_name: str) -> int | None:
     """Read the spin multiplicity (2S+1) from a Gaussian .log file.
 
     Args:
         file_name: Path to the Gaussian log file.
 
     Returns:
-        Spin multiplicity (2S+1).
+        Spin multiplicity (2S+1), or None if the line is not found.
     """
 
-    # Read number of atoms
     with open(file_name, "r") as f:
         for line in f:
             if "Multiplicity =" in line:
-                mult = int(line.split()[-1])
+                return int(line.split()[-1])
 
-    return mult
+    return None

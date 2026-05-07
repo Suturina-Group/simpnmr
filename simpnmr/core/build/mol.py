@@ -86,6 +86,7 @@ def build_molecule_from_csv(
     payload: dict,
     *,
     elements: list[str] | str = "all",
+    exclude: list[str] | None = None,
 ) -> Molecule:
     """Build a base `Molecule` from a CSV-derived structural payload.
 
@@ -108,4 +109,5 @@ def build_molecule_from_csv(
         labels=labels,
         coords=coords,
         elements=elements,
+        exclude=exclude,
     )

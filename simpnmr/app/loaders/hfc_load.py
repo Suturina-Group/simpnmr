@@ -90,7 +90,10 @@ def load_hyperfines(
             else "unavailable"
         )
 
-        qc_hyperfine_data = rdrs.QCA.guess_from_file(config.hyperfine_file)
+        qc_hyperfine_data = rdrs.QCA.guess_from_file(
+            config.hyperfine_file,
+            spin=getattr(config, "hyperfine_spin", None),
+        )
 
         molecule = build_hfc_from_qca(
             molecule,

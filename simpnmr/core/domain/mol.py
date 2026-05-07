@@ -538,6 +538,7 @@ class Molecule:
         labels: ArrayLike,
         coords: ArrayLike,
         elements: list[str] | str = "all",
+        exclude: list[str] | None = None,
     ) -> "Molecule":
         """Create a `Molecule` from labels and coordinates.
 
@@ -545,6 +546,7 @@ class Molecule:
             labels: Atomic labels.
             coords: Atomic coordinates as an ``(n_atoms, 3)`` array-like in Å.
             elements: Elements/labels to include. Use ``"all"`` to include all.
+            exclude: Explicit atom labels to remove after the include filter.
 
         Returns:
             A `Molecule` instance.
@@ -573,12 +575,14 @@ class Molecule:
             else:
                 elements_to_include.append(ele)
 
+        exclude_set: set[str] = set(exclude) if exclude else set()
+
         # Generate list of Nuclei, one for each atom
         # selecting only those elements requested by user
         nuclei = [
             Nucleus(label, coord, Hyperfine())
             for label, coord in zip(labels_list, coords)
-            if label in elements_to_include
+            if label in elements_to_include and label not in exclude_set
         ]
 
         # Generate Molecule using ALL labels and coords
@@ -887,14 +891,21 @@ class Molecule:
         if key_kind not in ("atom_label", "chem_label"):
             raise ValueError("key_kind must be 'atom_label' or 'chem_label'")
 
+        missing: list[str] = []
         for nuc in self.nuclei:
             key = nuc.label if key_kind == "atom_label" else nuc.chem_label
-            try:
+            if key in dia_by_key:
                 nuc.shift.dia = float(dia_by_key[key])
-            except KeyError as exc:
-                raise KeyError(
-                    f"Cannot find {key} in diamagnetic shift mapping"
-                ) from exc
+            else:
+                missing.append(key)
+        if missing:
+            raise KeyError(
+                f"Diamagnetic shift missing for {len(missing)} nucleus/"
+                f"nuclei: {', '.join(missing)}.\n"
+                "These atoms are in your molecule but not covered by the "
+                "diamagnetic file. Check your nuclei:isotope / "
+                "nuclei:include_groups / nuclei:exclude_groups settings."
+            )
 
         if ref_avg_by_isotope is not None:
             for nuc in self.nuclei:

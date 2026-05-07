@@ -15,7 +15,6 @@ from pathlib import Path
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-import matplotlib.transforms as mtransforms
 import numpy as np
 from numpy.typing import ArrayLike
 
@@ -412,7 +411,7 @@ def plot_raw_deconv_pred(
         num=window_title,
         layout="constrained",
     )
-    fig.get_layout_engine().set(w_pad=0, wspace=0.004)
+    fig.get_layout_engine().set(w_pad=0, wspace=0.001)
     _gs = fig.add_gridspec(
         2, _n,
         width_ratios=_seg_widths,
@@ -510,46 +509,12 @@ def plot_raw_deconv_pred(
         )
     _ax_top[0].set_ylim(0, _y_top_sim)
 
-    _blend_sim = mtransforms.blended_transform_factory(
-        _ax_top[0].transAxes, _ax_top[0].transData
-    )
-    _ax_top[0].text(
-        0.0, _sim_barrier / 2, "Simulation",
-        transform=_blend_sim,
-        rotation=90, va="center", ha="right",
-        fontsize=spec.typography.axis_label, clip_on=False,
-    )
 
     # ------------------------------------------------------------------
     # Bottom panel — deconvoluted + raw experimental spectrum
     # ------------------------------------------------------------------
 
-    # Individual Lorentzian/Gaussian components (thin dashed, behind sum)
-    _lw_comp = max(0.3, _lw_line * 0.7)
-    for signal in _iso_signals:
-        exp_width_ppm = signal.width / (
-            get_nuclear_gamma(isotope) * experiment.magnetic_field
-        )
-        y_comp = (
-            signal.l_to_g
-            * lorentzian(x_grid, exp_width_ppm, signal.shift, signal.area)
-            + (1 - signal.l_to_g)
-            * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
-        )
-        y_comp_norm = y_comp / _deconv_max
-        for _ab in _ax_bot:
-            _ab.plot(
-                x_grid, y_comp_norm,
-                lw=_lw_comp, color=palette.primary,
-                alpha=0.35, linestyle="--",
-            )
-
-    for _ab in _ax_bot:
-        _ab.plot(
-            x_grid, y_deconv_intensity,
-            lw=_lw_line, color=palette.primary, alpha=0.7,
-        )
-
+    # Raw experimental spectrum drawn first (bottom layer)
     if experiment.spectrum is not None:
         x_raw = np.asarray(experiment.spectrum[:, 0], dtype=float)
         y_raw = np.asarray(experiment.spectrum[:, 1], dtype=float)
@@ -586,6 +551,32 @@ def plot_raw_deconv_pred(
                 x_raw, y_raw,
                 lw=_lw_line, color=palette.highlight,
             )
+
+    # Individual Lorentzian/Gaussian components (thin dashed, behind sum)
+    _lw_comp = max(0.3, _lw_line * 0.7)
+    for signal in _iso_signals:
+        exp_width_ppm = signal.width / (
+            get_nuclear_gamma(isotope) * experiment.magnetic_field
+        )
+        y_comp = (
+            signal.l_to_g
+            * lorentzian(x_grid, exp_width_ppm, signal.shift, signal.area)
+            + (1 - signal.l_to_g)
+            * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
+        )
+        y_comp_norm = y_comp / _deconv_max
+        for _ab in _ax_bot:
+            _ab.plot(
+                x_grid, y_comp_norm,
+                lw=_lw_comp, color=palette.primary,
+                alpha=0.35, linestyle="--",
+            )
+
+    for _ab in _ax_bot:
+        _ab.plot(
+            x_grid, y_deconv_intensity,
+            lw=_lw_line, color=palette.primary, alpha=0.7,
+        )
 
     # Barrier line and ylim on bottom panel
     for _ab in _ax_bot:
@@ -653,16 +644,6 @@ def plot_raw_deconv_pred(
             color="red", va="bottom", ha="left", clip_on=True,
         )
 
-    # "Experiment" label
-    _blend_exp = mtransforms.blended_transform_factory(
-        _ax_bot[0].transAxes, _ax_bot[0].transData
-    )
-    _ax_bot[0].text(
-        0.0, _label_barrier_exp / 2, "Experiment",
-        transform=_blend_exp,
-        rotation=90, va="center", ha="right",
-        fontsize=spec.typography.axis_label, clip_on=False,
-    )
 
     # Centred x-label spanning the full figure width (works with axis breaks)
     fig.supxlabel(
@@ -853,7 +834,7 @@ def plot_vt_spectra(
     fig = plt.figure(
         figsize=(fig_w, fig_h), num=window_title, layout="constrained"
     )
-    fig.get_layout_engine().set(w_pad=0, wspace=0.004)
+    fig.get_layout_engine().set(w_pad=0, wspace=0.001)
     _gs = fig.add_gridspec(1, _n_seg, width_ratios=_seg_widths)
     axes = [fig.add_subplot(_gs[0, i]) for i in range(_n_seg)]
 
@@ -980,17 +961,24 @@ def _find_spectral_segments(
 def _draw_break_markers(
     ax_l: plt.Axes,
     ax_r: plt.Axes,
-    dx: float = 0.025,
-    dy: float = 0.03,
+    dy: float = 0.015,
     lw: float = 0.6,
 ) -> None:
-    """Draw parallel diagonal break markers using fixed axes fractions.
+    """Draw diagonal break markers with a consistent angle at every break.
 
-    Using fixed fractions of each axis guarantees identical marker
-    appearance at every break regardless of segment width.
+    ``dy`` is a fraction of axis height (same physical size for all axes
+    since they share a common height).  ``dx`` is derived so that its
+    physical size equals ``dy``'s physical size, giving a 45° line
+    regardless of how wide or narrow each segment axis is.
     """
+    fig = ax_l.figure
+    fw, fh = fig.get_size_inches()
     kw = dict(clip_on=False, color="k", lw=lw, zorder=10)
     for ax, x_anchor in [(ax_l, 1.0), (ax_r, 0.0)]:
+        pos = ax.get_position()
+        # Physical height of dy in inches; derive equal physical dx.
+        dy_in = dy * pos.height * fh
+        dx = dy_in / (pos.width * fw)
         ax.plot(
             [x_anchor - dx, x_anchor + dx],
             [-dy, dy],

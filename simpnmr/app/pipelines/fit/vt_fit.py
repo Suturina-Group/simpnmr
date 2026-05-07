@@ -181,10 +181,17 @@ def fit_vt(
             if eff_H is not None and g_tensor is not None:
                 D_J_raw, _ = vt.calculate_E_D_components(eff_H)
                 D_cm_orca = D_J_raw / (H * C * 100.0)
-                g_sym = 0.5 * (g_tensor + g_tensor.T)
-                g_eig = np.sort(np.linalg.eigvalsh(g_sym))
-                g_iso_orca = float(np.mean(g_eig))
-                g_ax_orca = float(g_eig[-1] - g_eig[0])
+                _g = np.asarray(g_tensor, dtype=float)
+                _G = _g.T @ _g
+                _g_sq_eig = np.linalg.eigvalsh(_G)
+                _g_sq_mean = float(np.mean(_g_sq_eig))
+                _order = np.argsort(np.abs(_g_sq_eig - _g_sq_mean))
+                _g_sq_sorted = _g_sq_eig[_order]
+                _gx = float(np.sqrt(max(_g_sq_sorted[0], 0.0)))
+                _gy = float(np.sqrt(max(_g_sq_sorted[1], 0.0)))
+                _gz = float(np.sqrt(max(_g_sq_sorted[2], 0.0)))
+                g_iso_orca = (_gx + _gy + _gz) / 3.0
+                g_ax_orca = 1.5 * (_gz - g_iso_orca)
                 orca_point = (g_iso_orca, g_ax_orca, D_cm_orca)
                 if abs(g_ax_orca) > 1e-6:
                     zeta_eff_from_orca = float(
@@ -208,23 +215,40 @@ def fit_vt(
                 eff_H_rot = (
                     susc_ab_initio.eigvecs.T @ eff_H @ susc_ab_initio.eigvecs
                 )
-                g_rot_diag = np.diag(
-                    np.diag(
-                        susc_ab_initio.eigvecs.T
-                        @ g_tensor
-                        @ susc_ab_initio.eigvecs
-                    )
+                g_rot = (
+                    susc_ab_initio.eigvecs.T
+                    @ g_tensor
+                    @ susc_ab_initio.eigvecs
                 )
 
-                g_components_sq = vt.compute_g_sq_components(g_rot_diag)
-                _gx = float(g_rot_diag[0, 0])
-                _gy = float(g_rot_diag[1, 1])
-                _gz = float(g_rot_diag[2, 2])
-                g_components = {
-                    "g_iso": (_gx + _gy + _gz) / 3.0,
-                    "g_ax": _gz - (_gx + _gy + _gz) / 3.0,
-                    "g_rho": (_gx - _gy) / 2.0,
-                }
+                # Check frame alignment: off-diagonal elements of g in the
+                # chi eigenframe should be small if the two frames coincide.
+                _diag_scale = np.mean(np.abs(np.diag(g_rot)))
+                _offdiag = g_rot - np.diag(np.diag(g_rot))
+                _offdiag_max = float(np.max(np.abs(_offdiag)))
+                if _diag_scale > 0:
+                    _rel = _offdiag_max / _diag_scale
+                    if _rel > 0.01:
+                        logger.warning(
+                            "chi and g-tensor frames are misaligned: "
+                            "largest off-diagonal element of g in the "
+                            "chi frame is %.4f (%.1f%% of diagonal). "
+                            "g_sq invariants may be inaccurate.",
+                            _offdiag_max,
+                            100.0 * _rel,
+                        )
+                    else:
+                        logger.info(
+                            "chi and g-tensor frames aligned: "
+                            "largest off-diagonal of g in chi frame "
+                            "is %.4f (%.2f%% of diagonal).",
+                            _offdiag_max,
+                            100.0 * _rel,
+                        )
+
+                # G = gᵀg eigenvalues are frame-independent; pass the
+                # full tensor directly.
+                g_sq = vt.compute_g_sq_components(g_tensor)
                 D_J, E_J = vt.calculate_E_D_components(eff_H_rot)
 
                 # Analytic VT curves on the clipped ab initio temperature grid
@@ -232,8 +256,7 @@ def fit_vt(
                 for comp in fit_component:
                     analytic_chi_vt[comp] = np.asarray(
                         vt.compute_analytic_component(
-                            comp, t_grid, g_components_sq, g_components,
-                            D_J, E_J, spin,
+                            comp, t_grid, g_sq, D_J, E_J, spin,
                             total_J=molecules[0].electronic.total_J,
                         ),
                         dtype=float,
@@ -242,13 +265,23 @@ def fit_vt(
                 # Fix TIP from the analytic value at the reference temperature
                 t_ref = float(susc_ab_initio.temperature)
                 idx_ref = int(np.argmin(np.abs(t_grid - t_ref)))
-                comp_to_attr = {
-                    "iso": "iso_g_corr", "ax": "axiality", "rh": "rhombicity"
-                }
+                comp_to_attr = {"iso": "iso", "ax": "axiality", "rh": "rhombicity"}
+                # g-corrected iso from NEVPT2 at the reference temperature
+                chi_iso_gcorr_ref = float(get_g_corr_iso_susc(
+                    spin=float(spin),
+                    orbit=float(molecules[0].electronic.orbit_L or 0.0),
+                    g_tensor=np.asarray(g_tensor, dtype=float),
+                    chi_tensors=np.asarray(susc_ab_initio.tensor, dtype=float),
+                    total_momentum_J=molecules[0].electronic.total_J,
+                ))
                 for comp in fit_component:
                     analytic_val_ref = float(analytic_chi_vt[comp][idx_ref])
+                    chi_ab = (
+                        chi_iso_gcorr_ref if comp == "iso"
+                        else getattr(susc_ab_initio, comp_to_attr[comp])
+                    )
                     tip_ref = vt.compute_tip_correction(
-                        getattr(susc_ab_initio, comp_to_attr[comp]),
+                        chi_ab,
                         analytic_val_ref,
                         spin,
                         total_J=molecules[0].electronic.total_J,
@@ -323,6 +356,8 @@ def fit_vt(
                 ab_series=ab_series,
                 analytic_chi_vt=analytic_chi_vt,
                 spec=spec,
+                chi_vals=chiT_reduced,
+                chi_errs=chiT_err_reduced,
                 show=show_plots,
                 save=True,
                 save_name=os.path.join(
@@ -377,6 +412,8 @@ def fit_vt(
                     else config.susc_vt_zeta_eff
                 ),
                 zeta_eff_tol=config.susc_vt_zeta_eff_tol,
+                evans_g_iso=config.susc_vt_evans_g_iso,
+                evans_g_iso_err=config.susc_vt_evans_g_iso_err,
                 orca_point=orca_point,
                 hfc_file=config.hyperfine_file or "",
                 tip_correction=chiT_fit_params.get("iso", {}).get("tip"),

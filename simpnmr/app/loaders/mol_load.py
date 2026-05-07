@@ -45,12 +45,15 @@ def load_base_molecule(config: Any) -> Molecule:
     method = config.hyperfine_method
 
     # DFT/QC-derived structure.
+    _exclude = getattr(config, "nuclei_exclude", None) or None
+
     if method == "dft":
         qcs = rdrs.QCStructure.guess_from_file(config.hyperfine_file)
         base_molecule = Molecule.from_labels_coords(
             labels=qcs.labels,
             coords=qcs.coords,
             elements=config.nuclei_include,
+            exclude=_exclude,
         )
 
     # Point-dipole workflow uses the same structural sources as before,
@@ -79,6 +82,7 @@ def load_base_molecule(config: Any) -> Molecule:
             labels=labels,
             coords=coords,
             elements=config.nuclei_include,
+            exclude=_exclude,
         )
 
     # CSV-provided molecule.
@@ -86,6 +90,7 @@ def load_base_molecule(config: Any) -> Molecule:
         base_molecule = load_molecule_from_csv(
             config.hyperfine_file,
             elements=config.nuclei_include,
+            exclude=_exclude,
         )
 
     else:
@@ -120,10 +125,13 @@ def load_molecule_from_csv(
     file_name: str,
     *,
     elements: list[str] | str = "all",
+    exclude: list[str] | None = None,
 ) -> Molecule:
     """Load a Molecule from a CSV file (IO -> domain).
 
     Reads CSV via IO layer and builds a Molecule via pure domain constructors.
     """
     payload = read_molecule_csv(file_name)
-    return mol.build_molecule_from_csv(payload, elements=elements)
+    return mol.build_molecule_from_csv(
+        payload, elements=elements, exclude=exclude
+    )

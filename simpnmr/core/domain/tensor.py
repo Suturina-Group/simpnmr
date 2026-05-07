@@ -73,6 +73,10 @@ class Hyperfine:
         else:
             self.tensor_full = tensor_full
 
+        # Conformer-averaged ⟨r⁻⁶⟩ (Å⁻⁶). Set only when HFC data originate
+        # from a conformer-averaging workflow; None otherwise.
+        self.r_inv6: float | None = None
+
     @property
     def fc(self) -> NDArray:
         """Fermi-contact hyperfine tensor (``ppm Å^-3``)."""

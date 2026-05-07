@@ -34,6 +34,7 @@ def plot_shift_spread(
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
     isotope_filter: str | None = None,
+    label_colors: dict[str, str] | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "shift_spread.pdf",
@@ -78,6 +79,13 @@ def plot_shift_spread(
     scale = spec.skin_axes(ax)
     palette = spec.palette
     shift_colours = spec.shift_colours
+
+    # chem_label → math_label mapping for color lookup
+    _math_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in _nuclei:
+            if nuc.chem_label in label_colors:
+                _math_to_color[nuc.chem_math_label] = label_colors[nuc.chem_label]
 
     # Total theoretical
     total = {nuc.chem_math_label: [] for nuc in _nuclei}
@@ -227,10 +235,8 @@ def plot_shift_spread(
         legend_labels.append("Dia.")
 
     # Add zero line to y axis
-    ax.hlines(
+    ax.axhline(
         0.0,
-        1,
-        len(_order) + 1,
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
@@ -246,16 +252,19 @@ def plot_shift_spread(
     else:
         ax.set_ylabel(r"$\delta$ (ppm)")
 
-    ax.yaxis.set_major_locator(ticker.AutoLocator())
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
     ax.set_xticks(xvals[::1] + 0.5)
     ax.set_xticklabels(_order, rotation=90)
+    if _math_to_color:
+        for tick, lab in zip(ax.get_xticklabels(), _order):
+            tick.set_color(_math_to_color.get(lab, palette.primary))
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
     ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
-    ax.set_xlim(0.5, len(_order) + 1.5)
+    ax.set_xlim(1, len(_order) + 1)
     ax.xaxis.set_tick_params("major", length=0)
 
     # Manually create custom legend
@@ -281,6 +290,7 @@ def plot_shift_contrib(
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
     isotope_filter: str | None = None,
+    label_colors: dict[str, str] | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "shift_components.pdf",
@@ -366,6 +376,12 @@ def plot_shift_contrib(
     scale = spec.skin_axes(ax)
     palette = spec.palette
     shift_colours = spec.shift_colours
+
+    _math_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in _nuclei:
+            if nuc.chem_label in label_colors:
+                _math_to_color[nuc.chem_math_label] = label_colors[nuc.chem_label]
 
     xvals = np.arange(len(cl_to_al))
 
@@ -463,10 +479,8 @@ def plot_shift_contrib(
             markersize=(glyphs.ms if glyphs is not None else 7),
         )
 
-    ax.hlines(
+    ax.axhline(
         0.0,
-        0,
-        len(total.values()),
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
@@ -480,13 +494,16 @@ def plot_shift_contrib(
     else:
         ax.set_ylabel(r"$\delta$ (ppm)")
 
-    ax.set_xlim([-0.5, xvals[-1] + 1.5])
+    ax.set_xlim([0, xvals[-1] + 1])
 
     ax.set_xticks(xvals + 0.5)
     ax.set_xticklabels(order, rotation=90)
+    if _math_to_color:
+        for tick, lab in zip(ax.get_xticklabels(), order):
+            tick.set_color(_math_to_color.get(lab, palette.primary))
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
-    ax.yaxis.set_major_locator(ticker.AutoLocator())
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     ax.xaxis.set_tick_params("major", length=0)

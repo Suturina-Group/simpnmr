@@ -109,7 +109,7 @@ def build_susceptibility_from_sh(
     from simpnmr.core.domain.tensor import Susceptibility
     from simpnmr.core.fitting.vt import (
         compute_analytic_component,
-        compute_curie_prefactor,
+        compute_chi_prefactor,
         compute_g_sq_components,
     )
 
@@ -120,7 +120,7 @@ def build_susceptibility_from_sh(
     D_J = D_cmm1 * H * C * 100.0
     E_J = E_cmm1 * H * C * 100.0
 
-    prefactor = compute_curie_prefactor(spin)  # Å³·K
+    prefactor = compute_chi_prefactor(spin)  # Å³·K
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
 
     def _analytic(comp, t):
@@ -189,7 +189,8 @@ def build_susceptibility_from_bleaney(
         List of Susceptibility objects, one per temperature.
 
     Raises:
-        ValueError: If ``total_J`` is zero or not provided (method requires L≠0).
+        ValueError: If ``total_J`` is zero or not provided
+            (method requires L≠0).
     """
     if not total_J:
         raise ValueError(
@@ -197,23 +198,30 @@ def build_susceptibility_from_bleaney(
             "(hyperfine:total_momentum_J must be provided for L≠0 systems)"
         )
 
+    from simpnmr.core.build.eff_factors import alpha_J_from_LSJ
     from simpnmr.core.domain.tensor import Susceptibility
     from simpnmr.core.fitting.vt import (
         compute_analytic_component,
-        compute_curie_prefactor,
+        compute_chi_prefactor,
     )
 
-    g_J = calc_g_eff(spin, orbit_L, total_J)
-    # For a pure J state the g-tensor is isotropic: g_sq_ax = g_sq_rh = 0
-    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+    # Rank-2 Stevens operator-equivalent factor.
+    alpha_J = alpha_J_from_LSJ(int(round(orbit_L)), spin, total_J)
 
-    D_cmm1 = 3.0 * B20_cmm1
-    E_cmm1 = B22_cmm1
+    # Scale B²₀ and B²₂ by α_J before converting to ZFS parameters.
+    # D = 3·B²₀·α_J,  E = B²₂·α_J  (Bleaney/Stevens convention).
+    D_cmm1 = 3.0 * B20_cmm1 * alpha_J
+    E_cmm1 = B22_cmm1 * alpha_J
 
     D_J_si = D_cmm1 * H * C * 100.0
     E_J_si = E_cmm1 * H * C * 100.0
 
-    prefactor = compute_curie_prefactor(spin, total_J)
+    # g_J² enters explicitly as g_sq_iso; the Curie prefactor C₀ carries
+    # only μ₀ μ_B² J(J+1)/(3 k_B) without a g² factor.
+    g_J = calc_g_eff(spin, orbit_L, total_J)
+    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+    prefactor = compute_chi_prefactor(spin, total_J)   # C₀, no g_J²
+
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
 
     def _analytic(comp, t):
@@ -230,8 +238,8 @@ def build_susceptibility_from_bleaney(
     for T in temperatures:
         t = np.asarray([float(T)], dtype=float)
         chi_iso = _analytic("iso", t)
-        chi_ax  = _analytic("ax",  t)
-        chi_rh  = _analytic("rh",  t)
+        chi_ax = _analytic("ax", t)
+        chi_rh = _analytic("rh", t)
 
         chi_zz = chi_iso + 2.0 / 3.0 * chi_ax
         chi_xx = chi_iso - 1.0 / 3.0 * chi_ax + chi_rh
@@ -243,6 +251,83 @@ def build_susceptibility_from_bleaney(
         suscs.append(Susceptibility(tensor=chi_mol, temperature=float(T)))
 
     return suscs
+
+
+def compute_bleaney_params(
+    chi_ax: float,
+    chi_rh: float,
+    temperature: float,
+    spin: float,
+    orbit_L: float,
+    total_J: float,
+) -> tuple[float, float]:
+    """Invert fitted χ_ax / χ_rh to Bleaney parameters B²₀ and B²₂ (cm⁻¹).
+
+    Follows the forward procedure of ``build_susceptibility_from_bleaney`` in
+    reverse.  D = 3·B²₀ and E = B²₂.  The g_J² factor is carried entirely
+    by the Curie prefactor C_J used to normalise the input susceptibilities;
+    ``g_sq_iso`` is therefore 1 here (no double-counting).
+
+    ``chi_ax`` and ``chi_rh`` must be the Curie-reduced components
+    χ_ax / C₀ and χ_rh / C₀ (units K⁻¹), where C₀ =
+    ``compute_chi_prefactor(spin, total_J)`` (without ``orbit_L``, so
+    g_J² is NOT included in the prefactor).  g_J² enters the analytic
+    formula explicitly through ``g_sq_iso = g_J²``.
+
+    Args:
+        chi_ax: Axial reduced susceptibility (K⁻¹, = χ_ax / C₀).
+        chi_rh: Rhombic reduced susceptibility (K⁻¹, = χ_rh / C₀).
+        temperature: Temperature in Kelvin.
+        spin: Electron spin quantum number S.
+        orbit_L: Orbital angular momentum L, used to compute g_J and α_J.
+        total_J: Total angular momentum quantum number J (must be > 0).
+
+    Returns:
+        Tuple ``(B20_cmm1, B22_cmm1, scale_ax, scale_rh)`` where the Stevens
+        parameters are in cm⁻¹ and the scale factors satisfy
+        ``sigma(B20) = sigma(chi_ax / C₀) * scale_ax`` and
+        ``sigma(B22) = sigma(chi_rh / C₀) * scale_rh``.
+    """
+    from simpnmr.core.build.eff_factors import alpha_J_from_LSJ
+    from simpnmr.core.fitting.vt import compute_analytic_component
+
+    # g_J² is explicit in g_sq_iso; C₀ (no g_J²) is used for normalisation.
+    g_J = calc_g_eff(spin, orbit_L, total_J)
+    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+    T_arr = np.asarray([float(temperature)], dtype=float)
+
+    # Probe with unit D_J = 1 cm⁻¹ in Joules to get sensitivity.
+    unit_J = H * C * 100.0  # 1 cm⁻¹ in Joules
+
+    # K⁻¹ per (cm⁻¹ of D)
+    coeff_D_ax = float(
+        compute_analytic_component(
+            "ax", T_arr, g_sq, unit_J, 0.0, spin, total_J=total_J
+        )[0]
+    )
+
+    # K⁻¹ per (cm⁻¹ of E)
+    coeff_E_rh = float(
+        compute_analytic_component(
+            "rh", T_arr, g_sq, 0.0, unit_J, spin, total_J=total_J
+        )[0]
+    )
+
+    alpha_J = alpha_J_from_LSJ(int(round(orbit_L)), spin, total_J)
+
+    D_cmm1 = float(chi_ax) / coeff_D_ax
+    E_cmm1 = float(chi_rh) / coeff_E_rh
+
+    # Invert D = 3·B²₀·α_J  and  E = B²₂·α_J.
+    B20_cmm1 = D_cmm1 / (3.0 * alpha_J)
+    B22_cmm1 = E_cmm1 / alpha_J
+
+    # Linear scale factors for error propagation:
+    # sigma(B20) = sigma(chi_ax / C₀) * scale_ax  (cm⁻¹ per K⁻¹)
+    scale_ax = abs(1.0 / (3.0 * alpha_J * coeff_D_ax))
+    scale_rh = abs(1.0 / (alpha_J * coeff_E_rh))
+
+    return B20_cmm1, B22_cmm1, scale_ax, scale_rh
 
 
 def build_susceptibility_from_reduced_chi(
@@ -282,9 +367,9 @@ def build_susceptibility_from_reduced_chi(
         List of Susceptibility objects, one per temperature.
     """
     from simpnmr.core.domain.tensor import Susceptibility
-    from simpnmr.core.fitting.vt import compute_curie_prefactor
+    from simpnmr.core.fitting.vt import compute_chi_prefactor
 
-    prefactor = compute_curie_prefactor(spin, total_J)  # Å³·K
+    prefactor = compute_chi_prefactor(spin, total_J)  # Å³·K
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
 
     def _broadcast(val, n):

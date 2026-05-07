@@ -23,7 +23,8 @@ def read_g_tensor_ab_initio(file_name: str, section: str) -> np.ndarray | None:
 
     Args:
         file_name: Path to the ORCA output file.
-        section: Label of the QDPT section to read (e.g., "casscf" or "nevpt2").
+        section: Label of the QDPT section to read (e.g., "casscf" or
+            "nevpt2").
 
     Returns:
         A 3x3 ab initio g-tensor as a NumPy array if found, otherwise None.
@@ -38,17 +39,44 @@ def read_g_tensor_ab_initio(file_name: str, section: str) -> np.ndarray | None:
                 if f"QDPT WITH {section.upper()}" in line:
                     # Go down to the G-matrix header
                     for line in f:
-                        if "ELECTRONIC G-MATRIX FROM EFFECTIVE HAMILTONIAN" in line:
+                        if (
+                            "ELECTRONIC G-MATRIX FROM EFFECTIVE HAMILTONIAN"
+                            in line
+                        ):
                             break
-                    # Find "g-matrix:"
+                    # Find "g-factors:" and "Orientation:" sub-blocks
+                    g_factors = None
+                    orientation = None
                     for line in f:
-                        if "g-matrix:" in line:
-                            # Next three lines are the rows of the tensor
-                            row_1 = [float(val) for val in next(f).split()]
-                            row_2 = [float(val) for val in next(f).split()]
-                            row_3 = [float(val) for val in next(f).split()]
-                            g_tensor = np.array([row_1, row_2, row_3])
+                        if "g-factors:" in line:
+                            # Next line: three values then "iso = ..."
+                            parts = next(f).split()
+                            g_factors = np.array(
+                                [
+                                    float(v)
+                                    for v in parts
+                                    if v not in ("iso", "=")
+                                ][:3]
+                            )
+                        if "Orientation:" in line:
+                            row_x = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
+                            row_y = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
+                            row_z = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
+                            orientation = np.array([row_x, row_y, row_z])
                             break
+                    if g_factors is not None and orientation is not None:
+                        # Reconstruct symmetric g-tensor from principal
+                        # values and axes. orientation rows are X/Y/Z
+                        # eigenvectors in the molecular frame.
+                        g_tensor = (
+                            orientation.T @ np.diag(g_factors) @ orientation
+                        )
                     break
     except Exception as e:
         raise ParseError(
@@ -115,16 +143,25 @@ def read_g_tensor_dft(
                                 [float(val) for val in stripped.split()[1:4]]
                             )
                         elif stripped.startswith("Orientation:"):
-                            row_x = [float(val) for val in next(f).split()[1:4]]
-                            row_y = [float(val) for val in next(f).split()[1:4]]
-                            row_z = [float(val) for val in next(f).split()[1:4]]
+                            row_x = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
+                            row_y = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
+                            row_z = [
+                                float(v) for v in next(f).split()[1:4]
+                            ]
                             orientation = np.array([row_x, row_y, row_z])
                             break
 
                     break
     except Exception as e:
         raise ParseError(
-            message="DFT g-tensor contributions could not be parsed from ORCA output",
+            message=(
+                "DFT g-tensor contributions could not be parsed "
+                "from ORCA output"
+            ),
             path=file_name,
             backend="orca",
             kind="gtensor",

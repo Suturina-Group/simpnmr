@@ -5,6 +5,7 @@
 
 import logging
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
@@ -12,6 +13,7 @@ import numpy as np
 from simpnmr.core.fitting.r6_fit import compute_p1_theoretical
 from simpnmr.viz.layout.canvas import create_canvas
 from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.layout.label import resolve_label_layout
 from simpnmr.viz.style.theme import PlotSpec
 from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
 
@@ -90,6 +92,12 @@ def plot_r6_fit(
     p2_err = fit_result["p2_err"]
     rmse = fit_result["rmse"]
 
+    # Scale x to avoid leading zeros. Pick the nearest power of 10 that
+    # brings the mean r^-6 value close to 1.
+    _x_exp = -int(np.floor(np.log10(float(np.mean(r6_inv)))))
+    _x_scale = 10 ** _x_exp     # multiply r6_inv by this for plotting
+    r6_inv_plot = r6_inv * _x_scale
+
     fig, ax = create_canvas(
         spec.profile,
         variant="standard",
@@ -108,37 +116,36 @@ def plot_r6_fit(
     ax.grid(True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8)
     ax.set_axisbelow(True)
 
-    # Scatter: data points
-    ax.plot(
-        r6_inv,
-        obs,
-        lw=0,
-        marker="o",
-        color=palette.primary,
-        markersize=glyphs.ms,
-        markerfacecolor=(0, 0, 0, 0.55),
-        markeredgecolor=palette.primary,
-        markeredgewidth=0.8,
-        zorder=3,
-    )
+    # Assign one color per label from the Matplotlib color cycle.
+    _color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    _colors = {
+        lbl: _color_cycle[i % len(_color_cycle)]
+        for i, lbl in enumerate(labels)
+    }
 
-    # Label each point
+    # Scatter: one point per label, filled with its label color.
+    for x, y, lbl in zip(r6_inv_plot, obs, labels):
+        ax.plot(
+            x, y,
+            lw=0,
+            marker="o",
+            color=palette.primary,
+            markersize=glyphs.ms,
+            markerfacecolor=_colors[lbl],
+            markeredgecolor=palette.primary,
+            markeredgewidth=0.8,
+            zorder=3,
+        )
+
     _fsize = (
         glyphs.annotation_size if hasattr(glyphs, "annotation_size") else 7
     )
-    for x, y, lbl in zip(r6_inv, obs, labels):
-        ax.annotate(
-            lbl,
-            xy=(x, y),
-            xytext=(4, 4),
-            textcoords="offset points",
-            fontsize=_fsize,
-            color=palette.primary,
-        )
 
-    # Smooth fitted curve
-    x_smooth = np.linspace(r6_inv.min() * 0.9, r6_inv.max() * 1.1, 300)
-    y_smooth = p1 * x_smooth + p2
+    # Smooth fitted curve — slope is p1/_x_scale because x is scaled.
+    x_smooth = np.linspace(
+        r6_inv_plot.min() * 0.9, r6_inv_plot.max() * 1.1, 300
+    )
+    y_smooth = (p1 / _x_scale) * x_smooth + p2
     ax.plot(
         x_smooth,
         y_smooth,
@@ -149,7 +156,9 @@ def plot_r6_fit(
     )
 
     obs_label = _OBS_LABELS.get(observable, observable)
-    ax.set_xlabel(r"$r^{-6}$ (Å$^{-6}$)")
+    ax.set_xlabel(
+        rf"$r^{{-6}}$ ($10^{{-{_x_exp}}}$ Å$^{{-6}}$)"
+    )
     ax.set_ylabel(obs_label)
 
     # Annotation box
@@ -175,6 +184,17 @@ def plot_r6_fit(
             edgecolor=palette.grid,
             alpha=0.8,
         ),
+    )
+
+    # Obstacle-aware label placement (same algorithm as the shift scatter).
+    label_entries = list(zip(labels, r6_inv_plot, obs))
+    resolve_label_layout(
+        ax,
+        label_entries,
+        fontsize=_fsize,
+        marker_size=glyphs.ms,
+        diag_line=None,
+        colors=_colors,
     )
 
     render_figure(fig, save=save, show=show, save_name=save_name)
@@ -564,7 +584,6 @@ def plot_tau_space_combined(
     from scipy.stats import norm as _norm
 
     z = _norm.ppf(0.5 + confidence / 2.0)
-    ci_pct = int(round(confidence * 100))
 
     _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
@@ -604,7 +623,7 @@ def plot_tau_space_combined(
 
     fig, ax = create_canvas(
         spec.profile,
-        variant="standard",
+        variant="narrow",
         window_title=window_title,
         layout="constrained",
     )
@@ -634,8 +653,8 @@ def plot_tau_space_combined(
     legend_labels_list = []
 
     for lr, color, label, lo_ci, hi_ci in [
-        (lr_r1, palette.primary, r"$R_1$ fit", lo_r1, hi_r1),
-        (lr_lw, palette.highlight, "Width fit", lo_lw, hi_lw),
+        (lr_r1, palette.primary, r"$R_1$", lo_r1, hi_r1),
+        (lr_lw, palette.highlight, r"$\Delta\nu$", lo_lw, hi_lw),
     ]:
         lo_data = float(lr.min())
         hi_data = float(lr.max())
@@ -650,7 +669,7 @@ def plot_tau_space_combined(
                 TAU_E_2D, TAU_R_2D, lr,
                 levels=sorted(ci_levels),
                 colors=[color] * len(ci_levels),
-                linewidths=[1.0] * len(ci_levels),
+                linewidths=[0.6] * len(ci_levels),
                 linestyles=["--"] * len(ci_levels),
             )
 
@@ -660,10 +679,10 @@ def plot_tau_space_combined(
                 TAU_E_2D, TAU_R_2D, lr,
                 levels=[0.0],
                 colors=[color],
-                linewidths=[1.6],
+                linewidths=[1.0],
             )
             legend_handles.append(
-                Line2D([0], [0], color=color, lw=1.6)
+                Line2D([0], [0], color=color, lw=1.0)
             )
             legend_labels_list.append(label)
         else:
@@ -680,55 +699,32 @@ def plot_tau_space_combined(
         ax.legend(
             legend_handles, legend_labels_list,
             fontsize=spec.typography.legend, framealpha=0.8,
-            loc="upper left",
+            loc="upper right",
         )
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
-    ax.set_title(
-        f"Combined τ space  —  {ci_pct}% CI",
-        fontsize=spec.typography.title,
-    )
-
-    _r1_str = _fmt_sci(r1_fit_result['p1'], r1_fit_result['p1_err'])
-    _w_str = _fmt_sci(width_fit_result['p1'], width_fit_result['p1_err'])
-    ann = (
-        f"$p_1(R_1)$ = {_r1_str} {_P1_UNITS['r1']}\n"
-        f"$p_1$(width) = {_w_str} {_P1_UNITS['width']}\n"
-        f"model: {relaxation_model}  |  T = {temperature:.0f} K"
-    )
-    ax.text(
-        0.97, 0.97, ann,
-        transform=ax.transAxes,
-        ha="right", va="top",
-        fontsize=spec.typography.annotation,
-        color=palette.primary,
-        bbox=dict(
-            boxstyle="round,pad=0.3",
-            facecolor=palette.annotation_bg,
-            edgecolor=palette.grid,
-            alpha=0.8,
-        ),
-    )
 
     if tau_R_fixed is not None:
         tau_R_plot = tau_R_fixed * _tau_r_scale
-        ax.axhline(
-            tau_R_plot,
-            color=palette.grid,
-            lw=1.5,
-            linestyle="--",
-            zorder=10,
+        _x_left = TAU_E_2D.min()
+        _y_bottom = TAU_R_2D.min()
+        _arrow_kw = dict(
+            xycoords="data", textcoords="data",
+            annotation_clip=False, zorder=8,
         )
 
         _fmt_tau = _fmt_ps
         _fmt_tau_r = _fmt_ps
 
         r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
-        ann_lines = [f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}"]
+        # Each entry: (text, colour)
+        ann_lines: list[tuple[str, str]] = [
+            (f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}", "royalblue"),
+        ]
 
         for lr, color, obs_label in [
-            (lr_r1, palette.primary, "$R_1$"),
-            (lr_lw, palette.highlight, "width"),
+            (lr_r1, palette.primary, r"$R_1$"),
+            (lr_lw, palette.highlight, r"$\Delta\nu$"),
         ]:
             # lr_r1 / lr_lw come from _log_ratio_grid which returns lr.T,
             # shape (n_tau_R, n_tau_e).  Row r_idx fixes tau_R, columns vary
@@ -744,26 +740,47 @@ def plot_tau_space_combined(
 
             for tau_e_cross in tau_e_intersections:
                 tau_e_cross_plot = tau_e_cross * _tau_e_scale
-                ax.axvline(
-                    tau_e_cross_plot,
-                    color=color,
-                    lw=0.8,
-                    linestyle=":",
-                    zorder=5,
+                # Horizontal arrow: y-axis → cross
+                ax.annotate(
+                    "",
+                    xy=(tau_e_cross_plot, tau_R_plot),
+                    xytext=(_x_left, tau_R_plot),
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color="royalblue",
+                        lw=0.7,
+                        mutation_scale=5,
+                    ),
+                    **_arrow_kw,
+                )
+                # Vertical arrow: cross → x-axis
+                ax.annotate(
+                    "",
+                    xy=(tau_e_cross_plot, _y_bottom),
+                    xytext=(tau_e_cross_plot, tau_R_plot),
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color=color,
+                        lw=0.7,
+                        mutation_scale=5,
+                    ),
+                    **_arrow_kw,
                 )
                 ax.plot(
                     tau_e_cross_plot,
                     tau_R_plot,
-                    marker="x",
+                    marker="o",
                     color=color,
-                    markersize=8,
-                    markeredgewidth=1.5,
-                    zorder=6,
+                    markersize=3,
+                    markeredgewidth=0,
+                    zorder=9,
                 )
 
             if tau_e_intersections:
                 te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
-                ann_lines.append(f"$\\tau_e$({obs_label}) = {te_strs}")
+                ann_lines.append(
+                    (f"$\\tau_e$({obs_label}) = {te_strs}", color)
+                )
             else:
                 logger.warning(
                     "tau_R_fixed=%.3g s: no intersection with %s central "
@@ -771,20 +788,27 @@ def plot_tau_space_combined(
                     tau_R_fixed, obs_label,
                 )
 
-        if len(ann_lines) > 1:
-            ax.text(
-                0.03, 0.03, "\n".join(ann_lines),
-                transform=ax.transAxes,
-                ha="left", va="bottom",
-                fontsize=spec.typography.annotation,
-                color=palette.primary,
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=palette.annotation_bg,
-                    edgecolor=palette.grid,
-                    alpha=0.8,
-                ),
-            )
+        if ann_lines:
+            # Stack bottom-up so visual reading order (top→bottom) matches
+            # the list order: T, B, τ_R, R1, Δν.
+            _fs = spec.typography.tick_label
+            _lh = _fs * 1.6 / (fig.get_figheight() * 72)
+            n = len(ann_lines)
+            # Single white background rectangle behind all lines
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (0.03, 0.03), 0.55, n * _lh,
+                boxstyle="square,pad=0.0",
+                facecolor="white", edgecolor="none",
+                alpha=0.7, transform=ax.transAxes, zorder=4,
+            ))
+            for i, (txt, col) in enumerate(reversed(ann_lines)):
+                ax.text(
+                    0.03, 0.03 + i * _lh, txt,
+                    transform=ax.transAxes,
+                    ha="left", va="bottom",
+                    fontsize=_fs, color=col,
+                    zorder=5,
+                )
 
     render_figure(fig, save=save, show=show, save_name=save_name)
 

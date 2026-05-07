@@ -67,7 +67,31 @@ from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spect import plot_pred_spectrum, plot_raw_deconv_pred
 from simpnmr.viz.style.theme import apply_profile
 
+try:
+    from simpnmr.gui.molecule_view import (
+        assign_label_colors, _CPK_COLORS, parse_xyz,
+    )
+    _HAS_VIEWER = True
+except ImportError:
+    _HAS_VIEWER = False
+
 logger = logging.getLogger(__name__)
+
+
+def _colors_from_xyz(xyz_path: str) -> "dict[str, str] | None":
+    """Return the exact chem-label → color mapping the GUI viewer computes."""
+    if not _HAS_VIEWER:
+        return None
+    try:
+        mol = parse_xyz(xyz_path)
+    except (FileNotFoundError, ValueError):
+        return None
+    groups = mol.grouped_by_label()
+    if not groups:
+        return None
+    unlabelled_elems = {a.element for a in mol.atoms if not a.label}
+    reserved = {_CPK_COLORS[e] for e in unlabelled_elems if e in _CPK_COLORS}
+    return assign_label_colors(list(groups.keys()), reserved_colors=reserved)
 
 
 def run_predict(config, options: PredictRunOptions | None = None) -> int:
@@ -86,6 +110,14 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
+
+    # Remove stale per-run CSVs so the GUI never shows results from a
+    # previous run alongside the current one.
+    for _stale in [
+        *Path(config.project_name).glob("shift_vs_intensity_*.csv"),
+        *Path(config.project_name).glob("peak_data_*.csv"),
+    ]:
+        _stale.unlink(missing_ok=True)
 
     if options is None:
         raise ValueError("PredictRunOptions is required")
@@ -326,6 +358,11 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         coords=base_molecule.coords,
         comment=f"Structure from {config.hyperfine_file}",
     )
+
+    # Compute label → color once by re-running the viewer's exact parse_xyz
+    # pipeline on the chemcraft XYZ we just wrote.
+    _xyz_path = os.path.join(config.project_name, "chemcraft_structure.xyz")
+    _mol_label_colors_all: dict[str, str] | None = _colors_from_xyz(_xyz_path)
 
     # Load diamagnetic shift file
     if len(config.diamagnetic_file):
@@ -576,6 +613,15 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                         verbose=True,
                     )
 
+            # Slice the all-label color map to this isotope's chem_labels so
+            # palette positions stay consistent with the GUI viewer.
+            _iso_chem_labels_pr = {n.chem_label for n in iso_nuclei}
+            _iso_label_colors: dict[str, str] | None = (
+                {lbl: c for lbl, c in _mol_label_colors_all.items()
+                 if lbl in _iso_chem_labels_pr}
+                if _mol_label_colors_all else None
+            )
+
             # Plot theoretical shifts
             with spec.context():
                 # Spread
@@ -586,12 +632,17 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     save=True,
                     show=options.runtime.show_plots,
                     terms=_terms,
+                    label_colors=_iso_label_colors,
                     save_name=os.path.join(
                         config.project_name,
-                        f"pred_shift_spread_{molecule.susc.temperature:.2f}_K{_suffix}",
+                        f"pred_shift_spread_"
+                        f"{molecule.susc.temperature:.2f}_K{_suffix}",
                     ),
                     verbose=True,
-                    window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
+                    window_title=(
+                        f"Spread of predicted shifts at "
+                        f"{susc.temperature:.2f} K"
+                    ),
                     order="descending",
                 )
 
@@ -602,13 +653,16 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     spec=spec,
                     save=True,
                     show=options.runtime.show_plots,
+                    label_colors=_iso_label_colors,
                     save_name=os.path.join(
                         config.project_name,
-                        f"pred_mean_components_{molecule.susc.temperature:.2f}_K{_suffix}",
+                        f"pred_mean_components_"
+                        f"{molecule.susc.temperature:.2f}_K{_suffix}",
                     ),
                     verbose=True,
                     window_title=(
-                        f"Predicted mean shifts and components at {susc.temperature:.2f} K"
+                        f"Predicted mean shifts and components at "
+                        f"{susc.temperature:.2f} K"
                     ),
                     order="descending",
                 )
@@ -804,7 +858,7 @@ def _apply_relaxation_linewidths(
 
     _DEFAULT_TAU_E = 1e-12  # 1 ps
     _DEFAULT_SOLVENT = "water"
-    _DEFAULT_MODEL = "sbm"
+    _DEFAULT_MODEL = "sbm curie"
     _DEFAULT_TEMPERATURE = 298.0   # K
     _DEFAULT_FIELD = 11.75         # T  (500 MHz ¹H)
 
@@ -863,11 +917,15 @@ def _apply_relaxation_linewidths(
     )
     nuclei_labels = [lbl for lbl in nuclei_labels if lbl]
 
-    # Use all nuclei in the molecule that match the requested element(s)
+    # Use all nuclei in the molecule that match the requested element(s).
+    # nuclei_labels may contain element symbols ("H") or specific atom
+    # labels ("H1", "H_tBu1a_1") when include_groups expansion is used.
+    nuclei_labels_set = set(nuclei_labels)
     nuclei_coords = {
         nuc.label: nuc.coord
         for nuc in base_molecule.nuclei
-        if remove_numbers(nuc.label) in nuclei_labels
+        if (remove_numbers(nuc.label) in nuclei_labels_set
+            or nuc.label in nuclei_labels_set)
     }
     B0 = magnetic_field_tesla
 

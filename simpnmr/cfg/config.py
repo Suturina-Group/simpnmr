@@ -77,10 +77,11 @@ class Config(ABC):
 
         # Check for unsupported keywords
         unsupported = [key for key in parsed if key not in cls.KEYWORDS]
-        # and subkeywords
+        # and subkeywords (only for top-level keys that are known)
         unsupported += [
             subkey
             for key in parsed
+            if key in cls.KEYWORDS
             for subkey in parsed[key]
             if subkey not in cls.KEYWORDS[key]
         ]
@@ -95,13 +96,17 @@ class Config(ABC):
                 raise KeyError(f"Error: missing keyword {keyword}")
             for subkeyword in cls.REQ_KEYWORDS[keyword]:
                 if subkeyword not in parsed[keyword]:
-                    # Allow nuclei: include to be omitted if
-                    # nuclei: include_groups is provided
-                    if keyword == "nuclei" and subkeyword == "include":
+                    # Allow nuclei: isotope (or legacy include) to be omitted
+                    # if the other form or include_groups is provided.
+                    if keyword == "nuclei" and subkeyword in ("isotope", "include"):
                         nuclei_block = (
                             parsed.get("nuclei", {}) if isinstance(parsed, dict) else {}
                         )
                         if isinstance(nuclei_block, dict):
+                            # Accept either key as satisfying the requirement.
+                            alt = "include" if subkeyword == "isotope" else "isotope"
+                            if nuclei_block.get(alt) not in (None, [], ""):
+                                continue
                             include_groups_val = nuclei_block.get("include_groups", [])
                             if include_groups_val not in (None, [], ""):
                                 continue
@@ -140,7 +145,7 @@ class FitSuscConfig(Config):
         "assignment": [
             "method",
         ],
-        "nuclei": ["include"],
+        "nuclei": ["isotope"],
         "susc_fit": ["type", "variables"],
         "project": ["name"],
         "chem_labels": ["file"],
@@ -166,8 +171,8 @@ class FitSuscConfig(Config):
             "width_weight",
             "r1_weight",
         ],
-        "nuclei": ["include", "include_groups"],
-        "susc_fit": ["type", "variables", "input_units", "average_shifts"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
+        "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
@@ -181,6 +186,10 @@ class FitSuscConfig(Config):
             "tip_type",
             "ab_initio_file",
             "ab_initio_format",
+            "zeta_eff",
+            "zeta_eff_tol",
+            "evans_g_iso",
+            "evans_g_iso_err",
         ],
         "fit_relaxation": [
             "tau_e_range",
@@ -233,10 +242,15 @@ class FitSuscConfig(Config):
         self._assignment_r1_weight = 0.0
         self._nuclei_include = ""
         self._nuclei_include_groups = []
+        self._nuclei_isotope_order: list[str] = []
+        self._nuclei_exclude_groups = []
+        self._nuclei_exclude: list[str] = []
         self._susc_fit_type = ""
         self._susc_fit_variables = ""
         self._susc_fit_input_units = "A3"
         self._susc_fit_average_shifts = []
+        self._susc_fit_covariance_params: list[str] = []
+        self._susc_fit_figures: dict[str, bool] = {}
         self._chem_labels_file = ""
         self._spin_S = None
         self._spin_multiplicity = None
@@ -250,6 +264,10 @@ class FitSuscConfig(Config):
         self._susc_vt_variables = None
         self._susc_vt_ab_initio_file = None
         self._susc_vt_ab_initio_format = None
+        self._susc_vt_zeta_eff: float | None = None
+        self._susc_vt_zeta_eff_tol: float = 0.15
+        self._susc_vt_evans_g_iso: float | None = None
+        self._susc_vt_evans_g_iso_err: float = 0.0
         self._fit_relaxation_tau_e_range = None
         self._fit_relaxation_tau_r_range = None
         self._fit_relaxation_tau_e = None
@@ -355,83 +373,221 @@ class FitSuscConfig(Config):
 
     @nuclei_include_groups.setter
     def nuclei_include_groups(self, values: list | str):
-        # Accept a single string or a list of strings representing chem_labels
+        # Accept a single string, a flat list of strings, or a list of lists
+        # (positional syntax pairing each sub-list with an isotope index).
         if isinstance(values, str):
             self._nuclei_include_groups = [values]
         else:
             self._nuclei_include_groups = list(values)
         return
 
-    def _resolve_nuclei_include_groups(self):
-        """Expands `nuclei:include_groups` into atom labels.
+    @property
+    def nuclei_exclude_groups(self) -> list:
+        return self._nuclei_exclude_groups
 
-        Uses `chem_labels_file` to map `chem_label` values to `atom_label` values.
-        The expanded atoms are merged into `self._nuclei_include` with duplicates
-        removed while preserving order.
+    @nuclei_exclude_groups.setter
+    def nuclei_exclude_groups(self, values: list | str):
+        # Same syntax as include_groups: flat list or list-of-lists.
+        if isinstance(values, str):
+            self._nuclei_exclude_groups = [values]
+        else:
+            self._nuclei_exclude_groups = list(values)
+        return
+
+    @property
+    def nuclei_exclude(self) -> list[str]:
+        return self._nuclei_exclude
+
+    def _resolve_nuclei_include_groups(self):
+        """Expands ``nuclei:include_groups`` into atom labels.
+
+        Uses ``chem_labels_file`` to map ``chem_label`` values to
+        ``atom_label`` values.
+
+        **Flat syntax** (single list of strings):
+            Each entry may be a bare chem_label (``"ring"``) or carry an
+            isotope prefix (``"1H:ring"``).  Bare entries expand all matching
+            atoms regardless of element; prefixed entries restrict to the
+            stated element (``"1H"`` → ``"H"``).  The result is merged with
+            the existing ``_nuclei_include`` content.
+
+        **Positional syntax** (list of lists):
+            Each sub-list is paired with the isotope at the same index in
+            ``nuclei:isotope``.  Only atom labels whose element matches the
+            paired isotope are selected.  The result *replaces* the broad
+            element symbols that ``nuclei_isotope`` stored in
+            ``_nuclei_include``, so only the explicitly listed groups are
+            retained::
+
+                nuclei:
+                  isotope: [1H, 13C]
+                  include_groups:
+                    - [Me1, Me2]   # selects H atoms for 1H
+                    - [Me1, Me3]   # selects C atoms for 13C
 
         This method is safe to call multiple times.
 
         Raises:
-            FileNotFoundError: If `chem_labels_file` does not exist.
+            FileNotFoundError: If ``chem_labels_file`` does not exist.
+            ValueError: If no atoms are matched.
         """
+        import re
+
         raw_groups = getattr(self, "_nuclei_include_groups", [])
         if raw_groups is None:
             raw_groups = []
         if isinstance(raw_groups, str):
             raw_groups = [raw_groups]
-        # Normalise groups to stripped strings to avoid whitespace mismatches.
-        groups = [str(g).strip() for g in raw_groups if str(g).strip()]
-        if not groups:
+
+        raw_excl = getattr(self, "_nuclei_exclude_groups", [])
+        if raw_excl is None:
+            raw_excl = []
+        if isinstance(raw_excl, str):
+            raw_excl = [raw_excl]
+
+        # Nothing to do if both lists are empty.
+        if not raw_groups and not raw_excl:
             return
-        # If chem_labels_file is not set yet, skip silently
+
+        # If chem_labels_file is not set yet, skip silently.
         chem_file = getattr(self, "_chem_labels_file", "")
         if not chem_file:
             return
-        expanded_atoms: list[str] = []
-        try:
-            with open(chem_file, newline="") as csvfile:
-                reader = csv.DictReader(csvfile, skipinitialspace=True)
 
-                # Strip header whitespace by matching keys after .strip().
-                def _get(row: dict, key: str):
-                    for k, v in row.items():
-                        if k is not None and k.strip() == key:
-                            return v
-                    return None
+        # ── helpers ───────────────────────────────────────────────────
+        def _load_csv(path: str) -> list[tuple[str, str]]:
+            pairs: list[tuple[str, str]] = []
+            try:
+                with open(path, newline="") as f:
+                    reader = csv.DictReader(f, skipinitialspace=True)
 
-                for row in reader:
-                    clabel = (_get(row, "chem_label") or "").strip()
-                    alabel = (_get(row, "atom_label") or "").strip()
-                    if clabel in groups and alabel:
-                        expanded_atoms.append(alabel)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"chem_labels_file not found: {chem_file}")
-        except Exception as e:
-            raise e
-        if not expanded_atoms:
-            raise ValueError(
-                "No nuclei selected: nuclei:include_groups did not match any "
-                "chem_label entries in chem_labels_file. "
-                f"Requested groups={groups}."
-            )
-        # Merge with existing nuclei_include
-        current = self._nuclei_include
-        if isinstance(current, str) and current:
-            merged = [current] + expanded_atoms
-        elif isinstance(current, list):
-            merged = current + expanded_atoms
-        elif not current:
-            merged = expanded_atoms
-        else:
-            merged = expanded_atoms
-        # Deduplicate preserving order
-        seen = set()
-        deduped = []
-        for x in merged:
-            if x not in seen:
-                seen.add(x)
-                deduped.append(x)
-        self._nuclei_include = deduped
+                    def _get(row: dict, key: str):
+                        for k, v in row.items():
+                            if k is not None and k.strip() == key:
+                                return v
+                        return None
+
+                    for row in reader:
+                        cl = (_get(row, "chem_label") or "").strip()
+                        al = (_get(row, "atom_label") or "").strip()
+                        if cl and al:
+                            pairs.append((cl, al))
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f"chem_labels_file not found: {path}"
+                )
+            return pairs
+
+        csv_pairs = _load_csv(chem_file)
+
+        def _atom_element(alabel: str) -> str:
+            m = re.match(r"[A-Za-z]+", alabel)
+            return m.group(0) if m else ""
+
+        def _expand(
+            chem_labels: list[str],
+            element_filter: str | None,
+        ) -> list[str]:
+            label_set = {str(c).strip() for c in chem_labels}
+            result: list[str] = []
+            for cl, al in csv_pairs:
+                if cl not in label_set:
+                    continue
+                if element_filter and _atom_element(al) != element_filter:
+                    continue
+                result.append(al)
+            return result
+
+        def _expand_flat_list(
+            entries: list,
+            isotope_order: list[str],
+        ) -> list[str]:
+            """Expand a flat or positional group list to atom labels."""
+            first = entries[0] if entries else None
+            if isinstance(first, (list, tuple)):
+                # Positional: pair sub-list[i] with isotope_order[i].
+                atoms: list[str] = []
+                for i, sub in enumerate(entries):
+                    if not isinstance(sub, (list, tuple)):
+                        sub = [sub]
+                    el = isotope_order[i] if i < len(isotope_order) else None
+                    atoms.extend(_expand(list(sub), el))
+                return atoms
+            # Flat: "1H:ring" prefix or bare "ring".
+            atoms = []
+            for entry in entries:
+                entry = str(entry).strip()
+                if ":" in entry:
+                    iso, cl = entry.split(":", 1)
+                    el = re.sub(r"^\d+", "", iso.strip()).strip() or None
+                    atoms.extend(_expand([cl.strip()], el))
+                else:
+                    atoms.extend(_expand([entry], None))
+            return atoms
+
+        isotope_order = getattr(self, "_nuclei_isotope_order", [])
+
+        # ── include_groups ────────────────────────────────────────────
+        if raw_groups:
+            first = raw_groups[0]
+            positional = isinstance(first, (list, tuple))
+
+            if positional:
+                expanded = _expand_flat_list(raw_groups, isotope_order)
+                if not expanded:
+                    raise ValueError(
+                        "No nuclei selected: positional "
+                        "nuclei:include_groups did not match any "
+                        "chem_label entries in chem_labels_file."
+                    )
+                seen: set[str] = set()
+                self._nuclei_include = [
+                    x for x in expanded
+                    if not (x in seen or seen.add(x))
+                ]
+            else:
+                # Flat syntax.
+                # Unprefixed entries (e.g. "tBu1a") inherit the element
+                # filter from isotope_order so that "isotope: 1H" +
+                # "include_groups: [tBu1a]" selects only H atoms from
+                # tBu1a rather than all atoms of any element.
+                # Explicitly prefixed entries ("1H:tBu1a") override.
+                expanded_flat: list[str] = []
+                for entry in raw_groups:
+                    entry = str(entry).strip()
+                    if ":" in entry:
+                        iso, cl = entry.split(":", 1)
+                        el = (
+                            re.sub(r"^\d+", "", iso.strip()).strip()
+                            or None
+                        )
+                        expanded_flat.extend(_expand([cl.strip()], el))
+                    elif isotope_order:
+                        # Apply each isotope element as a filter.
+                        for el in isotope_order:
+                            expanded_flat.extend(_expand([entry], el))
+                    else:
+                        expanded_flat.extend(_expand([entry], None))
+
+                if not expanded_flat:
+                    raise ValueError(
+                        "No nuclei selected: nuclei:include_groups did "
+                        "not match any chem_label entries in "
+                        f"chem_labels_file. Requested groups={raw_groups}."
+                    )
+                # Replace _nuclei_include: include_groups is the
+                # authoritative selector, not a supplement to isotope:.
+                seen2: set[str] = set()
+                self._nuclei_include = [
+                    x for x in expanded_flat
+                    if not (x in seen2 or seen2.add(x))
+                ]
+
+        # ── exclude_groups ────────────────────────────────────────────
+        if raw_excl:
+            excluded = _expand_flat_list(raw_excl, isotope_order)
+            excl_set: set[str] = set(excluded)
+            self._nuclei_exclude = list(excl_set)
 
     @property
     def hyperfine_rotate(self) -> str:
@@ -773,6 +929,49 @@ class FitSuscConfig(Config):
         return
 
     @property
+    def susc_fit_covariance_params(self) -> list[str]:
+        """Two parameter names for the covariance contour plot."""
+        return self._susc_fit_covariance_params
+
+    @susc_fit_covariance_params.setter
+    def susc_fit_covariance_params(self, value):
+        if value is None or value == "":
+            self._susc_fit_covariance_params = []
+            return
+        if isinstance(value, str):
+            value = [v.strip() for v in value.split(",") if v.strip()]
+        self._susc_fit_covariance_params = list(value)
+
+    # Valid figure-group keys
+    _FIGURE_KEYS = frozenset([
+        "fitted_shifts",
+        "shift_components",
+        "r6_fit",
+        "tau_space",
+        "bubble_plots",
+        "spectra",
+        "chi_t",
+    ])
+
+    @property
+    def susc_fit_figures(self) -> dict[str, bool]:
+        """Dict of figure-group key → enabled flag (missing key = enabled)."""
+        return self._susc_fit_figures
+
+    @susc_fit_figures.setter
+    def susc_fit_figures(self, value):
+        if value is None:
+            self._susc_fit_figures = {}
+            return
+        if not isinstance(value, dict):
+            raise ValueError("susc_fit:figures must be a mapping")
+        self._susc_fit_figures = {k: bool(v) for k, v in value.items()}
+
+    def susc_fit_figure(self, key: str) -> bool:
+        """Return whether a figure group is enabled (default True)."""
+        return self._susc_fit_figures.get(key, True)
+
+    @property
     def nuclei_include(self) -> list | str:
         return self._nuclei_include
 
@@ -780,6 +979,36 @@ class FitSuscConfig(Config):
     def nuclei_include(self, values: list | str):
         self._nuclei_include = values
         return
+
+    @property
+    def nuclei_isotope(self) -> list | str:
+        return self._nuclei_include
+
+    @nuclei_isotope.setter
+    def nuclei_isotope(self, values: list | str):
+        """Accept isotope strings and convert to element symbols.
+
+        ``"1H"`` → ``"H"``, ``"13C"`` → ``"C"``, ``"H"`` → ``"H"``.
+        Stored in ``_nuclei_include`` to reuse existing element-filtering.
+        The ordered list is also stored in ``_nuclei_isotope_order`` so that
+        positional ``include_groups`` lists can be paired with isotopes.
+        """
+        import re as _re
+        if isinstance(values, str):
+            values = [values]
+        elements = [_re.sub(r"^\d+", "", str(v).strip()) for v in values]
+        self._nuclei_isotope_order = elements
+        current = self._nuclei_include
+        if isinstance(current, list) and current:
+            merged = current + elements
+        elif isinstance(current, str) and current:
+            merged = [current] + elements
+        else:
+            merged = elements
+        seen: set[str] = set()
+        self._nuclei_include = [
+            x for x in merged if not (x in seen or seen.add(x))
+        ]
 
     @property
     def experiment_files(self) -> list[str]:
@@ -1176,6 +1405,73 @@ class FitSuscConfig(Config):
         return None
 
     @property
+    def susc_vt_zeta_eff(self) -> float | None:
+        """Effective spin-orbit coupling constant ζ̄_eff in cm⁻¹, or None."""
+        return self._susc_vt_zeta_eff
+
+    @susc_vt_zeta_eff.setter
+    def susc_vt_zeta_eff(self, value: float | None):
+        if value is None:
+            self._susc_vt_zeta_eff = None
+            return
+        try:
+            self._susc_vt_zeta_eff = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("susc_vt:zeta_eff must be a number or None") from exc
+
+    @property
+    def susc_vt_zeta_eff_tol(self) -> float:
+        """Fractional uncertainty on ζ̄_eff for the solution-line band (default 0.15)."""
+        return self._susc_vt_zeta_eff_tol
+
+    @susc_vt_zeta_eff_tol.setter
+    def susc_vt_zeta_eff_tol(self, value: float | None):
+        if value is None:
+            self._susc_vt_zeta_eff_tol = 0.15
+            return
+        try:
+            tol = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("susc_vt:zeta_eff_tol must be a number or None") from exc
+        if not (0.0 < tol < 1.0):
+            raise ValueError("susc_vt:zeta_eff_tol must be between 0 and 1")
+        self._susc_vt_zeta_eff_tol = tol
+
+    @property
+    def susc_vt_evans_g_iso(self) -> float | None:
+        """Isotropic g-value from an Evans-method measurement, or None."""
+        return self._susc_vt_evans_g_iso
+
+    @susc_vt_evans_g_iso.setter
+    def susc_vt_evans_g_iso(self, value: float | None):
+        if value is None:
+            self._susc_vt_evans_g_iso = None
+            return
+        try:
+            self._susc_vt_evans_g_iso = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_vt:evans_g_iso must be a number or None"
+            ) from exc
+
+    @property
+    def susc_vt_evans_g_iso_err(self) -> float:
+        """1-σ uncertainty on the Evans g_iso (default 0)."""
+        return self._susc_vt_evans_g_iso_err
+
+    @susc_vt_evans_g_iso_err.setter
+    def susc_vt_evans_g_iso_err(self, value: float | None):
+        if value is None:
+            self._susc_vt_evans_g_iso_err = 0.0
+            return
+        try:
+            self._susc_vt_evans_g_iso_err = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_vt:evans_g_iso_err must be a number or None"
+            ) from exc
+
+    @property
     def fit_relaxation_tau_e_range(self) -> list[float] | None:
         """τe plot range [min, max] in seconds, or None for defaults."""
         return self._fit_relaxation_tau_e_range
@@ -1353,12 +1649,15 @@ class FitSuscConfig(Config):
 
         config = super().from_file(file_name)
 
-        # If an optional VT susceptibility file is provided, require a ab_initio_format.
+        # If an ab initio file is provided without a format, warn but continue —
+        # comparison plots and ζ extraction require both; the pipeline skips
+        # the ab initio block when format is absent.
         if getattr(config, "susc_vt_ab_initio_file", ""):
             if not getattr(config, "susc_vt_ab_initio_format", ""):
-                raise ValueError(
-                    " Invalid VT configuration: 'susc_vt:ab_initio_file' was provided "
-                    "but 'susc_vt:ab_initio_format' is missing."
+                logger.warning(
+                    "susc_vt:ab_initio_file is set but susc_vt:ab_initio_format "
+                    "is missing — ab initio comparison and ζ extraction will be "
+                    "skipped. Add e.g. 'ab_initio_format: orca_nev'."
                 )
 
         if config.susc_vt_method == "ht_limit" and config.susc_vt_variables is not None:
@@ -1414,14 +1713,8 @@ class FitSuscConfig(Config):
                     },
                 }
 
-        if (
-            config.susc_vt_tip_type is None
-            and config.susc_vt_ab_initio_file is not None
-        ):
-            raise ValueError(
-                " Invalid VT configuration: TIP type is not provided, "
-                "Therefore 'susc_vt:ab_initio_file' variable can not be used"
-            )
+        # ab_initio_file is now useful without TIP (comparison plots, ζ extraction)
+        # so this is no longer an error.
 
         # exp_reference requires spectrum_files
         if getattr(
@@ -1464,7 +1757,7 @@ class PredictConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "susceptibility": ["temperatures"],
         "project": ["name"],
@@ -1482,7 +1775,7 @@ class PredictConfig(FitSuscConfig):
             "paramagnetic_centre",
         ],
         "experiment": ["files", "spectrum_files", "exp_reference"],
-        "nuclei": ["include", "include_groups"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
@@ -1831,7 +2124,7 @@ class FitCorrTimeConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "experiment": ["files"],
         "fit_corr_time": [
@@ -1855,7 +2148,7 @@ class FitCorrTimeConfig(FitSuscConfig):
             "total_momentum_J",
             "paramagnetic_centre",
         ],
-        "nuclei": ["include", "include_groups"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "experiment": ["files"],
         "fit_corr_time": [
             "tau_R",
@@ -2038,7 +2331,7 @@ class PlotHFCConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "project": ["name"],
     }
@@ -2050,7 +2343,7 @@ class PlotHFCConfig(FitSuscConfig):
             "average",
             "orbital_contribution",
         ],
-        "nuclei": ["include", "include_groups"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "project": ["name"],
         "chem_labels": ["file"],
     }

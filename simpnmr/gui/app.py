@@ -198,8 +198,18 @@ class ConfigForm(QScrollArea):
         # ── Nuclei ────────────────────────────────────────────────────
         sec = _section("Nuclei")
         self._nuclei_include = QLineEdit()
-        self._nuclei_include.setPlaceholderText("e.g. H  or  H, C")
-        sec.layout().addRow("Include:", self._nuclei_include)
+        self._nuclei_include.setPlaceholderText("e.g. 1H  or  1H, 13C")
+        sec.layout().addRow("Isotope:", self._nuclei_include)
+        self._nuclei_include_groups = QLineEdit()
+        self._nuclei_include_groups.setPlaceholderText(
+            "e.g. ring  or  1H:ring, 13C:ring"
+        )
+        sec.layout().addRow("Include groups:", self._nuclei_include_groups)
+        self._nuclei_exclude_groups = QLineEdit()
+        self._nuclei_exclude_groups.setPlaceholderText(
+            "e.g. ring  or  1H:ring, 13C:ring"
+        )
+        sec.layout().addRow("Exclude groups:", self._nuclei_exclude_groups)
         lay.addWidget(sec)
 
         # ── Experiment ────────────────────────────────────────────────
@@ -237,8 +247,13 @@ class ConfigForm(QScrollArea):
         sec.layout().addRow("Ref method:", self._dia_ref_method)
         sec.layout().addRow("Ref file:", self._dia_ref_file)
         sec.layout().addRow("Ref values:", self._dia_ref_values)
+        self._dia_sec_form = sec.layout()
+        self._dia_method.currentTextChanged.connect(
+            self._on_dia_method_changed
+        )
         lay.addWidget(sec)
         self._on_dia_ref_method_changed("(none)")
+        self._on_dia_method_changed(self._dia_method.currentText())
 
         # ── PREDICT-ONLY: Susceptibility source ───────────────────────
         self._sec_susc_src = _section("Susceptibility source  [predict only]")
@@ -372,6 +387,30 @@ class ConfigForm(QScrollArea):
         self._susc_dyz = _var_row(fix_val="0.0")
         self._average_shifts = QCheckBox("Average equivalent shift groups")
         self._pcs_isosurface = QCheckBox("Generate PCS isosurface (cube file)")
+        self._covariance_params = QLineEdit()
+        self._covariance_params.setPlaceholderText(
+            "e.g. iso, ax  (blank = no covariance plot)"
+        )
+        # Figure toggles (all on by default)
+        self._fig_fitted_shifts = QCheckBox("Fitted shifts")
+        self._fig_fitted_shifts.setChecked(True)
+        self._fig_shift_components = QCheckBox(
+            "Shift components (spread / mean)"
+        )
+        self._fig_shift_components.setChecked(True)
+        self._fig_r6_fit = QCheckBox("r\u207b\u2076 distance fit")
+        self._fig_r6_fit.setChecked(True)
+        self._fig_tau_space = QCheckBox("\u03c4-space heatmaps")
+        self._fig_tau_space.setChecked(True)
+        self._fig_bubble_plots = QCheckBox(
+            "Bubble plots (shift vs width / R\u2081)"
+        )
+        self._fig_bubble_plots.setChecked(True)
+        self._fig_spectra = QCheckBox("Spectra (predicted + experimental)")
+        self._fig_spectra.setChecked(True)
+        self._fig_chi_t = QCheckBox("\u03c7(T) temperature dependence")
+        self._fig_chi_t.setChecked(True)
+
         self._sec_susc_fit.layout().addRow("Fit type:", self._susc_type)
         self._sec_susc_fit.layout().addRow(
             "Input units:", self._susc_input_units)
@@ -389,9 +428,90 @@ class ConfigForm(QScrollArea):
         self._sec_susc_fit.layout().addRow("dyz:", self._susc_dyz)
         self._sec_susc_fit.layout().addRow("", self._average_shifts)
         self._sec_susc_fit.layout().addRow("", self._pcs_isosurface)
+        self._sec_susc_fit.layout().addRow(
+            "Covariance params:", self._covariance_params
+        )
+        self._sec_susc_fit.layout().addRow(
+            QLabel("Figures:"), self._fig_fitted_shifts
+        )
+        self._sec_susc_fit.layout().addRow("", self._fig_shift_components)
+        self._sec_susc_fit.layout().addRow("", self._fig_r6_fit)
+        self._sec_susc_fit.layout().addRow("", self._fig_tau_space)
+        self._sec_susc_fit.layout().addRow("", self._fig_bubble_plots)
+        self._sec_susc_fit.layout().addRow("", self._fig_spectra)
+        self._sec_susc_fit.layout().addRow("", self._fig_chi_t)
         lay.addWidget(self._sec_susc_fit)
         self._susc_type.currentIndexChanged.connect(self._on_susc_fit_type_changed)
         self._on_susc_fit_type_changed()
+
+        # ── FIT-ONLY: VT susceptibility ───────────────────────────────
+        self._sec_vt = _section("VT susceptibility  [fit only]")
+        self._vt_method = QComboBox()
+        self._vt_method.addItems(["(none)", "vt_2nd_order", "ht_limit"])
+        self._vt_tip_type = QComboBox()
+        self._vt_tip_type.addItems(["none", "fix_tip_from_ab_initio", "fit"])
+        self._vt_ab_file = _file_picker(self, "Ab initio file")
+        self._vt_ab_format = QComboBox()
+        for _label, _val in [
+            ("(auto)", ""),
+            ("ORCA NEVPT2", "orca_nev"),
+            ("ORCA CASSCF", "orca_cas"),
+            ("MOLCAS", "molcas"),
+            ("CSV", "csv"),
+            ("TXT", "txt"),
+        ]:
+            self._vt_ab_format.addItem(_label, _val)
+
+        # Variables sub-form (iso / ax / rh × intercept / slope / tip)
+        self._vt_vars_widget = QWidget()
+        self._vt_vars_form = QFormLayout(self._vt_vars_widget)
+        self._vt_vars_form.setContentsMargins(0, 0, 0, 0)
+        self._vt_iso_int = _var_row()
+        self._vt_iso_slo = _var_row()
+        self._vt_iso_tip = _var_row(fix_val="0.0")
+        self._vt_ax_int = _var_row()
+        self._vt_ax_slo = _var_row()
+        self._vt_ax_tip = _var_row(fix_val="0.0")
+        self._vt_rh_int = _var_row()
+        self._vt_rh_slo = _var_row()
+        self._vt_rh_tip = _var_row(fix_val="0.0")
+        self._vt_vars_form.addRow("iso intercept:", self._vt_iso_int)
+        self._vt_vars_form.addRow("iso slope:", self._vt_iso_slo)
+        self._vt_vars_form.addRow("iso TIP:", self._vt_iso_tip)
+        self._vt_vars_form.addRow("ax intercept:", self._vt_ax_int)
+        self._vt_vars_form.addRow("ax slope:", self._vt_ax_slo)
+        self._vt_vars_form.addRow("ax TIP:", self._vt_ax_tip)
+        self._vt_vars_form.addRow("rh intercept:", self._vt_rh_int)
+        self._vt_vars_form.addRow("rh slope:", self._vt_rh_slo)
+        self._vt_vars_form.addRow("rh TIP:", self._vt_rh_tip)
+
+        self._vt_zeta_eff = QLineEdit()
+        self._vt_zeta_eff.setPlaceholderText("cm⁻¹  e.g. 530  (blank = from ORCA)")
+        self._vt_evans_g_iso = QLineEdit()
+        self._vt_evans_g_iso.setPlaceholderText("e.g. 2.07  (blank = omit)")
+        self._vt_evans_g_iso_err = QLineEdit()
+        self._vt_evans_g_iso_err.setPlaceholderText("e.g. 0.02  (blank = 0)")
+
+        self._sec_vt.layout().addRow("Method:", self._vt_method)
+        self._sec_vt.layout().addRow("TIP type:", self._vt_tip_type)
+        self._sec_vt.layout().addRow("Ab initio file:", self._vt_ab_file)
+        self._sec_vt.layout().addRow("Ab initio format:", self._vt_ab_format)
+        self._sec_vt.layout().addRow("ζ_eff (cm⁻¹):", self._vt_zeta_eff)
+        self._sec_vt.layout().addRow(
+            "Evans g_iso:", self._vt_evans_g_iso
+        )
+        self._sec_vt.layout().addRow(
+            "Evans g_iso err:", self._vt_evans_g_iso_err
+        )
+        self._sec_vt.layout().addRow(self._vt_vars_widget)
+
+        self._vt_method.currentTextChanged.connect(self._on_vt_method_changed)
+        self._vt_tip_type.currentTextChanged.connect(
+            self._on_vt_tip_type_changed
+        )
+        lay.addWidget(self._sec_vt)
+        self._on_vt_method_changed(self._vt_method.currentText())
+        self._on_vt_tip_type_changed(self._vt_tip_type.currentText())
 
         # ── Relaxation ────────────────────────────────────────────────
         sec = _section("Relaxation (optional)")
@@ -402,19 +522,19 @@ class ConfigForm(QScrollArea):
         self._relax_b0 = QLineEdit()
         self._relax_b0.setPlaceholderText("T  (leave blank = from experiment)")
         self._relax_T1e = QLineEdit()
-        self._relax_T1e.setPlaceholderText("s  e.g. 0.2e-12")
+        self._relax_T1e.setPlaceholderText("ps  e.g. 0.2")
         self._relax_T2e = QLineEdit()
-        self._relax_T2e.setPlaceholderText("s  e.g. 0.2e-12")
+        self._relax_T2e.setPlaceholderText("ps  e.g. 0.2")
         self._relax_tR = QLineEdit()
-        self._relax_tR.setPlaceholderText("s  e.g. 140e-12")
+        self._relax_tR.setPlaceholderText("ps  e.g. 140")
         self._relax_min_lw = QLineEdit()
         self._relax_min_lw.setPlaceholderText("Hz  (optional floor, default 0)")
         sec.layout().addRow("Model:", self._relax_model)
         sec.layout().addRow("Temperature (K):", self._relax_temp)
         sec.layout().addRow("B₀ (T):", self._relax_b0)
-        sec.layout().addRow("T1e:", self._relax_T1e)
-        sec.layout().addRow("T2e:", self._relax_T2e)
-        sec.layout().addRow("τR:", self._relax_tR)
+        sec.layout().addRow("T1e (ps):", self._relax_T1e)
+        sec.layout().addRow("T2e (ps):", self._relax_T2e)
+        sec.layout().addRow("τR (ps):", self._relax_tR)
         sec.layout().addRow("Min linewidth (Hz):", self._relax_min_lw)
         lay.addWidget(sec)
 
@@ -431,20 +551,20 @@ class ConfigForm(QScrollArea):
         self._tau_r_eta = QLineEdit()
         self._tau_r_eta.setPlaceholderText("Pa·s  (overrides solvent)")
         self._tau_r_fixed = QLineEdit()
-        self._tau_r_fixed.setPlaceholderText("s  (manual overlay)")
+        self._tau_r_fixed.setPlaceholderText("ps  (manual overlay)")
         self._r6_distance_power = QLineEdit()
         self._r6_distance_power.setPlaceholderText("0  (equal weights); 6 = w∝r⁶")
         self._tau_e_range = QLineEdit()
-        self._tau_e_range.setPlaceholderText("e.g. 1e-14 1e-10  (s, auto if blank)")
+        self._tau_e_range.setPlaceholderText("e.g. 0.01 100  (ps, auto if blank)")
         self._tau_r_range = QLineEdit()
-        self._tau_r_range.setPlaceholderText("e.g. 1e-12 1e-5  (s, auto if blank)")
+        self._tau_r_range.setPlaceholderText("e.g. 1 1e7  (ps, auto if blank)")
         self._sec_fit_relax.layout().addRow("τR method:", self._tau_r_method)
         self._sec_fit_relax.layout().addRow("Solvent:", self._tau_r_solvent)
         self._sec_fit_relax.layout().addRow("η (Pa·s):", self._tau_r_eta)
-        self._sec_fit_relax.layout().addRow("τR fixed (s):", self._tau_r_fixed)
+        self._sec_fit_relax.layout().addRow("τR fixed (ps):", self._tau_r_fixed)
         self._sec_fit_relax.layout().addRow("r⁻⁶ distance weight:", self._r6_distance_power)
-        self._sec_fit_relax.layout().addRow("τe range (s):", self._tau_e_range)
-        self._sec_fit_relax.layout().addRow("τR range (s):", self._tau_r_range)
+        self._sec_fit_relax.layout().addRow("τe range (ps):", self._tau_e_range)
+        self._sec_fit_relax.layout().addRow("τR range (ps):", self._tau_r_range)
         lay.addWidget(self._sec_fit_relax)
 
     # ------------------------------------------------------------------
@@ -460,6 +580,7 @@ class ConfigForm(QScrollArea):
         self._sec_susc_src.setEnabled(is_predict)
         self._sec_assign.setEnabled(not is_predict)
         self._sec_susc_fit.setEnabled(not is_predict)
+        self._sec_vt.setEnabled(not is_predict)
         self._sec_fit_relax.setEnabled(not is_predict)
         # Susceptibility file sub-fields depend on method when in predict mode
         if is_predict:
@@ -506,6 +627,40 @@ class ConfigForm(QScrollArea):
         is_values = method == "values"
         self._dia_ref_file.setEnabled(not is_none and not is_values)
         self._dia_ref_values.setEnabled(is_values)
+
+    def _on_dia_method_changed(self, method: str):
+        is_csv = method == "csv"
+        form = self._dia_sec_form
+        for widget in (
+            self._dia_ref_method,
+            self._dia_ref_file,
+            self._dia_ref_values,
+        ):
+            self._set_row_visible(form, widget, not is_csv)
+
+    def _on_vt_method_changed(self, method: str):
+        is_none = method == "(none)"
+        is_vt2 = method == "vt_2nd_order"
+        form = self._sec_vt.layout()
+        self._set_row_visible(form, self._vt_tip_type, not is_none)
+        self._set_row_visible(form, self._vt_zeta_eff, not is_none)
+        self._set_row_visible(form, self._vt_evans_g_iso, not is_none)
+        self._set_row_visible(form, self._vt_evans_g_iso_err, not is_none)
+        self._vt_vars_widget.setVisible(is_vt2)
+        # ab initio rows are owned by tip_type handler; re-run it so they
+        # update correctly when the method changes
+        self._on_vt_tip_type_changed(self._vt_tip_type.currentText())
+
+    def _on_vt_tip_type_changed(self, tip_type: str):
+        method_is_none = self._vt_method.currentText() == "(none)"
+        is_fit = tip_type == "fit"
+        form = self._sec_vt.layout()
+        # Ab initio file/format visible whenever VT method is active —
+        # the file is useful for comparison and ζ extraction even without TIP.
+        self._set_row_visible(form, self._vt_ab_file, not method_is_none)
+        self._set_row_visible(form, self._vt_ab_format, not method_is_none)
+        for widget in (self._vt_iso_tip, self._vt_ax_tip, self._vt_rh_tip):
+            self._set_row_visible(self._vt_vars_form, widget, is_fit)
 
     # ------------------------------------------------------------------
     # Public mode accessors
@@ -562,10 +717,45 @@ class ConfigForm(QScrollArea):
             d["chem_labels"] = {"file": cl_file}
 
         # Nuclei
+        nuclei_block: dict = {}
         nuclei = self._nuclei_include.text().strip()
         if nuclei:
             items = [x.strip() for x in nuclei.split(",") if x.strip()]
-            d["nuclei"] = {"include": items[0] if len(items) == 1 else items}
+            nuclei_block["isotope"] = items[0] if len(items) == 1 else items
+        nuclei_groups = self._nuclei_include_groups.text().strip()
+        if nuclei_groups:
+            if "|" in nuclei_groups:
+                # Positional syntax: "a, b | c, d" → [[a, b], [c, d]]
+                sublists = [
+                    [x.strip() for x in part.split(",") if x.strip()]
+                    for part in nuclei_groups.split("|")
+                ]
+                nuclei_block["include_groups"] = sublists
+            else:
+                items = [
+                    x.strip() for x in nuclei_groups.split(",") if x.strip()
+                ]
+                nuclei_block["include_groups"] = (
+                    items[0] if len(items) == 1 else items
+                )
+        excl_groups = self._nuclei_exclude_groups.text().strip()
+        if excl_groups:
+            if "|" in excl_groups:
+                sublists = [
+                    [x.strip() for x in p.split(",") if x.strip()]
+                    for p in excl_groups.split("|")
+                ]
+                nuclei_block["exclude_groups"] = sublists
+            else:
+                items = [
+                    x.strip()
+                    for x in excl_groups.split(",") if x.strip()
+                ]
+                nuclei_block["exclude_groups"] = (
+                    items[0] if len(items) == 1 else items
+                )
+        if nuclei_block:
+            d["nuclei"] = nuclei_block
 
         # Experiment
         exp_file = self._exp_file._edit.text().strip()
@@ -757,7 +947,75 @@ class ConfigForm(QScrollArea):
             }
             if self._average_shifts.isChecked():
                 susc_fit["average_shifts"] = "all"
+            _cov = [
+                p.strip()
+                for p in self._covariance_params.text().replace(",", " ").split()
+                if p.strip()
+            ]
+            if len(_cov) == 2:
+                susc_fit["covariance_params"] = _cov
+            _fig_widgets = [
+                ("fitted_shifts", self._fig_fitted_shifts),
+                ("shift_components", self._fig_shift_components),
+                ("r6_fit", self._fig_r6_fit),
+                ("tau_space", self._fig_tau_space),
+                ("bubble_plots", self._fig_bubble_plots),
+                ("spectra", self._fig_spectra),
+                ("chi_t", self._fig_chi_t),
+            ]
+            _figs = {k: w.isChecked() for k, w in _fig_widgets}
+            # Only emit the block when at least one figure is disabled
+            if not all(_figs.values()):
+                susc_fit["figures"] = _figs
             d["susc_fit"] = susc_fit
+
+        # Fit-only: VT susceptibility
+        if not is_predict:
+            vt_method = self._vt_method.currentText()
+            if vt_method != "(none)":
+                def _vvar(row):
+                    return [
+                        row._combo.currentText(),
+                        float(row._edit.text() or "0"),
+                    ]
+                tip_type = self._vt_tip_type.currentText()
+                vt: dict = {"method": vt_method}
+                if tip_type != "none":
+                    vt["tip_type"] = tip_type
+                ab_file = self._vt_ab_file._edit.text().strip()
+                if ab_file:
+                    vt["ab_initio_file"] = ab_file
+                ab_fmt = self._vt_ab_format.currentData() or ""
+                if ab_fmt:
+                    vt["ab_initio_format"] = ab_fmt
+                _zeta = self._vt_zeta_eff.text().strip()
+                if _zeta:
+                    vt["zeta_eff"] = float(_zeta)
+                _ev_g = self._vt_evans_g_iso.text().strip()
+                if _ev_g:
+                    vt["evans_g_iso"] = float(_ev_g)
+                    _ev_err = self._vt_evans_g_iso_err.text().strip()
+                    if _ev_err:
+                        vt["evans_g_iso_err"] = float(_ev_err)
+                if vt_method == "vt_2nd_order":
+                    vt_variables: dict = {}
+                    for comp, int_w, slo_w, tip_w in [
+                        ("iso", self._vt_iso_int, self._vt_iso_slo,
+                         self._vt_iso_tip),
+                        ("ax", self._vt_ax_int, self._vt_ax_slo,
+                         self._vt_ax_tip),
+                        ("rh", self._vt_rh_int, self._vt_rh_slo,
+                         self._vt_rh_tip),
+                    ]:
+                        block: dict = {
+                            "intercept": _vvar(int_w),
+                            "slope": _vvar(slo_w),
+                        }
+                        if tip_type == "fit":
+                            block["tip"] = _vvar(tip_w)
+                        vt_variables[comp] = block
+                    vt["variables"] = vt_variables
+                d["susc_vt"] = vt
 
         # Relaxation (shared)
         model = self._relax_model.currentText()
@@ -766,14 +1024,19 @@ class ConfigForm(QScrollArea):
             for key, field in [
                 ("temperature", self._relax_temp),
                 ("magnetic_field_tesla", self._relax_b0),
-                ("T1e", self._relax_T1e),
-                ("T2e", self._relax_T2e),
-                ("tR", self._relax_tR),
                 ("min_linewidth_hz", self._relax_min_lw),
             ]:
                 val = field.text().strip()
                 if val:
                     relax[key] = float(val)
+            for key, field in [
+                ("T1e", self._relax_T1e),
+                ("T2e", self._relax_T2e),
+                ("tR", self._relax_tR),
+            ]:
+                val = field.text().strip()
+                if val:
+                    relax[key] = float(val) * 1e-12
             d["relaxation"] = relax
 
         # Fit-only: Fit relaxation / tau_r heatmap
@@ -789,7 +1052,7 @@ class ConfigForm(QScrollArea):
                     fit_relax["tau_r_eta"] = float(eta)
                 fixed = self._tau_r_fixed.text().strip()
                 if fixed:
-                    fit_relax["tau_r_fixed"] = float(fixed)
+                    fit_relax["tau_r_fixed"] = float(fixed) * 1e-12
                 dp = self._r6_distance_power.text().strip()
                 if dp:
                     fit_relax["distance_power"] = float(dp)
@@ -800,7 +1063,10 @@ class ConfigForm(QScrollArea):
                     parts = widget.text().strip().split()
                     if len(parts) == 2:
                         try:
-                            fit_relax[key] = [float(parts[0]), float(parts[1])]
+                            fit_relax[key] = [
+                                float(parts[0]) * 1e-12,
+                                float(parts[1]) * 1e-12,
+                            ]
                         except ValueError:
                             pass
                 d["fit_relaxation"] = fit_relax
@@ -841,10 +1107,34 @@ class ConfigForm(QScrollArea):
         self._chem_labels._edit.setText(str(cl.get("file", "")))
 
         nuclei = d.get("nuclei", {})
-        inc = nuclei.get("include", [])
+        # Accept both new "isotope" and legacy "include" keys when loading.
+        inc = nuclei.get("isotope", nuclei.get("include", []))
         self._nuclei_include.setText(
             ", ".join(inc) if isinstance(inc, list) else str(inc)
         )
+        inc_grp = nuclei.get("include_groups", [])
+        if inc_grp and isinstance(inc_grp[0], list):
+            # Positional syntax: render as "group0_a, group0_b | group1_a"
+            parts = [
+                ", ".join(str(x) for x in sub) for sub in inc_grp
+            ]
+            inc_grp_text = " | ".join(parts)
+        elif isinstance(inc_grp, list):
+            inc_grp_text = ", ".join(str(x) for x in inc_grp)
+        else:
+            inc_grp_text = str(inc_grp)
+        self._nuclei_include_groups.setText(inc_grp_text)
+        excl_grp = nuclei.get("exclude_groups", [])
+        if excl_grp and isinstance(excl_grp[0], list):
+            parts = [
+                ", ".join(str(x) for x in sub) for sub in excl_grp
+            ]
+            excl_grp_text = " | ".join(parts)
+        elif isinstance(excl_grp, list):
+            excl_grp_text = ", ".join(str(x) for x in excl_grp)
+        else:
+            excl_grp_text = str(excl_grp)
+        self._nuclei_exclude_groups.setText(excl_grp_text)
 
         exp = d.get("experiment", {})
         files = exp.get("files", "")
@@ -974,6 +1264,75 @@ class ConfigForm(QScrollArea):
                 row._edit.setText(str(val[1]))
         self._average_shifts.setChecked(bool(susc_fit.get("average_shifts")))
         self._pcs_isosurface.setChecked(bool(susc_fit.get("pcs_isosurface")))
+        cov = susc_fit.get("covariance_params", [])
+        self._covariance_params.setText(
+            ", ".join(cov) if isinstance(cov, list) else str(cov)
+        )
+        _figs_saved = susc_fit.get("figures", {})
+        for key, widget in [
+            ("fitted_shifts", self._fig_fitted_shifts),
+            ("shift_components", self._fig_shift_components),
+            ("r6_fit", self._fig_r6_fit),
+            ("tau_space", self._fig_tau_space),
+            ("bubble_plots", self._fig_bubble_plots),
+            ("spectra", self._fig_spectra),
+            ("chi_t", self._fig_chi_t),
+        ]:
+            widget.setChecked(bool(_figs_saved.get(key, True)))
+
+        # VT susceptibility (fit)
+        vt = d.get("susc_vt", {})
+        if vt:
+            vt_m = str(vt.get("method", "(none)") or "(none)")
+            idx = self._vt_method.findText(vt_m)
+            if idx >= 0:
+                self._vt_method.setCurrentIndex(idx)
+            tip_t = str(vt.get("tip_type", "none") or "none")
+            idx = self._vt_tip_type.findText(tip_t)
+            if idx >= 0:
+                self._vt_tip_type.setCurrentIndex(idx)
+            ab_f = vt.get("ab_initio_file", "")
+            self._vt_ab_file._edit.setText(str(ab_f) if ab_f else "")
+            ab_fmt = str(vt.get("ab_initio_format", "") or "")
+            idx = self._vt_ab_format.findData(ab_fmt)
+            if idx >= 0:
+                self._vt_ab_format.setCurrentIndex(idx)
+            else:
+                self._vt_ab_format.setCurrentIndex(0)  # default to (auto)
+            _ze = vt.get("zeta_eff")
+            self._vt_zeta_eff.setText(
+                f"{float(_ze):g}" if _ze not in (None, "") else ""
+            )
+            _ev = vt.get("evans_g_iso")
+            self._vt_evans_g_iso.setText(
+                f"{float(_ev):g}" if _ev not in (None, "") else ""
+            )
+            _ev_err = vt.get("evans_g_iso_err")
+            self._vt_evans_g_iso_err.setText(
+                f"{float(_ev_err):g}" if _ev_err not in (None, "") else ""
+            )
+            variables = vt.get("variables", {})
+            for comp, int_w, slo_w, tip_w in [
+                ("iso", self._vt_iso_int, self._vt_iso_slo, self._vt_iso_tip),
+                ("ax", self._vt_ax_int, self._vt_ax_slo, self._vt_ax_tip),
+                ("rh", self._vt_rh_int, self._vt_rh_slo, self._vt_rh_tip),
+            ]:
+                blk = variables.get(comp, {})
+                for key, row in [
+                    ("intercept", int_w),
+                    ("slope", slo_w),
+                    ("tip", tip_w),
+                ]:
+                    val = blk.get(key)
+                    if (
+                        val
+                        and isinstance(val, (list, tuple))
+                        and len(val) == 2
+                    ):
+                        idx = row._combo.findText(str(val[0]))
+                        if idx >= 0:
+                            row._combo.setCurrentIndex(idx)
+                        row._edit.setText(str(val[1]))
 
         # Relaxation (shared)
         relax = d.get("relaxation", {})
@@ -982,9 +1341,13 @@ class ConfigForm(QScrollArea):
         self._relax_model.setCurrentIndex(idx if idx >= 0 else 0)
         self._relax_temp.setText(str(relax.get("temperature", "")))
         self._relax_b0.setText(str(relax.get("magnetic_field_tesla", "")))
-        self._relax_T1e.setText(str(relax.get("T1e", "")))
-        self._relax_T2e.setText(str(relax.get("T2e", "")))
-        self._relax_tR.setText(str(relax.get("tR", "")))
+        for attr, key in [
+            (self._relax_T1e, "T1e"),
+            (self._relax_T2e, "T2e"),
+            (self._relax_tR, "tR"),
+        ]:
+            v = relax.get(key)
+            attr.setText(f"{v / 1e-12:g}" if v not in (None, "") else "")
         self._relax_min_lw.setText(str(relax.get("min_linewidth_hz", "")))
 
         # Fit relaxation (fit)
@@ -996,7 +1359,11 @@ class ConfigForm(QScrollArea):
         idx = self._tau_r_solvent.findText(solvent)
         self._tau_r_solvent.setCurrentIndex(idx if idx >= 0 else 0)
         self._tau_r_eta.setText(str(fit_relax.get("tau_r_eta", "")))
-        self._tau_r_fixed.setText(str(fit_relax.get("tau_r_fixed", "")))
+        _tau_r_fixed_s = fit_relax.get("tau_r_fixed")
+        self._tau_r_fixed.setText(
+            f"{_tau_r_fixed_s / 1e-12:g}"
+            if _tau_r_fixed_s not in (None, "") else ""
+        )
         dp = fit_relax.get("distance_power", "")
         self._r6_distance_power.setText("" if dp == "" else str(dp))
         for key, widget in (
@@ -1005,7 +1372,8 @@ class ConfigForm(QScrollArea):
         ):
             val = fit_relax.get(key)
             widget.setText(
-                f"{val[0]} {val[1]}" if isinstance(val, list) and len(val) == 2
+                f"{val[0] / 1e-12:g} {val[1] / 1e-12:g}"
+                if isinstance(val, list) and len(val) == 2
                 else ""
             )
 

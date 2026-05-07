@@ -10,7 +10,7 @@ uncertainties, with optional ZFS (D, E) estimation.
 import logging
 
 import numpy as np
-from sympy import Expr, nsolve, symbols
+from scipy.optimize import fsolve
 
 from simpnmr.core.const.physics import GE, KB, C, H
 from simpnmr.core.util.uncertainty import delta_method_sigma
@@ -164,41 +164,44 @@ def solve_D_E(
 def solve_g_principals_full(params: dict[str, float]) -> tuple[float, float, float]:
     """Solve for principal g-values (gx, gy, gz) using iso/ax/rh fit intercepts.
 
-    This branch uses a numerical solve (sympy.nsolve) for the three principal values
-    based on the relationships between g and chiT fit intercepts.
+    Uses scipy.optimize.fsolve to solve the 3×3 system:
+        (gx + gy + gz) / 3  = iso_intercept / GE   (linear g, isotropic)
+        g²_ax(gx, gy, gz)   = ax_intercept          (quadratic invariant)
+        g²_rh(gx, gy, gz)   = rh_intercept          (quadratic invariant)
 
     Args:
         params (dict[str, float]): Flattened fit parameters keyed by
             `{type}_{intercept|slope|intercept_err|slope_err}`.
 
     Returns:
-        tuple[float, float, float]: Principal g-values (gx, gy, gz).
+        tuple[float, float, float]: Principal g-values (gx, gy, gz) sorted
+        ascending.
     """
-
-    iso_intercept = params["iso_intercept"]
-    ax_intercept = params["ax_intercept"]
-    rh_intercept = params["rh_intercept"]
-
-    gx, gy, gz = symbols("gx gy gz", real=True)
+    iso_intercept = float(params["iso_intercept"])
+    ax_intercept = float(params["ax_intercept"])
+    rh_intercept = float(params["rh_intercept"])
 
     g_iso_fit = iso_intercept / GE
 
-    g2_iso, g2_ax, g2_rh = compute_g2_invariants(gx, gy, gz)
+    def _residuals(g_vec):
+        gx_v, gy_v, gz_v = g_vec
+        _, g2_ax, g2_rh = compute_g2_invariants(gx_v, gy_v, gz_v)
+        return [
+            (gx_v + gy_v + gz_v) / 3.0 - g_iso_fit,
+            g2_ax - ax_intercept,
+            g2_rh - rh_intercept,
+        ]
 
-    eqs = [
-        (gx + gy + gz) / 3.0 - g_iso_fit,
-        g2_ax - ax_intercept,
-        g2_rh - rh_intercept,
-    ]
-
-    # Initial guess: nearly isotropic solution around g_iso
     g0 = float(g_iso_fit)
-    gx_val, gy_val, gz_val = nsolve(
-        eqs, (gx, gy, gz), (g0 - 0.05, g0 + 0.05, g0 + 0.10)
+    g_sol, _, ier, msg = fsolve(
+        _residuals,
+        [g0 - 0.05, g0 + 0.05, g0 + 0.10],
+        full_output=True,
     )
+    if ier != 1:
+        logger.warning("solve_g_principals_full did not converge: %s", msg)
 
-    g_vals = [float(gx_val), float(gy_val), float(gz_val)]
-    g_vals.sort()
+    g_vals = sorted(float(v) for v in g_sol)
     return g_vals[0], g_vals[1], g_vals[2]
 
 
@@ -247,18 +250,14 @@ def solve_g_principals_axial_only(
 
 
 def compute_g2_invariants(
-    gx: float | Expr,
-    gy: float | Expr,
-    gz: float | Expr,
-) -> tuple[float | Expr, float | Expr, float | Expr]:
-    """Compute g^2 invariants used across g-tensor and ZFS formulas.
+    gx: float,
+    gy: float,
+    gz: float,
+) -> tuple[float, float, float]:
+    """Compute g² invariants used across g-tensor and ZFS formulas.
 
     Returns:
         (g2_iso, g2_ax, g2_rh)
-
-    Notes:
-        This helper is intentionally compatible with both numeric inputs (floats)
-        and SymPy symbols, since `_solve_g_principals_full` uses symbolic equations.
     """
 
     g2_iso = (gx**2 + gy**2 + gz**2) / 3.0

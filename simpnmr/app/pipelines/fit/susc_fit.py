@@ -60,6 +60,7 @@ from simpnmr.viz.plots.r6_fit import (
 )
 from simpnmr.viz.plots.spect import plot_raw_deconv_pred, plot_vt_spectra
 from simpnmr.viz.plots.shift_width_bubble import plot_shift_width_bubble
+from simpnmr.viz.plots.param_covariance import plot_param_covariance
 
 # Visualisation
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
@@ -68,14 +69,34 @@ from simpnmr.viz.style.theme import apply_profile
 
 try:
     from simpnmr.gui.molecule_view import (
-        assign_label_colors, _CPK_COLORS,
+        assign_label_colors, _CPK_COLORS, parse_xyz,
     )
-    from simpnmr.tools.coords.xyz_fmt import remove_label_indices
     _HAS_VIEWER = True
 except ImportError:
     _HAS_VIEWER = False
 
 logger = logging.getLogger(__name__)
+
+
+def _colors_from_xyz(xyz_path: str) -> "dict[str, str] | None":
+    """Return the exact chem-label → color mapping the GUI viewer computes.
+
+    Reads `xyz_path` with the same `parse_xyz` → `assign_label_colors`
+    pipeline the GUI uses, so graph colors are guaranteed to match.
+    Returns None when the viewer modules are unavailable or the file is missing.
+    """
+    if not _HAS_VIEWER:
+        return None
+    try:
+        mol = parse_xyz(xyz_path)
+    except (FileNotFoundError, ValueError):
+        return None
+    groups = mol.grouped_by_label()
+    if not groups:
+        return None
+    unlabelled_elems = {a.element for a in mol.atoms if not a.label}
+    reserved = {_CPK_COLORS[e] for e in unlabelled_elems if e in _CPK_COLORS}
+    return assign_label_colors(list(groups.keys()), reserved_colors=reserved)
 
 
 def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
@@ -171,6 +192,12 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         comment=f"Structure from {config.hyperfine_file}",
     )
 
+    # Compute label → color once by re-running the viewer's exact parse_xyz
+    # pipeline on the chemcraft XYZ we just wrote, so graph colors always
+    # match the GUI molecular viewer.
+    _xyz_path = os.path.join(config.project_name, "chemcraft_structure.xyz")
+    _mol_label_colors_all: dict[str, str] | None = _colors_from_xyz(_xyz_path)
+
     # Pre-compute τ_R per temperature when hydrodynamic parameters are given
     _tau_r_by_temp: dict[float, float] = {}
     if config.fit_relaxation_tau_r_method is not None:
@@ -201,7 +228,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         _tau_r_result["tau_iso"] * 1e12,
                     )
             except ValueError as err:
-                logger.warning("τ_R calculation at %.1f K failed: %s", _exp.temperature, err)
+                logger.warning(
+                    "τ_R calculation at %.1f K failed: %s",
+                    _exp.temperature, err,
+                )
 
     # Apply rotation matrix to all hyperfine tensors
     # if requested
@@ -582,75 +612,126 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         molecule.calculate_shifts()
         molecule.average_shifts()
 
-        with spec.context():
-            plot_fitted_shifts(
-                molecule,
-                experiment,
-                susc_model,
-                spec=spec,
-                show=options.runtime.show_plots,
-                susc_units=options.susc_units,
-                average=len(config.susc_fit_average_shifts),
-                save=True,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"shifts_{experiment.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    f"Fitted shifts at {experiment.temperature:.2f} K"
-                ),
-                spin=spin,
-                total_J=base_molecule.electronic.total_J,
-            )
+        _mol_label_colors_fit = _mol_label_colors_all
+
+        if config.susc_fit_figure("fitted_shifts"):
+            with spec.context():
+                plot_fitted_shifts(
+                    molecule,
+                    experiment,
+                    susc_model,
+                    spec=spec,
+                    show=options.runtime.show_plots,
+                    susc_units=options.susc_units,
+                    average=len(config.susc_fit_average_shifts),
+                    save=True,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"shifts_{experiment.temperature:.2f}_K",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Fitted shifts at {experiment.temperature:.2f} K"
+                    ),
+                    spin=spin,
+                    orbit=base_molecule.electronic.orbit_L,
+                    total_J=base_molecule.electronic.total_J,
+                    label_colors=_mol_label_colors_fit,
+                )
+
+        # Parameter covariance contour plot (optional)
+        _cov_params = getattr(config, "susc_fit_covariance_params", [])
+        if len(_cov_params) == 2:
+            try:
+                with spec.context():
+                    plot_param_covariance(
+                        molecule,
+                        experiment,
+                        susc_model,
+                        param_x=_cov_params[0],
+                        param_y=_cov_params[1],
+                        spec=spec,
+                        average_labels=average_labels,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"covariance_{_cov_params[0]}_{_cov_params[1]}"
+                            f"_{experiment.temperature:.2f}_K",
+                        ),
+                        window_title=(
+                            f"Covariance {_cov_params[0]} vs {_cov_params[1]}"
+                            f" at {experiment.temperature:.2f} K"
+                        ),
+                    )
+            except Exception as _cov_exc:
+                logger.warning(
+                    "Covariance plot skipped: %s", _cov_exc
+                )
 
         # Unique isotopes in molecule (insertion-ordered)
         _isotopes_mol = list(
             dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
         )
 
-        for _iso in _isotopes_mol:
-            _T = experiment.temperature
-            with spec.context():
-                plot_shift_spread(
-                    molecule,
-                    experiment,
-                    spec=spec,
-                    terms=_terms,
-                    isotope_filter=_iso,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"shift_spread_{_iso}_{_T:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Spread of predicted shift components "
-                        f"({_iso}) at {_T:.2f} K"
-                    ),
-                    order="descending",
+        if config.susc_fit_figure("shift_components"):
+            for _iso in _isotopes_mol:
+                _T = experiment.temperature
+                _iso_chem_labels_sc = {
+                    nuc.chem_label
+                    for nuc in molecule.nuclei
+                    if nuc.isotope == _iso
+                }
+                _label_colors_sc = (
+                    {
+                        lbl: c for lbl, c in _mol_label_colors_fit.items()
+                        if lbl in _iso_chem_labels_sc
+                    }
+                    if _mol_label_colors_fit else None
                 )
+                with spec.context():
+                    plot_shift_spread(
+                        molecule,
+                        experiment,
+                        spec=spec,
+                        terms=_terms,
+                        isotope_filter=_iso,
+                        label_colors=_label_colors_sc,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"shift_spread_{_iso}_{_T:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Spread of predicted shift components "
+                            f"({_iso}) at {_T:.2f} K"
+                        ),
+                        order="descending",
+                    )
 
-            with spec.context():
-                plot_shift_contrib(
-                    molecule,
-                    experiment,
-                    spec=spec,
-                    terms=_terms,
-                    isotope_filter=_iso,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"mean_components_{_iso}_{_T:.2f}_K",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Predicted shift components ({_iso}) at {_T:.2f} K"
-                    ),
-                    order="descending",
-                )
+                with spec.context():
+                    plot_shift_contrib(
+                        molecule,
+                        experiment,
+                        spec=spec,
+                        terms=_terms,
+                        isotope_filter=_iso,
+                        label_colors=_label_colors_sc,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"mean_components_{_iso}_{_T:.2f}_K",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Predicted shift components"
+                            f" ({_iso}) at {_T:.2f} K"
+                        ),
+                        order="descending",
+                    )
 
         # r^-6 distance-model fits (R1 and linewidth) — one fit per isotope
         _width_fit_result_by_iso: dict = {}
@@ -722,57 +803,59 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     verbose=True,
                     tau_e=config.fit_relaxation_tau_e,
                 )
-                with spec.context():
-                    plot_r6_fit(
-                        r6_result,
-                        observable=_obs,
-                        spec=spec,
-                        show=options.runtime.show_plots,
-                        save=True,
-                        save_name=os.path.join(
-                            config.project_name,
-                            f"r6_fit_{_obs}_{_iso_r6}_"
-                            f"{experiment.temperature:.2f}_K",
-                        ),
-                        verbose=True,
-                        window_title=(
-                            f"r\u207b\u2076 Fit ({_obs}, {_iso_r6})"
-                            f" at {experiment.temperature:.2f} K"
-                        ),
-                    )
+                if config.susc_fit_figure("r6_fit"):
+                    with spec.context():
+                        plot_r6_fit(
+                            r6_result,
+                            observable=_obs,
+                            spec=spec,
+                            show=options.runtime.show_plots,
+                            save=True,
+                            save_name=os.path.join(
+                                config.project_name,
+                                f"r6_fit_{_obs}_{_iso_r6}_"
+                                f"{experiment.temperature:.2f}_K",
+                            ),
+                            verbose=True,
+                            window_title=(
+                                f"r\u207b\u2076 Fit ({_obs}, {_iso_r6})"
+                                f" at {experiment.temperature:.2f} K"
+                            ),
+                        )
                 _tau_R_fixed = (
                     _tau_r_by_temp.get(experiment.temperature)
                     or config.fit_relaxation_tau_r_fixed
                 )
-                with spec.context():
-                    plot_tau_space(
-                        r6_result,
-                        observable=_obs,
-                        omega_I=_omega_I_r6,
-                        omega_S=_omega_S_r6,
-                        gamma_I=_gamma_I_r6,
-                        spin=spin,
-                        orbit=config.orbit,
-                        total_momentum_J=config.total_momentum_J,
-                        temperature=experiment.temperature,
-                        relaxation_model=_relaxation_model,
-                        spec=spec,
-                        tau_e_range=config.fit_relaxation_tau_e_range,
-                        tau_r_range=config.fit_relaxation_tau_r_range,
-                        tau_R_fixed=_tau_R_fixed,
-                        show=options.runtime.show_plots,
-                        save=True,
-                        save_name=os.path.join(
-                            config.project_name,
-                            f"r6_tau_space_{_obs}_{_iso_r6}_"
-                            f"{experiment.temperature:.2f}_K",
-                        ),
-                        verbose=True,
-                        window_title=(
-                            f"\u03c4 space ({_obs}, {_iso_r6})"
-                            f" at {experiment.temperature:.2f} K"
-                        ),
-                    )
+                if config.susc_fit_figure("tau_space"):
+                    with spec.context():
+                        plot_tau_space(
+                            r6_result,
+                            observable=_obs,
+                            omega_I=_omega_I_r6,
+                            omega_S=_omega_S_r6,
+                            gamma_I=_gamma_I_r6,
+                            spin=spin,
+                            orbit=config.orbit,
+                            total_momentum_J=config.total_momentum_J,
+                            temperature=experiment.temperature,
+                            relaxation_model=_relaxation_model,
+                            spec=spec,
+                            tau_e_range=config.fit_relaxation_tau_e_range,
+                            tau_r_range=config.fit_relaxation_tau_r_range,
+                            tau_R_fixed=_tau_R_fixed,
+                            show=options.runtime.show_plots,
+                            save=True,
+                            save_name=os.path.join(
+                                config.project_name,
+                                f"r6_tau_space_{_obs}_{_iso_r6}_"
+                                f"{experiment.temperature:.2f}_K",
+                            ),
+                            verbose=True,
+                            window_title=(
+                                f"\u03c4 space ({_obs}, {_iso_r6})"
+                                f" at {experiment.temperature:.2f} K"
+                            ),
+                        )
 
             # Combined τ-space plot per isotope when both obs succeeded
             _r1_rec_iso = (
@@ -784,35 +867,36 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             _r1_iso = _r1_rec_iso[-1]["fit_result"] if _r1_rec_iso else None
             _lw_iso = _lw_rec_iso[-1]["fit_result"] if _lw_rec_iso else None
             if _r1_iso is not None and _lw_iso is not None:
-                with spec.context():
-                    plot_tau_space_combined(
-                        r1_fit_result=_r1_iso,
-                        width_fit_result=_lw_iso,
-                        omega_I=_omega_I_r6,
-                        omega_S=_omega_S_r6,
-                        gamma_I=_gamma_I_r6,
-                        spin=spin,
-                        orbit=config.orbit,
-                        total_momentum_J=config.total_momentum_J,
-                        temperature=experiment.temperature,
-                        relaxation_model=_relaxation_model,
-                        spec=spec,
-                        tau_e_range=config.fit_relaxation_tau_e_range,
-                        tau_r_range=config.fit_relaxation_tau_r_range,
-                        tau_R_fixed=_tau_R_fixed,
-                        show=options.runtime.show_plots,
-                        save=True,
-                        save_name=os.path.join(
-                            config.project_name,
-                            f"r6_tau_space_combined_{_iso_r6}_"
-                            f"{experiment.temperature:.2f}_K",
-                        ),
-                        verbose=True,
-                        window_title=(
-                            f"\u03c4 space (combined, {_iso_r6})"
-                            f" at {experiment.temperature:.2f} K"
-                        ),
-                    )
+                if config.susc_fit_figure("tau_space"):
+                    with spec.context():
+                        plot_tau_space_combined(
+                            r1_fit_result=_r1_iso,
+                            width_fit_result=_lw_iso,
+                            omega_I=_omega_I_r6,
+                            omega_S=_omega_S_r6,
+                            gamma_I=_gamma_I_r6,
+                            spin=spin,
+                            orbit=config.orbit,
+                            total_momentum_J=config.total_momentum_J,
+                            temperature=experiment.temperature,
+                            relaxation_model=_relaxation_model,
+                            spec=spec,
+                            tau_e_range=config.fit_relaxation_tau_e_range,
+                            tau_r_range=config.fit_relaxation_tau_r_range,
+                            tau_R_fixed=_tau_R_fixed,
+                            show=options.runtime.show_plots,
+                            save=True,
+                            save_name=os.path.join(
+                                config.project_name,
+                                f"r6_tau_space_combined_{_iso_r6}_"
+                                f"{experiment.temperature:.2f}_K",
+                            ),
+                            verbose=True,
+                            window_title=(
+                                f"\u03c4 space (combined, {_iso_r6})"
+                                f" at {experiment.temperature:.2f} K"
+                            ),
+                        )
 
         # Bubble plots — one per isotope
         _iso_suffix = len(_isotopes_mol) > 1
@@ -824,31 +908,39 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 if nuc.isotope == _iso_bubble
             ]
 
-            # Shift vs linewidth bubble plot
-            with spec.context():
-                plot_shift_width_bubble(
-                    experiment,
-                    _iso_mol,
-                    spec=spec,
-                    observable="width",
-                    fit_result=_width_fit_result_by_iso.get(_iso_bubble),
-                    isotope_filter=_iso_bubble,
-                    show=options.runtime.show_plots,
-                    save=True,
-                    save_name=os.path.join(
-                        config.project_name,
-                        f"shift_width_bubble_{experiment.temperature:.2f}_K{_suffix}",
-                    ),
-                    verbose=True,
-                    window_title=(
-                        f"Shift vs Linewidth at {experiment.temperature:.2f} K"
-                    ),
-                )
+            # Shift vs linewidth bubble plot (only when r⁻⁶ width fit ran)
+            if (
+                config.susc_fit_figure("bubble_plots")
+                and _width_fit_result_by_iso.get(_iso_bubble) is not None
+            ):
+                with spec.context():
+                    plot_shift_width_bubble(
+                        experiment,
+                        _iso_mol,
+                        spec=spec,
+                        observable="width",
+                        fit_result=_width_fit_result_by_iso.get(_iso_bubble),
+                        isotope_filter=_iso_bubble,
+                        show=options.runtime.show_plots,
+                        save=True,
+                        save_name=os.path.join(
+                            config.project_name,
+                            "shift_width_bubble_"
+                            f"{experiment.temperature:.2f}_K{_suffix}",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Shift vs Linewidth at"
+                            f" {experiment.temperature:.2f} K"
+                        ),
+                    )
 
             # Shift vs R1 bubble plot (only when R1 data is present)
-            if _r1_fit_result_by_iso.get(_iso_bubble) is not None or any(
-                sig.r1 is not None and sig.isotope == _iso_bubble
-                for sig in experiment.signals
+            if config.susc_fit_figure("bubble_plots") and (
+                _r1_fit_result_by_iso.get(_iso_bubble) is not None or any(
+                    sig.r1 is not None and sig.isotope == _iso_bubble
+                    for sig in experiment.signals
+                )
             ):
                 with spec.context():
                     plot_shift_width_bubble(
@@ -862,7 +954,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         save=True,
                         save_name=os.path.join(
                             config.project_name,
-                            f"shift_r1_bubble_{experiment.temperature:.2f}_K{_suffix}",
+                            "shift_r1_bubble_"
+                            f"{experiment.temperature:.2f}_K{_suffix}",
                         ),
                         verbose=True,
                         window_title=(
@@ -877,41 +970,22 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 zip(_width_fit_result["labels"], _width_fit_result["pred"])
             )
             for nuc in molecule.nuclei:
-                if nuc.isotope == _iso_lw and nuc.chem_label in _label_to_lw_loop:
+                if (
+                    nuc.isotope == _iso_lw
+                    and nuc.chem_label in _label_to_lw_loop
+                ):
                     lw_hz = _label_to_lw_loop[nuc.chem_label]
                     _gamma_loop = get_nuclear_gamma(nuc.isotope)
                     nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
 
-        # Predicted + experimental deconvoluted spectrum overlay — one per isotope
+        # Predicted + experimental spectrum overlay — one per isotope
         _avgs = [
             nuc.shift.avg
             for nuc in molecule.nuclei
             if nuc.shift.avg is not None
         ]
-        if _avgs and experiment.signals:
-            # Compute label → color once for ALL chem_labels, mirroring the
-            # molecular viewer: same sorted order, same reserved-color logic.
-            # Slice per-isotope later so positions in the palette are identical.
-            _mol_label_colors: dict[str, str] | None = None
-            if _HAS_VIEWER:
-                _nuc_atom_labels: set[str] = set()
-                _all_chem_labels_set: set[str] = set()
-                for _n in molecule.nuclei:
-                    _nuc_atom_labels.add(_n.label)
-                    _all_chem_labels_set.add(_n.chem_label)
-                _unlabeled_elems = {
-                    remove_label_indices(lbl)[0]
-                    for lbl in molecule.labels
-                    if lbl not in _nuc_atom_labels
-                }
-                _reserved = {
-                    _CPK_COLORS[e]
-                    for e in _unlabeled_elems
-                    if e in _CPK_COLORS
-                }
-                _mol_label_colors = assign_label_colors(
-                    sorted(_all_chem_labels_set), reserved_colors=_reserved
-                )
+        if _avgs and experiment.signals and config.susc_fit_figure("spectra"):
+            _mol_label_colors = _mol_label_colors_all
 
             _isotopes_present = list(
                 dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
@@ -962,7 +1036,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     )
 
     # VT stacked experimental spectra — one figure per isotope
-    if len(experiments) > 1 and any(
+    if config.susc_fit_figure("spectra") and len(experiments) > 1 and any(
         e.spectrum is not None or e.signals for e in experiments
     ):
         _vt_isotopes = list(dict.fromkeys(
@@ -1069,14 +1143,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
             logger.info("PCS isosurface written to %s", file_name)
 
-    # Multi-temperature τ-space plots (only when >1 experiment) — per isotope
+    # Multi-temperature τ-space plots (only when >1 experiment), per isotope
     _relaxation_model_mt = getattr(config, "relaxation_model", "sbm curie")
     for _obs_mt, _records_by_iso in (
         ("r1", _r6_records_r1),
         ("width", _r6_records_width),
     ):
         for _iso_mt, _records_mt in _records_by_iso.items():
-            if len(_records_mt) > 1:
+            if len(_records_mt) > 1 and config.susc_fit_figure("tau_space"):
                 with spec.context():
                     plot_tau_space_multitemp(
                         records=_records_mt,
@@ -1127,18 +1201,19 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 susc_models=susc_models,
                 plot_profile=options.runtime.plot_profile,
                 show_plots=options.runtime.show_plots,
+                save_chi_t=config.susc_fit_figure("chi_t"),
             )
 
     # Apply r^-6 predicted linewidths to the spectrum if available.
     # Widths from fit_r6 are in Hz (same unit as signal.width); convert to
     # ppm using the Larmor frequency of the last experiment.
-    if _width_fit_result is not None:
+    _b0 = experiment.magnetic_field
+    for _iso_lw_final, _width_fit_result in _width_fit_result_by_iso.items():
         _label_to_lw = dict(
             zip(_width_fit_result["labels"], _width_fit_result["pred"])
         )
-        _b0 = experiment.magnetic_field
         for nuc in mol.nuclei:
-            if nuc.chem_label in _label_to_lw:
+            if nuc.isotope == _iso_lw_final and nuc.chem_label in _label_to_lw:
                 lw_hz = _label_to_lw[nuc.chem_label]
                 _gamma = get_nuclear_gamma(nuc.isotope)
                 nuc.shift.lw = np.float64(lw_hz / (_gamma * _b0))
@@ -1153,6 +1228,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             if nuc.isotope == _iso_final and nuc.shift.avg is not None
         ]
         if not _avgs_iso_final:
+            continue
+        if not config.susc_fit_figure("spectra"):
             continue
         with spec.context():
             plot_pred_spectrum(

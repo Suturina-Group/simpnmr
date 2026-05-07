@@ -292,6 +292,46 @@ new QWebChannel(qt.webChannelTransport, function(channel) {{
   viewer.render();
 }});
 
+// ── Discrete XYZ axis triad ─────────────────────────────────────
+(function() {{
+  const atoms = viewer.getModel().selectedAtoms({{}});
+  if (!atoms.length) return;
+  let minX=Infinity, minY=Infinity, minZ=Infinity;
+  let maxX=-Infinity, maxY=-Infinity, maxZ=-Infinity;
+  atoms.forEach(a => {{
+    minX=Math.min(minX,a.x); maxX=Math.max(maxX,a.x);
+    minY=Math.min(minY,a.y); maxY=Math.max(maxY,a.y);
+    minZ=Math.min(minZ,a.z); maxZ=Math.max(maxZ,a.z);
+  }});
+  const span = Math.max(maxX-minX, maxY-minY, maxZ-minZ, 1.0);
+  const L  = Math.max(1.5, span * 0.12);   // arrow length
+  const r  = 0.05;                          // shaft radius
+  const ox = minX - L * 0.6;
+  const oy = minY - L * 0.6;
+  const oz = minZ - L * 0.6;
+  const axes = [
+    {{d:[1,0,0], color:'#cc3333', lbl:'x'}},
+    {{d:[0,1,0], color:'#33aa33', lbl:'y'}},
+    {{d:[0,0,1], color:'#3366cc', lbl:'z'}},
+  ];
+  axes.forEach(ax => {{
+    viewer.addArrow({{
+      start:{{x:ox,            y:oy,            z:oz}},
+      end:  {{x:ox+ax.d[0]*L, y:oy+ax.d[1]*L, z:oz+ax.d[2]*L}},
+      radius:r, radiusRatio:2.5, mid:0.78,
+      color:ax.color, opacity:0.75
+    }});
+    viewer.addLabel(ax.lbl, {{
+      position:{{x:ox+ax.d[0]*(L+0.35),
+                 y:oy+ax.d[1]*(L+0.35),
+                 z:oz+ax.d[2]*(L+0.35)}},
+      fontSize:11, fontColor:ax.color,
+      backgroundOpacity:0.0, borderThickness:0,
+      inFront:true
+    }});
+  }});
+}})();
+
 viewer.zoomTo();
 viewer.render();
 </script></body></html>"""

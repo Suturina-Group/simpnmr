@@ -127,6 +127,28 @@ def extract_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     return run_extract_hfc(uargs.calculation_data, options)
 
 
+def average_conformers_cli(
+    uargs: argparse.Namespace, runtime: RuntimeSettings
+) -> int:
+    """Thin CLI wrapper for average_conformers pipeline."""
+
+    from simpnmr.app.pipelines.extract.average_conformers import (
+        run_average_conformers,
+    )
+
+    weights = None
+    if uargs.weights:
+        weights = [float(w) for w in uargs.weights]
+
+    return run_average_conformers(
+        files=uargs.files,
+        centre_label=uargs.centre,
+        weights=weights,
+        output=uargs.output,
+        csv_delimiter=runtime.csv_delimiter,
+    )
+
+
 def plot_hfc_cli(uargs: argparse.Namespace, runtime: RuntimeSettings) -> int:
     """Thin CLI wrapper for plot_hfc pipeline."""
 
@@ -437,6 +459,46 @@ def read_args(arg_list=None):
         "calculation_data",
         type=str,
         help=("Gaussian log file, or Orca output or property file"),
+    )
+
+    avg_conf = subparsers.add_parser(
+        "average_conformers",
+        description=(
+            "Average HFC tensors and r⁻⁶ over a conformer ensemble and "
+            "write a canonical molecule CSV."
+        ),
+    )
+    avg_conf.set_defaults(func=average_conformers_cli)
+    avg_conf.add_argument(
+        "files",
+        nargs="+",
+        type=str,
+        help="QC output files, one per conformer (same atom order required).",
+    )
+    avg_conf.add_argument(
+        "--centre",
+        required=True,
+        type=str,
+        help="Atom label of the paramagnetic centre (e.g. Fe1).",
+    )
+    avg_conf.add_argument(
+        "--weights",
+        nargs="+",
+        type=float,
+        default=None,
+        help=(
+            "Population weights, one per conformer. Need not be normalised. "
+            "Defaults to equal weights."
+        ),
+    )
+    avg_conf.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help=(
+            "Output CSV file name. "
+            "Defaults to conformer_avg_<stem_of_first_file>.csv."
+        ),
     )
 
     plot_hfc = subparsers.add_parser(

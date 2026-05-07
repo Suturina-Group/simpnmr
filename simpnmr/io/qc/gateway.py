@@ -644,11 +644,16 @@ class QCA(ABC):
         return
 
     @staticmethod
-    def guess_from_file(file_name: str) -> "QCA":
+    def guess_from_file(file_name: str, *, spin: float | None = None) -> "QCA":
         """Guess a compatible hyperfine reader and parse the file.
 
         Args:
             file_name: Path to the file to examine.
+            spin: Optional spin quantum number S. Used only for Gaussian logs
+                that lack a 'Multiplicity =' line, to derive n_unpaired for
+                A(SD) normalisation. If the file is missing the line and spin
+                is not provided, a ValueError is raised with a hint to add
+                'spin:' under 'hyperfine:' in the YAML.
 
         Returns:
             QCA: Parsed component-based hyperfine object.
@@ -658,6 +663,8 @@ class QCA(ABC):
         """
 
         if is_gaussian_log(file_name):
+            if spin is not None:
+                return GaussianLogA.read_with_spin(file_name, spin)
             return GaussianLogA.read(file_name)
 
         if is_orca_output(file_name):
@@ -824,14 +831,27 @@ class GaussianLogA(QCA):
     COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
-    def _read(cls, file_name: str):
+    def _read(cls, file_name: str, n_unpaired: int | None = None):
         # Read raw data
         labels, coords = read_gaussian_log_xyz(file_name)
         labels = np.array(xyzf.add_label_indices(labels))
         a_fc_raw, a_sd_raw = read_gaussian_log_a_tensors(file_name)
 
         mult = read_gaussian_log_spin(file_name)
-        n_unpaired = mult - 1
+        if mult is None:
+            if n_unpaired is None:
+                raise ValueError(
+                    f"Could not find 'Multiplicity =' in Gaussian log: {file_name}. "
+                    "Add 'spin: <value>' under 'hyperfine:' in your YAML to specify "
+                    "the spin multiplicity manually."
+                )
+            logger.warning(
+                "Multiplicity not found in %s; using n_unpaired=%d from config spin.",
+                file_name,
+                n_unpaired,
+            )
+        else:
+            n_unpaired = mult - 1
 
         # Gaussian provides isotropic Fermi-contact values and traceless dipolar
         # tensors separately. Adapt these raw quantities to the canonical QCA
@@ -849,6 +869,12 @@ class GaussianLogA(QCA):
         a_units = "MHz"
 
         return cls(file_name, labels, coords, a_fc, a_sd, a_orb, a_units)
+
+    @classmethod
+    def read_with_spin(cls, file_name: str, spin: float) -> "GaussianLogA":
+        """Read a Gaussian log, using *spin* (S) to derive n_unpaired when
+        'Multiplicity =' is absent from the file."""
+        return cls._read(file_name, n_unpaired=round(2 * spin))
 
 
 class Orca5OutputA(QCA):

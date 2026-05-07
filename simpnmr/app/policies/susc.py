@@ -350,12 +350,5 @@ def _get_susc_fit_input_scale_to_a3(
             "susc_fit:input_units='reduced' requires a positive experiment temperature"
         )
 
-    return _compute_curie_prefactor(spin, total_J) / float(temperature)
-
-
-def _compute_curie_prefactor(
-    spin: float, total_J: float | None = None
-) -> float:
-    """Return the Curie prefactor in ``Å^3 K`` for reduced susc. units."""
-    J_eff = total_J if total_J is not None else spin
-    return (MU0 * MUB**2 * J_eff * (J_eff + 1.0)) / (3.0 * KB) * 1e30
+    from simpnmr.core.fitting.vt import compute_chi_prefactor
+    return compute_chi_prefactor(spin, total_J) / float(temperature)

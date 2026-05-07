@@ -255,6 +255,10 @@ def fit_r6(
 
         r6_inv_group = []
         for nuc in nuclei_in_group:
+            # Use pre-averaged ⟨r⁻⁶⟩ from conformer averaging when available.
+            if getattr(nuc.A, "r_inv6", None) is not None:
+                r6_inv_group.append(float(nuc.A.r_inv6))
+                continue
             r = float(
                 np.linalg.norm(np.asarray(nuc.coord, dtype=float) - centre)
             )

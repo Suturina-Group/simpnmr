@@ -129,6 +129,48 @@ Used in workflows that require hyperfine tensor information, including:
    quantities are available. At present, this pathway is implemented only for
    ORCA 5 and ORCA 6 outputs.
 
+.. note::
+
+   **Hyperfine CSV format (``method: csv``)**
+
+   The CSV file must be in the canonical SimpNMR molecule CSV format —
+   the same format produced by ``save_molecule_to_csv``. Comment lines
+   beginning with ``#`` are ignored.
+
+   **Required columns:**
+
+   - ``atom_label ()`` — atom label matching the structure (e.g. ``H1``, ``C3``)
+   - ``x (Å)``, ``y (Å)``, ``z (Å)`` — Cartesian coordinates in Ångströms
+
+   **Spin hyperfine columns** (all seven must be present together):
+
+   - ``A_fc_iso (ppm Å^-3)`` — isotropic Fermi-contact value, ⅓ Tr[**A**\ :sub:`FC`]
+   - ``A_sd_xx``, ``A_sd_xy``, ``A_sd_xz``, ``A_sd_yy``, ``A_sd_yz``,
+     ``A_sd_zz`` (all ``ppm Å^-3``) — unique elements of the symmetric
+     spin-dipole tensor **A**\ :sub:`SD`
+
+   The full hyperfine tensor is reconstructed internally as
+   **A** = **A**\ :sub:`SD` + *A*\ :sub:`fc,iso` · **I**.
+
+   **Optional orbital hyperfine columns** (all six must be present together):
+
+   - ``A_orb_xx``, ``A_orb_xy``, ``A_orb_xz``, ``A_orb_yy``, ``A_orb_yz``,
+     ``A_orb_zz`` (all ``ppm Å^-3``) — unique elements of the symmetric
+     orbital hyperfine tensor
+
+   **Optional label columns:**
+
+   - ``chem_label ()`` — chemical/symmetry label for each atom
+   - ``chem_math_label ()`` — LaTeX-formatted label for plot annotations
+
+   Example header line::
+
+       atom_label (),chem_label (),x (Å),y (Å),z (Å),A_fc_iso (ppm Å^-3),A_sd_xx (ppm Å^-3),A_sd_xy (ppm Å^-3),A_sd_xz (ppm Å^-3),A_sd_yy (ppm Å^-3),A_sd_yz (ppm Å^-3),A_sd_zz (ppm Å^-3)
+
+   The easiest way to produce a valid file is to run a ``dft`` calculation
+   first and save the result with ``save_molecule_to_csv``; the output can
+   then be edited or used directly as a ``csv`` input.
+
 Chemical Labels
 ^^^^^^^^^^^^^^^
 
