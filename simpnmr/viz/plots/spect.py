@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 
 def _get_plot_linewidth(nucleus, linewidths_by_label):
     if linewidths_by_label is not None and nucleus.label in linewidths_by_label:
-        return linewidths_by_label[nucleus.label]
+        lw = linewidths_by_label[nucleus.label]
+        if lw is not None:
+            return lw
     if nucleus.shift.lw is None:
         raise ValueError("Spectrum plotting requires linewidth values")
     return nucleus.shift.lw
@@ -265,7 +267,7 @@ def plot_raw_deconv_pred(
     # Connector arrows only for signals assigned to this isotope
     _connector_signals = [
         s for s in experiment.signals
-        if s.assignment in _iso_chem_labels
+        if s.assignment in _iso_chem_labels and _signal_belongs(s)
     ]
 
     # Use union of simulation and experimental ranges to avoid clipping.
@@ -390,8 +392,9 @@ def plot_raw_deconv_pred(
         for nuc in molecule.nuclei:
             if nuc.isotope != isotope:
                 continue
+            _lw = _get_plot_linewidth(nuc, effective_linewidths_by_label)
             contrib = lorentzian(
-                x_grid, nuc.shift.lw, nuc.shift.avg, 1
+                x_grid, _lw, nuc.shift.avg, 1
             )
             if nuc.chem_label in _group_y:
                 _group_y[nuc.chem_label] += contrib

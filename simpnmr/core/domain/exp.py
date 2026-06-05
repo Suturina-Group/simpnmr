@@ -125,17 +125,6 @@ class Experiment:
         spectrum: ArrayLike = None,
         exp_reference: Optional[float] = None,
     ) -> None:
-        # Validate per-isotope assignment uniqueness
-        from collections import defaultdict
-        _seen: dict = defaultdict(set)
-        for sig in signals:
-            iso = sig.isotope or ""
-            if sig.assignment in _seen[iso]:
-                raise ValueError(
-                    f"Duplicate assignment '{sig.assignment}' for "
-                    f"isotope '{iso or 'untagged'}' in experiment."
-                )
-            _seen[iso].add(sig.assignment)
 
         self._signals = signals
         self.temperature = temperature
@@ -159,10 +148,33 @@ class Experiment:
         return [signal.assignment for signal in self.signals]
 
     def __contains__(self, item):
+        if isinstance(item, tuple):
+            label, isotope = item
+            # Exact match first.
+            if any(s.assignment == label and s.isotope == isotope for s in self.signals):
+                return True
+            # Fall back to untagged only when the experiment has no isotope
+            # column at all (all signals untagged).
+            exp_has_isotopes = any(s.isotope is not None for s in self.signals)
+            if not exp_has_isotopes:
+                return any(s.assignment == label for s in self.signals)
+            return False
         return any(signal.assignment == item for signal in self.signals)
 
     def __getitem__(self, item):
-        # This is probably slow
+        if isinstance(item, tuple):
+            label, isotope = item
+            # Exact isotope match.
+            for signal in self.signals:
+                if signal.assignment == label and signal.isotope == isotope:
+                    return signal
+            # Fall back to untagged only when the experiment has no isotope column.
+            exp_has_isotopes = any(s.isotope is not None for s in self.signals)
+            if not exp_has_isotopes:
+                for signal in self.signals:
+                    if signal.assignment == label:
+                        return signal
+            raise KeyError(item)
         lookup = {signal.assignment: signal for signal in self.signals}
         return lookup[item]
 

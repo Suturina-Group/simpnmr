@@ -85,7 +85,7 @@ class Nucleus:
 
         # If isotope is provided then set, else set as default
         if isotope is None:
-            self.isotope = isotopes.DEFAULT_ISOTOPES[self.label_nn]
+            self.isotope = isotopes.DEFAULT_ISOTOPES.get(self.label_nn)
 
         return
 
@@ -168,8 +168,10 @@ class Nucleus:
         return self._isotope
 
     @isotope.setter
-    def isotope(self, value: str):
-        if re.sub("[0-9]", "", value) != self.label_nn:
+    def isotope(self, value: str | None):
+        if value is None:
+            self._isotope = None
+        elif re.sub("[0-9]", "", value) != self.label_nn:
             raise ValueError("Isotope label does not match atomic label")
         elif value not in isotopes.SUPPORTED_ISOTOPES:
             raise ValueError(f"Unsupported isotope {value}")
@@ -868,7 +870,7 @@ class Molecule:
 
     def apply_diamagnetic_shifts(
         self,
-        dia_by_key: dict[str, float],
+        dia_by_key: dict,
         key_kind: str,
         ref_avg_by_isotope: dict[str, float] | None = None,
     ) -> None:
@@ -876,7 +878,9 @@ class Molecule:
 
         Args:
             dia_by_key: Mapping from label key -> diamagnetic shielding (or
-                shift for pre-referenced CSV inputs).
+                shift for pre-referenced CSV inputs).  Keys are either plain
+                strings (label only) or ``(label, isotope)`` tuples when the
+                dia CSV includes an ``isotope`` column.
             key_kind: ``'atom_label'`` (uses ``nuc.label``) or
                 ``'chem_label'`` (uses ``nuc.chem_label``).
             ref_avg_by_isotope: Optional mapping isotope -> averaged reference
@@ -894,7 +898,10 @@ class Molecule:
         missing: list[str] = []
         for nuc in self.nuclei:
             key = nuc.label if key_kind == "atom_label" else nuc.chem_label
-            if key in dia_by_key:
+            iso_key = (key, nuc.isotope) if nuc.isotope is not None else None
+            if iso_key is not None and iso_key in dia_by_key:
+                nuc.shift.dia = float(dia_by_key[iso_key])
+            elif key in dia_by_key:
                 nuc.shift.dia = float(dia_by_key[key])
             else:
                 missing.append(key)

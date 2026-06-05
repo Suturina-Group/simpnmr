@@ -107,16 +107,20 @@ def plot_shift_spread(
             ]
     # or order using experimental shift
     else:
+        def _exp_key(nuc):
+            k = (nuc.chem_label, nuc.isotope) if nuc.isotope is not None else nuc.chem_label
+            return k
+
         exps = {
-            nuc.chem_math_label: experiment[nuc.chem_label].shift
+            nuc.chem_math_label: experiment[_exp_key(nuc)].shift
             for nuc in _nuclei
-            if nuc.chem_label in experiment
+            if _exp_key(nuc) in experiment
         }
 
         # Remove diamagnetic part of experiment if not included in terms list
         if "d" not in terms:
             for nuc in _nuclei:
-                if nuc.chem_label in experiment:
+                if _exp_key(nuc) in experiment:
                     exps[nuc.chem_math_label] -= nuc.shift.dia
 
         # Order by low to high experimental shift
@@ -334,19 +338,23 @@ def plot_shift_contrib(
     # Experiment
     _exp_math_labels: set[str] = set()  # math labels with real experimental data
     if experiment is not None:
+        def _exp_key2(nuc):
+            k = (nuc.chem_label, nuc.isotope) if nuc.isotope is not None else nuc.chem_label
+            return k
+
         # Take average (skip nuclei absent from experiment)
         exps = dict.fromkeys(cl_to_al, 0)
         for nuc in _nuclei:
-            if nuc.chem_label not in experiment:
+            if _exp_key2(nuc) not in experiment:
                 continue
             exps[nuc.chem_math_label] += (
-                experiment[nuc.chem_label].shift / cl_to_al[nuc.chem_math_label]
+                experiment[_exp_key2(nuc)].shift / cl_to_al[nuc.chem_math_label]
             )
             _exp_math_labels.add(nuc.chem_math_label)
 
         if "d" not in terms:
             for nuc in _nuclei:
-                if nuc.chem_label not in experiment:
+                if _exp_key2(nuc) not in experiment:
                     continue
                 exps[nuc.chem_math_label] -= (
                     nuc.shift.dia / cl_to_al[nuc.chem_math_label]

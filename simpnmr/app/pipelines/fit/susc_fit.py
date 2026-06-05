@@ -16,7 +16,7 @@ from pathos import multiprocessing as mp
 # Application layer
 from simpnmr.app.loaders.dia_load import load_diamagnetic_shifts
 from simpnmr.app.loaders.elstate_load import load_electronic_state
-from simpnmr.app.loaders.exp_load import load_experiments, save_experiment
+from simpnmr.app.loaders.exp_load import load_experiments, save_experiments
 from simpnmr.app.loaders.hfc_load import load_hyperfines
 from simpnmr.app.loaders.labels_load import load_chem_labels_from_csv
 from simpnmr.app.loaders.mol_load import load_base_molecule
@@ -334,6 +334,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
     # Finds one shared assignment across all (T, B) conditions by summing
     # cost matrices; each condition retains its own susceptibility parameters.
     _hungarian_done = False
+    _assignment_run = False
     if config.assignment_method == "hungarian" and len(experiments) > 1:
         search_settings = resolve_assignment_search_settings(
             mode=config.assignment_search,
@@ -353,7 +354,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
 
         # Per-isotope partitions (signal indices from the first experiment)
         _isotopes_multi = list(
-            dict.fromkeys(nuc.isotope for nuc in molecules[0].nuclei)
+            [iso for iso in dict.fromkeys(nuc.isotope for nuc in molecules[0].nuclei) if iso is not None]
         )
         _multi_iso_partitions = None
         if len(_isotopes_multi) > 1:
@@ -399,22 +400,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             "Multi-experiment Hungarian completed: mean RMSE = %.6f",
             _multi_rmse,
         )
-        # Save each assigned experiment
-        for exp in experiments:
-            save_experiment(
-                exp,
-                file_name=os.path.join(
-                    config.project_name,
-                    f"assigned_experiment_{exp.temperature:.2f}_K.csv",
-                ),
-                delimiter=delimiter,
-                comment=(
-                    f"# Optimal Assignment (Hungarian, multi-experiment)\n"
-                    f"# mean rmse = {_multi_rmse:f}\n"
-                    f"# T = {exp.temperature:.2f} K"
-                ),
-            )
         _hungarian_done = True
+        _assignment_run = True
 
     # Run fit for all experiments
     for molecule, susc_model, experiment in zip(
@@ -503,20 +490,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             for sig, new in zip(_fit_sigs, assignment):
                 sig.assignment = new
 
-            # Save assigned experiment to file
-            save_experiment(
-                experiment,
-                file_name=os.path.join(
-                    config.project_name,
-                    f"assigned_experiment_{experiment.temperature:.2f}_K.csv",
-                ),
-                delimiter=delimiter,
-                comment=(
-                    f"Optimal Assignment\n"
-                    f"rmse = {opt_rmse:f}\n"
-                    f"T = {experiment.temperature:.2f} K"
-                ),
-            )
+            _assignment_run = True
 
         elif config.assignment_method == "hungarian" and not _hungarian_done:
             search_settings = resolve_assignment_search_settings(
@@ -538,7 +512,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             # using all signals and nuclei, but each isotope's signals only
             # compete for labels belonging to that isotope.
             _isotopes_hung = list(
-                dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+                [iso for iso in dict.fromkeys(nuc.isotope for nuc in molecule.nuclei) if iso is not None]
             )
             _iso_partitions = None
             if len(_isotopes_hung) > 1:
@@ -582,21 +556,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 isotope_partitions=_iso_partitions,
             )
             logger.info("Hungarian completed: best RMSE = %.6f", opt_rmse)
-
-            # Save assigned experiment to file
-            save_experiment(
-                experiment,
-                file_name=os.path.join(
-                    config.project_name,
-                    f"assigned_experiment_{experiment.temperature:.2f}_K.csv",
-                ),
-                delimiter=delimiter,
-                comment=(
-                    f"# Optimal Assignment (Hungarian)\n"
-                    f"# rmse = {opt_rmse:f}\n"
-                    f"# T = {experiment.temperature:.2f} K"
-                ),
-            )
+            _assignment_run = True
 
         # Fit susceptibility model to experimental chemical shifts.
         susc_model.fit_to(molecule, experiment, average_labels=average_labels)
@@ -642,6 +602,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         # Parameter covariance contour plot (optional)
         _cov_params = getattr(config, "susc_fit_covariance_params", [])
         if len(_cov_params) == 2:
+            logger.info(
+                "Computing parameter covariance grid (%s vs %s) — this may take a minute",
+                _cov_params[0], _cov_params[1],
+            )
             try:
                 with spec.context():
                     plot_param_covariance(
@@ -669,10 +633,11 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     "Covariance plot skipped: %s", _cov_exc
                 )
 
-        # Unique isotopes in molecule (insertion-ordered)
-        _isotopes_mol = list(
-            dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
-        )
+        # Unique NMR isotopes in molecule (insertion-ordered, skip None).
+        _isotopes_mol = [
+            iso for iso in dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+            if iso is not None
+        ]
 
         if config.susc_fit_figure("shift_components"):
             for _iso in _isotopes_mol:
@@ -988,7 +953,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             _mol_label_colors = _mol_label_colors_all
 
             _isotopes_present = list(
-                dict.fromkeys(nuc.isotope for nuc in molecule.nuclei)
+                [iso for iso in dict.fromkeys(nuc.isotope for nuc in molecule.nuclei) if iso is not None]
             )
             for _iso in _isotopes_present:
                 _avgs_iso = [
@@ -1010,15 +975,18 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     }
                     if _mol_label_colors else None
                 )
+                _iso_shift_range = [np.min(_avgs_iso), np.max(_avgs_iso)]
+                _iso_lw_output = resolve_output_linewidths(
+                    molecule, _iso_shift_range
+                )
                 with spec.context():
                     plot_raw_deconv_pred(
                         molecule=molecule,
                         isotope=_iso,
-                        shift_range=[
-                            np.min(_avgs_iso), np.max(_avgs_iso)
-                        ],
+                        shift_range=_iso_shift_range,
                         experiment=experiment,
                         spec=spec,
+                        effective_linewidths_by_label=_iso_lw_output.values_by_label,
                         save=True,
                         show=options.runtime.show_plots,
                         save_name=os.path.join(
@@ -1062,6 +1030,17 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     verbose=True,
                     window_title=f"VT Spectra ({_iso})",
                 )
+
+    # Write assigned experiments in one wide-format file (preserves isotope
+    # column and multi-temperature/field layout matching the input format).
+    if _assignment_run:
+        save_experiments(
+            experiments,
+            file_name=os.path.join(
+                config.project_name, "assigned_experiment.csv"
+            ),
+            delimiter=delimiter,
+        )
 
     # Write shift data to file
     _comment_base = f"Hyperfines from file {config.hyperfine_file}\n"
@@ -1219,7 +1198,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 nuc.shift.lw = np.float64(lw_hz / (_gamma * _b0))
 
     _isotopes_final = list(
-        dict.fromkeys(nuc.isotope for nuc in mol.nuclei)
+        [iso for iso in dict.fromkeys(nuc.isotope for nuc in mol.nuclei) if iso is not None]
     )
     for _iso_final in _isotopes_final:
         _avgs_iso_final = [

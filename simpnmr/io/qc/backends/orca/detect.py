@@ -21,6 +21,8 @@ ORCA_A5_SIGNATURE = (
 ORCA_A6_SIGNATURE = (
     "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,     #,   #   #,  ,#"
 )
+# ORCA 6.1+ changed the ASCII banner; fall back to version-string detection.
+ORCA_A6_VERSION_SIGNATURE = "Program Version 6."
 
 A_ORB_SIGNATURE = "A(ORB)"
 
@@ -78,11 +80,14 @@ def is_orca_a5_output(file_name: str) -> bool:
 
 
 def is_orca_a6_output(file_name: str) -> bool:
+    found_banner = False
     with open(file_name, "r") as f:
         for line in f:
             if ORCA_A6_SIGNATURE in line:
                 return True
-    return False
+            if ORCA_A6_VERSION_SIGNATURE in line:
+                found_banner = True
+    return found_banner
 
 
 def detect_hfc_has_orb(file_name: str) -> bool:

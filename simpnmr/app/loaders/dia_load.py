@@ -57,18 +57,24 @@ def load_diamagnetic_shifts(
 
         if "atom_label" in dia.columns:
             key_kind = "atom_label"
-            dia_by_key = {
-                str(k): float(v) for k, v in zip(dia["atom_label"], dia["shift"])
-            }
+            label_col = "atom_label"
         elif "chem_label" in dia.columns:
             key_kind = "chem_label"
-            dia_by_key = {
-                str(k): float(v) for k, v in zip(dia["chem_label"], dia["shift"])
-            }
+            label_col = "chem_label"
         else:
             raise KeyError(
                 "atom_label or chem_label not present in diamagnetic shift file"
             )
+
+        if "isotope" in dia.columns:
+            dia_by_key = {
+                (str(k), str(iso)): float(v)
+                for k, iso, v in zip(dia[label_col], dia["isotope"], dia["shift"])
+            }
+        else:
+            dia_by_key = {
+                str(k): float(v) for k, v in zip(dia[label_col], dia["shift"])
+            }
 
     elif file_type == "dft":
         data = rdrs.QCCS.guess_from_file(file_name)

@@ -472,7 +472,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         # Calculate average shifts
         molecule.average_shifts()
 
-        unique_isotopes = sorted({nuc.isotope for nuc in molecule.nuclei})
+        unique_isotopes = sorted({nuc.isotope for nuc in molecule.nuclei if nuc.isotope is not None})
         _iso_suffix = len(unique_isotopes) > 1
 
         for iso in unique_isotopes:

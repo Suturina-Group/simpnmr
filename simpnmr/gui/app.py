@@ -359,13 +359,25 @@ class ConfigForm(QScrollArea):
         self._sec_assign = _section("Assignment  [fit only]")
         self._assign_method = QComboBox()
         self._assign_method.addItems(["fixed", "hungarian", "permute"])
+        # Hungarian fields
+        self._assign_search = QComboBox()
+        self._assign_search.addItems(["fast", "balanced", "robust"])
         self._assign_area_w = QLineEdit("0.0")
         self._assign_width_w = QLineEdit("0.0")
         self._assign_r1_w = QLineEdit("0.0")
+        # Permute fields
+        self._assign_groups = QLineEdit()
+        self._assign_groups.setPlaceholderText(
+            "e.g. H1 H2 H3; H4 H5  (semicolon-separated groups)"
+        )
         self._sec_assign.layout().addRow("Method:", self._assign_method)
+        self._sec_assign.layout().addRow("Search mode:", self._assign_search)
         self._sec_assign.layout().addRow("Area weight:", self._assign_area_w)
         self._sec_assign.layout().addRow("Width weight:", self._assign_width_w)
         self._sec_assign.layout().addRow("R1 weight:", self._assign_r1_w)
+        self._sec_assign.layout().addRow("Groups:", self._assign_groups)
+        self._assign_method.currentTextChanged.connect(self._on_assign_method_changed)
+        self._on_assign_method_changed(self._assign_method.currentText())
         lay.addWidget(self._sec_assign)
 
         # ── FIT-ONLY: Susceptibility fit ──────────────────────────────
@@ -619,6 +631,19 @@ class ConfigForm(QScrollArea):
             (self._susc_dxy, is_split),
             (self._susc_dxz, is_split),
             (self._susc_dyz, is_split),
+        ):
+            self._set_row_visible(form, widget, visible)
+
+    def _on_assign_method_changed(self, method: str):
+        form = self._sec_assign.layout()
+        is_hungarian = method == "hungarian"
+        is_permute = method == "permute"
+        for widget, visible in (
+            (self._assign_search, is_hungarian),
+            (self._assign_area_w, is_hungarian),
+            (self._assign_width_w, is_hungarian),
+            (self._assign_r1_w, is_hungarian),
+            (self._assign_groups, is_permute),
         ):
             self._set_row_visible(form, widget, visible)
 
@@ -911,15 +936,28 @@ class ConfigForm(QScrollArea):
 
         # Fit-only: Assignment
         if not is_predict:
-            d["assignment"] = {"method": self._assign_method.currentText()}
-            for key, field in [
-                ("area_weight", self._assign_area_w),
-                ("width_weight", self._assign_width_w),
-                ("r1_weight", self._assign_r1_w),
-            ]:
-                val = field.text().strip()
-                if val and float(val) != 0.0:
-                    d["assignment"][key] = float(val)
+            method = self._assign_method.currentText()
+            d["assignment"] = {"method": method}
+            if method == "hungarian":
+                d["assignment"]["search"] = {
+                    "mode": self._assign_search.currentText()
+                }
+                for key, field in [
+                    ("area_weight", self._assign_area_w),
+                    ("width_weight", self._assign_width_w),
+                    ("r1_weight", self._assign_r1_w),
+                ]:
+                    val = field.text().strip()
+                    if val and float(val) != 0.0:
+                        d["assignment"][key] = float(val)
+            elif method == "permute":
+                groups_text = self._assign_groups.text().strip()
+                if groups_text:
+                    groups = [
+                        g.split() for g in groups_text.split(";") if g.strip()
+                    ]
+                    if groups:
+                        d["assignment"]["groups"] = groups
 
         # Fit-only: Susceptibility fit
         if not is_predict:
@@ -1231,6 +1269,14 @@ class ConfigForm(QScrollArea):
         self._assign_area_w.setText(str(assign.get("area_weight", "0.0")))
         self._assign_width_w.setText(str(assign.get("width_weight", "0.0")))
         self._assign_r1_w.setText(str(assign.get("r1_weight", "0.0")))
+        search_mode = (assign.get("search") or {}).get("mode", "fast")
+        idx = self._assign_search.findText(search_mode)
+        if idx >= 0:
+            self._assign_search.setCurrentIndex(idx)
+        groups = assign.get("groups", [])
+        self._assign_groups.setText(
+            "; ".join(" ".join(g) for g in groups) if groups else ""
+        )
 
         # Susceptibility fit (fit)
         susc_fit = d.get("susc_fit", {})

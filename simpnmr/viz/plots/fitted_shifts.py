@@ -94,19 +94,25 @@ def plot_fitted_shifts(
         A tuple ``(fig, ax)``.
     """
 
+    # Deduplicate by (chem_label, isotope) so same-name labels from different
+    # isotopes are kept separate.
     seen = set()
-    unique_nuclei = [
-        seen.add(nuc.chem_label) or nuc
-        for nuc in molecule.nuclei
-        if nuc.chem_label not in seen
-    ]
+    unique_nuclei = []
+    for nuc in molecule.nuclei:
+        key = (nuc.chem_label, nuc.isotope)
+        if key not in seen:
+            seen.add(key)
+            unique_nuclei.append(nuc)
+
+    def _exp_key(nuc):
+        return (nuc.chem_label, nuc.isotope) if nuc.isotope is not None else nuc.chem_label
 
     # Only plot nuclei whose chem_label has an experimental signal
-    _present_labels = set()
+    _present_keys = set()
     for nuc in unique_nuclei:
         try:
-            experiment[nuc.chem_label]
-            _present_labels.add(nuc.chem_label)
+            experiment[_exp_key(nuc)]
+            _present_keys.add(_exp_key(nuc))
         except (KeyError, TypeError):
             logger.warning(
                 "chem_label '%s' absent from experiment — skipped",
@@ -114,16 +120,17 @@ def plot_fitted_shifts(
             )
     unique_nuclei = [
         nuc for nuc in unique_nuclei
-        if nuc.chem_label in _present_labels
+        if _exp_key(nuc) in _present_keys
     ]
+    _present_labels = {nuc.chem_label for nuc in unique_nuclei}
 
     if average:
         calc_shifts = {
             nuc.chem_label: nuc.shift.avg for nuc in unique_nuclei
         }
         exp = {
-            label: experiment[label].shift
-            for label in calc_shifts.keys()
+            nuc.chem_label: experiment[_exp_key(nuc)].shift
+            for nuc in unique_nuclei
         }
     else:
         calc_shifts = {nuc.chem_label: [] for nuc in unique_nuclei}
@@ -132,8 +139,8 @@ def plot_fitted_shifts(
                 continue
             calc_shifts[nuc.chem_label].append(nuc.shift.total)
         exp = {
-            label: [experiment[label].shift] * len(calc_shifts[label])
-            for label in calc_shifts.keys()
+            nuc.chem_label: [experiment[_exp_key(nuc)].shift] * len(calc_shifts[nuc.chem_label])
+            for nuc in unique_nuclei
         }
 
     # Element-specific markers in periodic-table order.
