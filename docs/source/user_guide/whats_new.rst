@@ -216,6 +216,32 @@ A new standalone utility automatically assigns NMR-equivalent group labels
 
 ----
 
+Shared permutation assignment across temperatures
+--------------------------------------------------
+
+When using ``assignment: method: permute`` with multiple experimental
+temperatures, the new ``shared: true`` option finds a **single permutation
+that minimises the sum of RMSEs across all temperatures simultaneously**,
+rather than optimising each temperature independently.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [Ha1, Ha2, Ha3]
+        - [Hb1, Hb2]
+      shared: true
+
+Each temperature is still fitted with its own susceptibility parameters after
+the shared assignment is locked in.  The search is parallelised over
+permutations in the same way as the standard per-temperature permute.
+
+In the GUI, a **Shared assignment across temperatures** checkbox appears when
+the ``permute`` method is selected.
+
+----
+
 Bug fixes
 ----------
 

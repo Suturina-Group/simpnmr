@@ -170,6 +170,7 @@ class FitSuscConfig(Config):
             "area_weight",
             "width_weight",
             "r1_weight",
+            "shared",
         ],
         "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures"],
@@ -240,6 +241,7 @@ class FitSuscConfig(Config):
         self._assignment_area_weight = 0.0
         self._assignment_width_weight = 0.0
         self._assignment_r1_weight = 0.0
+        self._assignment_shared = False
         self._nuclei_include = ""
         self._nuclei_include_groups = []
         self._nuclei_isotope_order: list[str] = []
@@ -880,6 +882,19 @@ class FitSuscConfig(Config):
             raise ValueError("assignment:r1_weight must be non-negative")
         self._assignment_r1_weight = fvalue
         return None
+
+    @property
+    def assignment_shared(self) -> bool:
+        return self._assignment_shared
+
+    @assignment_shared.setter
+    def assignment_shared(self, value) -> None:
+        if isinstance(value, bool):
+            self._assignment_shared = value
+        elif isinstance(value, str):
+            self._assignment_shared = value.lower() in ("true", "yes", "1")
+        else:
+            self._assignment_shared = bool(value)
 
     @property
     def chem_labels_file(self) -> str:

@@ -265,7 +265,7 @@ function filterLabels(elem) {{
 // Single framed label per group, on a representative atom
 labels.forEach(addLabelToViewer);
 
-// PCS isosurface — positive lobe blue, negative lobe red
+// PCS isosurface — positive lobe red, negative lobe blue
 let _isoShapes = [];
 function renderIsosurface(isoval) {{
   _isoShapes.forEach(s => viewer.removeShape(s));

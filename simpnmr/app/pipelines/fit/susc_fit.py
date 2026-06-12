@@ -403,13 +403,79 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         _hungarian_done = True
         _assignment_run = True
 
+    # Shared permute assignment (run once, before the main loop).
+    # Finds one permutation that minimises the sum of RMSEs across all
+    # temperatures; each condition is then fitted independently with that
+    # fixed assignment.
+    _permute_done = False
+    if (
+        config.assignment_method == "permute"
+        and getattr(config, "assignment_shared", False)
+        and len(experiments) > 1
+    ):
+        _ref_mol = molecules[0]
+        if not len(config.assignment_groups):
+            config.assignment_groups = [
+                list({nuc.chem_label for nuc in _ref_mol.nuclei})
+            ]
+        _mol_labels_shared = {nuc.chem_label for nuc in _ref_mol.nuclei}
+        _perm_exp_ref = copy.deepcopy(experiments[0])
+        _perm_exp_ref._signals = [
+            s for s in experiments[0].signals
+            if s.assignment in _mol_labels_shared
+        ]
+        permed_assignments_shared = generate_assignment_permutations(
+            experiment=_perm_exp_ref, groups=config.assignment_groups
+        )
+        logger.info(
+            "Shared permute: %d permutations × %d temperatures",
+            len(permed_assignments_shared), len(experiments),
+        )
+        num_threads = (
+            mp.cpu_count() - 1
+            if config.num_threads == "auto"
+            else config.num_threads
+        )
+        num_threads = min(num_threads, len(permed_assignments_shared))
+        pool = mp.Pool(num_threads)
+        iterables_shared = [
+            (
+                molecules,
+                perm,
+                susc_models,
+                [copy.deepcopy(e) for e in experiments],
+                average_labels,
+                options.runtime.echo_r2,
+            )
+            for perm in permed_assignments_shared
+        ]
+        results_shared = pool.starmap(_obtain_r2a_multi, iterables_shared)
+        pool.close()
+        pool.join()
+        best_perm = permed_assignments_shared[np.nanargmin(results_shared)]
+        opt_rmse_shared = np.nanmin(results_shared)
+        logger.info(
+            "Shared permute completed: best total RMSE = %.6f", opt_rmse_shared
+        )
+        # Apply the best assignment to all experiments
+        for experiment in experiments:
+            _mol_labels = {nuc.chem_label for nuc in molecules[0].nuclei}
+            _fit_sigs = [
+                s for s in experiment.signals
+                if s.assignment in _mol_labels
+            ]
+            for sig, new in zip(_fit_sigs, best_perm):
+                sig.assignment = new
+        _permute_done = True
+        _assignment_run = True
+
     # Run fit for all experiments
     for molecule, susc_model, experiment in zip(
         molecules, susc_models, experiments
     ):
         # If permuting assignments, then first
         # run all assignment permutations to find best one
-        if config.assignment_method == "permute":
+        if config.assignment_method == "permute" and not _permute_done:
             # If no permutation groups provided, permute all
             if not len(config.assignment_groups):
                 config.assignment_groups = [
@@ -1230,6 +1296,33 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             )
 
     return 0
+
+
+def _obtain_r2a_multi(
+    molecules: list,
+    assignment: list[str],
+    model_list: list,
+    experiments: list,
+    average_labels: list[list[str]],
+    echo_r2: bool,
+) -> float:
+    """Sum of RMSEs across all temperatures for a shared permutation assignment.
+
+    Used to find the single best permutation that minimises the total residual
+    across all experimental temperatures simultaneously.
+    """
+    total = 0.0
+    for molecule, model, experiment in zip(molecules, model_list, experiments):
+        exp_copy = copy.deepcopy(experiment)
+        for it, new in enumerate(assignment):
+            exp_copy.signals[it].assignment = new
+        model_copy = copy.deepcopy(model)
+        model_copy.fit_to(molecule, exp_copy, average_labels=average_labels)
+        rmse = model_copy.rmse if model_copy.fit_status else float("nan")
+        total += rmse
+    if echo_r2:
+        print(total)
+    return total
 
 
 def _obtain_r2a(

@@ -370,12 +370,14 @@ class ConfigForm(QScrollArea):
         self._assign_groups.setPlaceholderText(
             "e.g. H1 H2 H3; H4 H5  (semicolon-separated groups)"
         )
+        self._assign_shared = QCheckBox("Shared assignment across temperatures")
         self._sec_assign.layout().addRow("Method:", self._assign_method)
         self._sec_assign.layout().addRow("Search mode:", self._assign_search)
         self._sec_assign.layout().addRow("Area weight:", self._assign_area_w)
         self._sec_assign.layout().addRow("Width weight:", self._assign_width_w)
         self._sec_assign.layout().addRow("R1 weight:", self._assign_r1_w)
         self._sec_assign.layout().addRow("Groups:", self._assign_groups)
+        self._sec_assign.layout().addRow("", self._assign_shared)
         self._assign_method.currentTextChanged.connect(self._on_assign_method_changed)
         self._on_assign_method_changed(self._assign_method.currentText())
         lay.addWidget(self._sec_assign)
@@ -644,6 +646,7 @@ class ConfigForm(QScrollArea):
             (self._assign_width_w, is_hungarian),
             (self._assign_r1_w, is_hungarian),
             (self._assign_groups, is_permute),
+            (self._assign_shared, is_permute),
         ):
             self._set_row_visible(form, widget, visible)
 
@@ -958,6 +961,8 @@ class ConfigForm(QScrollArea):
                     ]
                     if groups:
                         d["assignment"]["groups"] = groups
+                if self._assign_shared.isChecked():
+                    d["assignment"]["shared"] = True
 
         # Fit-only: Susceptibility fit
         if not is_predict:
@@ -1277,6 +1282,7 @@ class ConfigForm(QScrollArea):
         self._assign_groups.setText(
             "; ".join(" ".join(g) for g in groups) if groups else ""
         )
+        self._assign_shared.setChecked(bool(assign.get("shared", False)))
 
         # Susceptibility fit (fit)
         susc_fit = d.get("susc_fit", {})
