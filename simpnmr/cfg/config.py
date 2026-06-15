@@ -171,6 +171,7 @@ class FitSuscConfig(Config):
             "width_weight",
             "r1_weight",
             "shared",
+            "correlations",
         ],
         "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures"],
@@ -242,6 +243,7 @@ class FitSuscConfig(Config):
         self._assignment_width_weight = 0.0
         self._assignment_r1_weight = 0.0
         self._assignment_shared = False
+        self._assignment_correlations: list[dict] = []
         self._nuclei_include = ""
         self._nuclei_include_groups = []
         self._nuclei_isotope_order: list[str] = []
@@ -882,6 +884,51 @@ class FitSuscConfig(Config):
             raise ValueError("assignment:r1_weight must be non-negative")
         self._assignment_r1_weight = fvalue
         return None
+
+    @property
+    def assignment_correlations(self) -> list[dict]:
+        """List of HMBC/HSQC correlation constraints for permute assignment.
+
+        Each entry is a dict with keys ``h`` (H experimental signal label),
+        ``c`` (C experimental signal label), ``type`` (``"hsqc"`` or
+        ``"hmbc"``), and optionally ``cutoff`` (Å, overrides default).
+        """
+        return self._assignment_correlations
+
+    @assignment_correlations.setter
+    def assignment_correlations(self, value) -> None:
+        if value is None or value == "" or value == []:
+            self._assignment_correlations = []
+            return
+        if not isinstance(value, list):
+            raise ValueError(
+                "assignment:correlations must be a list of {h, c, type} dicts"
+            )
+        parsed = []
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"assignment:correlations[{i}] must be a mapping with keys "
+                    "'h', 'c', and optionally 'type' and 'cutoff'"
+                )
+            if "h" not in item or "c" not in item:
+                raise ValueError(
+                    f"assignment:correlations[{i}] must have 'h' and 'c' keys"
+                )
+            corr = {
+                "h": str(item["h"]),
+                "c": str(item["c"]),
+                "type": str(item.get("type", "hsqc")).lower(),
+            }
+            if corr["type"] not in ("hsqc", "hmbc"):
+                raise ValueError(
+                    f"assignment:correlations[{i}].type must be 'hsqc' or 'hmbc', "
+                    f"got {corr['type']!r}"
+                )
+            if "cutoff" in item:
+                corr["cutoff"] = float(item["cutoff"])
+            parsed.append(corr)
+        self._assignment_correlations = parsed
 
     @property
     def assignment_shared(self) -> bool:

@@ -427,6 +427,25 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         permed_assignments_shared = generate_assignment_permutations(
             experiment=_perm_exp_ref, groups=config.assignment_groups
         )
+        _correlations_shared = getattr(config, "assignment_correlations", [])
+        if _correlations_shared:
+            permed_assignments_shared = _filter_by_correlations(
+                permed_assignments_shared,
+                _perm_exp_ref._signals,
+                _correlations_shared,
+                _ref_mol,
+                experiments[0],
+            )
+            logger.info(
+                "After correlation filter: %d permutations remain",
+                len(permed_assignments_shared),
+            )
+            if not permed_assignments_shared:
+                logger.warning(
+                    "All permutations eliminated by correlation constraints "
+                    "— skipping shared permute assignment"
+                )
+                _permute_done = False
         logger.info(
             "Shared permute: %d permutations × %d temperatures",
             len(permed_assignments_shared), len(experiments),
@@ -500,6 +519,27 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             logger.info(
                 "There are %s possible permutations", len(permed_assignments)
             )
+
+            # Filter by HMBC/HSQC correlation constraints
+            _correlations = getattr(config, "assignment_correlations", [])
+            if _correlations:
+                permed_assignments = _filter_by_correlations(
+                    permed_assignments,
+                    _perm_exp._signals,
+                    _correlations,
+                    molecule,
+                    experiment,
+                )
+                logger.info(
+                    "After correlation filter: %d permutations remain",
+                    len(permed_assignments),
+                )
+                if not permed_assignments:
+                    logger.warning(
+                        "All permutations eliminated by correlation constraints "
+                        "— skipping permute assignment for this experiment"
+                    )
+                    continue
 
             # For each permutation, fit tensor and store r2_adjusted
 
@@ -1296,6 +1336,95 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             )
 
     return 0
+
+
+_HSQC_CUTOFF_ANG = 1.7   # direct H–C bond
+_HMBC_CUTOFF_ANG = 4.5   # 2–3 bond H–C through-bond distance
+
+
+def _are_connected(
+    h_chem_label: str,
+    c_chem_label: str,
+    molecule,
+    corr_type: str,
+    cutoff: float | None = None,
+) -> bool:
+    """Return True if any nucleus with h_chem_label is within cutoff Å of any
+    nucleus with c_chem_label.
+
+    Default cutoffs: 1.7 Å for HSQC (1-bond H–C), 4.5 Å for HMBC (2–3 bond).
+    """
+    if cutoff is None:
+        cutoff = _HSQC_CUTOFF_ANG if corr_type == "hsqc" else _HMBC_CUTOFF_ANG
+    h_coords = [
+        np.asarray(nuc.coord, dtype=float)
+        for nuc in molecule.nuclei
+        if nuc.chem_label == h_chem_label
+    ]
+    c_coords = [
+        np.asarray(nuc.coord, dtype=float)
+        for nuc in molecule.nuclei
+        if nuc.chem_label == c_chem_label
+    ]
+    if not h_coords or not c_coords:
+        return True  # unknown label — don't filter
+    for h in h_coords:
+        for c in c_coords:
+            if float(np.linalg.norm(h - c)) <= cutoff:
+                return True
+    return False
+
+
+def _filter_by_correlations(
+    permed_assignments: list,
+    fittable_signals: list,
+    correlations: list[dict],
+    molecule,
+    experiment,
+) -> list:
+    """Remove permutations inconsistent with HMBC/HSQC correlation constraints.
+
+    For each correlation ``{h, c, type}``:
+    - ``h``: current assignment label of the experimental H signal being permuted.
+    - ``c``: current assignment label of the experimental C signal (fixed, not permuted).
+
+    A permutation is kept only if, for every constraint, the proposed H chem_label
+    is within the expected distance of the C chem_label still assigned to the C signal.
+    """
+    if not correlations:
+        return permed_assignments
+
+    # Map current H signal assignment → index in fittable_signals list
+    sig_to_idx: dict[str, int] = {
+        s.assignment: i for i, s in enumerate(fittable_signals)
+    }
+    # Map C signal assignment label → its current chem_label (unchanged)
+    c_label_map: dict[str, str] = {
+        s.assignment: s.assignment
+        for s in experiment.signals
+        if s.isotope is None or s.isotope not in ("1H",)
+    }
+
+    valid = []
+    for assignment in permed_assignments:
+        ok = True
+        for corr in correlations:
+            h_exp = corr["h"]
+            c_exp = corr["c"]
+            idx = sig_to_idx.get(h_exp)
+            if idx is None:
+                continue  # H signal not in permuted set — skip
+            h_chem = assignment[idx]
+            c_chem = c_label_map.get(c_exp, c_exp)
+            if not _are_connected(
+                h_chem, c_chem, molecule, corr["type"],
+                corr.get("cutoff"),
+            ):
+                ok = False
+                break
+        if ok:
+            valid.append(assignment)
+    return valid
 
 
 def _obtain_r2a_multi(

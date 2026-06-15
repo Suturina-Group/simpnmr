@@ -216,6 +216,40 @@ A new standalone utility automatically assigns NMR-equivalent group labels
 
 ----
 
+HMBC/HSQC correlation constraints for permutation assignment
+-------------------------------------------------------------
+
+When using ``assignment: method: permute``, HMBC and HSQC correlation data
+can be provided to **eliminate impossible permutations before the search**,
+dramatically reducing the combinatorial space.
+
+Each correlation specifies a pair of experimental signal labels (H and C)
+that are known to be connected by 1 bond (HSQC) or 2–3 bonds (HMBC).  Any
+permutation that would assign the H label to a nucleus too far from the
+corresponding C nucleus is discarded.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [Ha1, Ha2, Ha3]
+      correlations:
+        - {h: Ha1, c: Ca1, type: hsqc}   # direct H–C bond (cutoff 1.7 Å)
+        - {h: Ha2, c: Cb3, type: hmbc}   # 2–3 bond H–C (cutoff 4.5 Å)
+        - {h: Ha3, c: Ca2, type: hmbc, cutoff: 5.0}  # custom cutoff
+
+Distance cutoffs default to 1.7 Å for HSQC and 4.5 Å for HMBC; override
+with ``cutoff`` in Å.  Constraints are also applied to the shared
+multi-temperature permute search when ``shared: true``.
+
+In the GUI, the **Correlations** field accepts comma-separated entries in
+the form ``H_label:C_label:type``, e.g.::
+
+    Ha1:Ca1:hsqc, Ha2:Cb3:hmbc
+
+----
+
 Shared permutation assignment across temperatures
 --------------------------------------------------
 
