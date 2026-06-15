@@ -424,28 +424,25 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             s for s in experiments[0].signals
             if s.assignment in _mol_labels_shared
         ]
-        permed_assignments_shared = generate_assignment_permutations(
-            experiment=_perm_exp_ref, groups=config.assignment_groups
-        )
         _correlations_shared = getattr(config, "assignment_correlations", [])
-        if _correlations_shared:
-            permed_assignments_shared = _filter_by_correlations(
-                permed_assignments_shared,
-                _perm_exp_ref._signals,
-                _correlations_shared,
-                _ref_mol,
-                experiments[0],
+        _sig_allowed_shared = (
+            _signal_allowed_from_correlations(
+                config.assignment_groups, _correlations_shared,
+                _ref_mol, experiments[0],
             )
-            logger.info(
-                "After correlation filter: %d permutations remain",
-                len(permed_assignments_shared),
+            if _correlations_shared else None
+        )
+        permed_assignments_shared = generate_assignment_permutations(
+            experiment=_perm_exp_ref,
+            groups=config.assignment_groups,
+            signal_allowed=_sig_allowed_shared,
+        )
+        if not permed_assignments_shared:
+            logger.warning(
+                "No valid permutations after applying correlation constraints "
+                "— skipping shared permute assignment"
             )
-            if not permed_assignments_shared:
-                logger.warning(
-                    "All permutations eliminated by correlation constraints "
-                    "— skipping shared permute assignment"
-                )
-                _permute_done = False
+            _permute_done = False
         logger.info(
             "Shared permute: %d permutations × %d temperatures",
             len(permed_assignments_shared), len(experiments),
@@ -512,34 +509,28 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 s for s in experiment.signals
                 if s.assignment in _mol_labels_perm
             ]
+            _correlations = getattr(config, "assignment_correlations", [])
+            _sig_allowed = (
+                _signal_allowed_from_correlations(
+                    config.assignment_groups, _correlations, molecule, experiment
+                )
+                if _correlations else None
+            )
             permed_assignments = generate_assignment_permutations(
-                experiment=_perm_exp, groups=config.assignment_groups
+                experiment=_perm_exp,
+                groups=config.assignment_groups,
+                signal_allowed=_sig_allowed,
             )
 
             logger.info(
-                "There are %s possible permutations", len(permed_assignments)
+                "There are %s valid permutations", len(permed_assignments)
             )
-
-            # Filter by HMBC/HSQC correlation constraints
-            _correlations = getattr(config, "assignment_correlations", [])
-            if _correlations:
-                permed_assignments = _filter_by_correlations(
-                    permed_assignments,
-                    _perm_exp._signals,
-                    _correlations,
-                    molecule,
-                    experiment,
+            if not permed_assignments:
+                logger.warning(
+                    "No valid permutations after applying correlation constraints "
+                    "— skipping permute assignment for this experiment"
                 )
-                logger.info(
-                    "After correlation filter: %d permutations remain",
-                    len(permed_assignments),
-                )
-                if not permed_assignments:
-                    logger.warning(
-                        "All permutations eliminated by correlation constraints "
-                        "— skipping permute assignment for this experiment"
-                    )
-                    continue
+                continue
 
             # For each permutation, fit tensor and store r2_adjusted
 
@@ -1373,6 +1364,51 @@ def _are_connected(
             if float(np.linalg.norm(h - c)) <= cutoff:
                 return True
     return False
+
+
+def _signal_allowed_from_correlations(
+    groups: list[list[str]],
+    correlations: list[dict],
+    molecule,
+    experiment,
+) -> dict[str, set[str]]:
+    """Precompute allowed chem_labels per signal from HMBC/HSQC constraints.
+
+    Returns a dict ``{signal_label: set_of_allowed_chem_labels}`` for every
+    signal that appears in at least one correlation constraint.  Signals with
+    no constraints are absent (meaning all group labels are allowed).
+    """
+    # C signal label → chem_label (fixed, not permuted)
+    c_label_map: dict[str, str] = {
+        s.assignment: s.assignment for s in experiment.signals
+    }
+    # Build set of chem_labels per group for fast lookup
+    label_to_group: dict[str, list[str]] = {}
+    for group in groups:
+        for lbl in group:
+            label_to_group[lbl] = group
+
+    # For each constrained H signal, intersect allowed sets across constraints
+    signal_allowed: dict[str, set[str]] = {}
+    for corr in correlations:
+        h_exp = corr["h"]
+        c_exp = corr["c"]
+        c_chem = c_label_map.get(c_exp, c_exp)
+        corr_type = corr.get("type", "hsqc")
+        cutoff = corr.get("cutoff")
+        group = label_to_group.get(h_exp)
+        if group is None:
+            continue  # signal not in any permuted group
+        # Which chem_labels in this group are valid for h_exp given this constraint?
+        valid = {
+            lbl for lbl in group
+            if _are_connected(lbl, c_chem, molecule, corr_type, cutoff)
+        }
+        if h_exp in signal_allowed:
+            signal_allowed[h_exp] &= valid   # intersect multiple constraints
+        else:
+            signal_allowed[h_exp] = valid
+    return signal_allowed
 
 
 def _filter_by_correlations(

@@ -21,9 +21,51 @@ from simpnmr.core.fitting import models
 logger = logging.getLogger(__name__)
 
 
+def _constrained_group_perms(
+    signals: list[str],
+    labels_pool: list[str],
+    signal_allowed: dict[str, set[str]],
+) -> list[list[str]]:
+    """Generate permutations of labels_pool for signals using backtracking.
+
+    Only branches where the proposed label is in ``signal_allowed[signal]``
+    (or all labels when unconstrained) are explored, pruning invalid
+    sub-trees immediately rather than generating-then-filtering.
+
+    Args:
+        signals: Ordered signal labels in this group (their current assignments).
+        labels_pool: The same set of chem_labels to be redistributed.
+        signal_allowed: signal_label → set of allowed chem_labels.
+            Absent keys mean "no constraint" (all labels allowed).
+
+    Returns:
+        List of valid permutations, each a list of chem_labels in ``signals``
+        order.
+    """
+    results: list[list[str]] = []
+
+    def _bt(pos: int, remaining: list[str], current: list[str]) -> None:
+        if pos == len(signals):
+            results.append(current[:])
+            return
+        sig = signals[pos]
+        allowed = signal_allowed.get(sig)  # None → unconstrained
+        for i, label in enumerate(remaining):
+            if allowed is not None and label not in allowed:
+                continue
+            current.append(label)
+            _bt(pos + 1, remaining[:i] + remaining[i + 1:], current)
+            current.pop()
+
+    _bt(0, list(labels_pool), [])
+    return results
+
+
+
 def generate_assignment_permutations(
     experiment: Experiment,
     groups: list[list[str]] | None = None,
+    signal_allowed: dict[str, set[str]] | None = None,
 ) -> list[list[str]]:
     """Generate assignment permutations consistent with grouping constraints.
 
@@ -75,8 +117,14 @@ def generate_assignment_permutations(
     fixed = [[lab] for lab in exp_labels if lab not in grouped_labels]
     group_list = group_list + fixed
 
-    # Generate all permutations subject to grouping constraints.
-    per_group = [permutations(group) for group in group_list]
+    # Generate permutations subject to grouping (and optional signal) constraints.
+    if signal_allowed:
+        per_group = [
+            _constrained_group_perms(group, group, signal_allowed)
+            for group in group_list
+        ]
+    else:
+        per_group = [list(permutations(group)) for group in group_list]
     perms = [
         list(chain.from_iterable(e))
         for e in product(*per_group, repeat=1)
