@@ -6,6 +6,7 @@ User Guide
    :maxdepth: 1
    :hidden:
 
+   whats_new
    installation
    workflows
    input_files
@@ -16,6 +17,12 @@ User Guide
 
 .. grid:: 2
    :gutter: 3
+
+   .. grid-item-card:: What's New
+      :link: whats_new
+      :link-type: doc
+
+      Major features and improvements in the current development branch.
 
    .. grid-item-card:: Installation
       :link: installation

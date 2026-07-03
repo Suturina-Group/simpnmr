@@ -103,6 +103,9 @@ class RelaxationEvaluation:
             evaluation.
         r1: Optional decomposition for ``R1``.
         r2: Optional decomposition for ``R2``.
+        tau_R: Optional rotational correlation time used (s).
+        tau_e1: Optional electronic T1e correlation time used (s).
+        tau_e2: Optional electronic T2e correlation time used (s).
     """
 
     def __init__(
@@ -110,7 +113,13 @@ class RelaxationEvaluation:
         relaxation_model: str | None = None,
         r1: RelaxationChannels | None = None,
         r2: RelaxationChannels | None = None,
+        tau_R: float | None = None,
+        tau_e1: float | None = None,
+        tau_e2: float | None = None,
     ) -> None:
         self.relaxation_model = relaxation_model
         self.r1 = r1 if r1 is not None else RelaxationChannels()
         self.r2 = r2 if r2 is not None else RelaxationChannels()
+        self.tau_R = tau_R
+        self.tau_e1 = tau_e1
+        self.tau_e2 = tau_e2

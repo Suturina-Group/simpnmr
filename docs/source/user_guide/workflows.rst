@@ -99,12 +99,12 @@ Minimal input example
      method: fixed
 
    susc_fit:
-     type: isoaxrho
+     type: isoaxrh
      input_units: A3
      variables:
        iso: [fit, 0.0]
        ax: [fit, 0.0]
-       rho_over_ax: [fix, 0.0]
+       rh_over_ax: [fix, 0.0]
 
 Optional additions
 ^^^^^^^^^^^^^^^^^^

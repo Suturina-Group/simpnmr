@@ -6,9 +6,36 @@
 Provides gyromagnetic ratios (MHz/T) for common elements and isotopes.
 """
 
-# # Values from easyspin, most abundant isotope taken
-# unless otherwise stated
+import re
+
+
+def get_nuclear_gamma(key: str) -> float:
+    """Return the gyromagnetic ratio (MHz/T) for an isotope or atom label.
+
+    Tries ``key`` directly first (e.g. ``"15N"``, ``"19F"``), then falls back
+    to the element-only entry after stripping digits (e.g. ``"N1"`` → ``"N"``).
+
+    Args:
+        key: Isotope string (``"15N"``) or atom label with index (``"N1"``).
+
+    Returns:
+        Gyromagnetic ratio in MHz/T.
+
+    Raises:
+        KeyError: If neither the full key nor its element symbol is found.
+    """
+    if key in NUCLEAR_GAMMAS:
+        return NUCLEAR_GAMMAS[key]
+    return NUCLEAR_GAMMAS[re.sub(r"\d", "", key)]
+
+
+# Values from easyspin, most abundant isotope taken unless otherwise stated.
+# Per-isotope overrides (e.g. "15N", "14N") take priority in get_nuclear_gamma.
 NUCLEAR_GAMMAS = {  # MHz / T
+    # Isotope-specific overrides
+    "14N": 3.077705864,
+    "15N": -4.316,
+    "17O": -3.62808,
     "H": 42.57747844,
     "He": 0,
     "Li": 16.54827639,
@@ -16,7 +43,7 @@ NUCLEAR_GAMMAS = {  # MHz / T
     "B": 13.6629846,
     "C": 10.70839886,  # 13C
     "N": 3.077705864,
-    "O": 0,
+    "O": -3.62808,  # 17O
     "F": 40.07758282,
     "Ne": 0,
     "Na": 11.26884545,

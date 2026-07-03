@@ -10,7 +10,7 @@ with an optional TIP term.
 import numpy as np
 from scipy.optimize import curve_fit
 
-from simpnmr.core.const.physics import GE, KB, MU0, MUB, C, H  # noqa
+from simpnmr.core.const.physics import GE, KB, MU0, MUB, C, H
 
 
 def fit_chit_linear_model(
@@ -19,6 +19,7 @@ def fit_chit_linear_model(
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
     susc_vt_variables: dict,
+    total_J: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Fit a linear chiT(T) = A + B / T + tip * T model to
@@ -27,14 +28,16 @@ def fit_chit_linear_model(
     If valid error estimates are provided, a weighted least-squares fit is performed
 
     Args:
-        spin (float): Total spin quantum number S.
-        fit_temps (np.ndarray): Temperature values.
-        chi_vals (np.ndarray): Susceptibility values for a single chi_component.
-        chi_errors (np.ndarray): Uncertainties associated with `chi_vals` as an array
-        of the same shape.
-        susc_vt_variables (dict): Variables controlling fit modes and initial values.
-            Must include keys `intercept` and `slope`. The optional key `tip` may be
-            provided as `["fit", <guess>]` or `["fix", <value>]`.
+        spin: Spin quantum number S.
+        fit_temps: Temperature values in Kelvin.
+        chi_vals: Susceptibility values for a single chi component in Å³.
+        chi_errors: Uncertainties associated with ``chi_vals``.
+        susc_vt_variables: Variables controlling fit modes and initial values.
+            Must include keys ``intercept`` and ``slope``. The optional key
+            ``tip`` may be provided as ``["fit", <guess>]`` or
+            ``["fix", <value>]``.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
@@ -55,7 +58,7 @@ def fit_chit_linear_model(
 
         return Intercept + Slope / T + tip * T
 
-    norm_factor = compute_curie_prefactor(spin)
+    norm_factor = compute_chi_prefactor(spin, total_J)
 
     fit_param_names: list[str] = []
     x0: list[float] = []
@@ -270,6 +273,7 @@ def compute_chit_high_t_limit(
     fit_temps: np.ndarray,
     chi_vals: np.ndarray,
     chi_errors: np.ndarray,
+    total_J: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
     """
     Evaluate the high-temperature chiT limit assuming a zero slope
@@ -279,10 +283,12 @@ def compute_chit_high_t_limit(
     returned fixed at 0.0.
 
     Args:
-        temperature (array_like): Temperature values
-        chi_value (array_like): Susceptibility values for a single chi_component
-        chi_errors: Uncertainties associated with `chi_vals` as an array
-        of the same shape
+        spin: Spin quantum number S.
+        fit_temps: Temperature values in Kelvin.
+        chi_vals: Susceptibility values for a single chi component in Å³.
+        chi_errors: Uncertainties associated with ``chi_vals``.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
 
     Returns:
         tuple[np.ndarray, np.ndarray, dict[str, float | None | np.ndarray]]:
@@ -295,7 +301,7 @@ def compute_chit_high_t_limit(
             `fit_y`, `fit_y_low`, `fit_y_high` arrays evaluated on `fit_temps`
             for downstream visualization.
     """
-    norm_factor = compute_curie_prefactor(spin)
+    norm_factor = compute_chi_prefactor(spin, total_J)
 
     # chiT in internal units -> Curie-normalised (dimensionless)
     chiT_reduced = (chi_vals * fit_temps) / norm_factor
@@ -326,30 +332,62 @@ def compute_chit_high_t_limit(
 def compute_analytic_component(
     chi_component: str,
     temperature: np.ndarray,
-    g_components_sq: dict[str, float],
-    g_components: dict[str, float],
+    g_sq: dict[str, float],
     D_J: float,
     E_J: float,
     spin: float,
+    total_J: float | None = None,
 ) -> np.ndarray:
-    g_sq_iso = float(g_components_sq["g_sq_iso"])
-    g_sq_ax = float(g_components_sq["g_sq_ax"])
-    g_sq_rh = float(g_components_sq["g_sq_rh"])
-    g_iso = float(g_components["g_iso"])
-    g_ax = float(g_components["g_ax"])
-    g_rho = float(g_components["g_rho"])
+    """Evaluate an analytic high-temperature susceptibility component.
+
+    Computes the second-order VT expansion of the iso, axial, or rhombic
+    susceptibility component in reduced Curie units (chiT / prefactor, units
+    of 1/K).  The ZFS second-order coefficient uses ``(2J−1)(2J+3)`` when
+    ``total_J`` is supplied (lanthanide/actinide J-multiplets) or
+    ``(2S−1)(2S+3)`` for pure spin systems.
+
+    Args:
+        chi_component: Which component to evaluate — ``"iso"``, ``"ax"``,
+            or ``"rh"``.
+        temperature: Temperature array in Kelvin.
+        g_sq: Dict of squared g-tensor invariants with keys ``g_sq_iso``,
+            ``g_sq_ax``, ``g_sq_rh``.
+        D_J: Axial ZFS parameter in Joules.
+        E_J: Rhombic ZFS parameter in Joules.
+        spin: Spin quantum number S.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the ZFS coefficient ``(2J_eff−1)(2J_eff+3)``.
+
+    Returns:
+        Array of analytic chi/prefactor values (units 1/K) evaluated on
+        ``temperature``.
+
+    Raises:
+        ValueError: If ``chi_component`` is not ``"iso"``, ``"ax"``, or
+            ``"rh"``.
+    """
+    g_sq_iso = float(g_sq["g_sq_iso"])
+    g_sq_ax = float(g_sq["g_sq_ax"])
+    g_sq_rh = float(g_sq["g_sq_rh"])
 
     # Accept both scalar and array temperatures.
     t = np.asarray(temperature, dtype=float)
 
-    # Compute Spin coefficient
-    f_S = (2 * spin - 1) * (2 * spin + 3)
+    # ZFS coefficient: use J when orbital angular momentum is present.
+    J_eff = total_J if total_J is not None else spin
+    f_S = (2 * J_eff - 1) * (2 * J_eff + 3)
 
     # Calculate chi component in reduced (Curie) units
     if chi_component == "iso":
+        # g-corrected iso formula: χ_iso·T = g_e·g_iso − f(S)/(45kT)·(D·g_e·g_ax + 3E·g_e·g_rh)
+        # The g_e·g cross-products are only needed here (ax/rh use g² invariants),
+        # so read them lazily — callers computing ax/rh may omit them.
+        ge_g_iso = float(g_sq["ge_g_iso"])
+        ge_g_ax = float(g_sq["ge_g_ax"])
+        ge_g_rh = float(g_sq["ge_g_rh"])
         analytic = (
-            GE * g_iso
-            - (f_S / (45 * KB * t)) * (D_J * GE * g_ax + 3 * E_J * GE * g_rho)
+            ge_g_iso
+            - (f_S / (45 * KB * t)) * (D_J * ge_g_ax + 3 * E_J * ge_g_rh)
         ) / t
     elif chi_component == "ax":
         analytic = (
@@ -357,54 +395,73 @@ def compute_analytic_component(
             - (f_S / (30 * KB * t))
             * (D_J * (g_sq_ax + 3 * g_sq_iso) - 3 * E_J * g_sq_rh)
         ) / t
-    elif chi_component == "rho":
+    elif chi_component == "rh":
         analytic = (
             g_sq_rh
             + (f_S / (30 * KB * t)) * (E_J * (g_sq_ax - 3 * g_sq_iso) + D_J * g_sq_rh)
         ) / t
     else:
         raise ValueError(
-            f"Unknown chi_component={chi_component!r}; expected 'iso', 'ax', or 'rho'."
+            f"Unknown chi_component={chi_component!r}; expected 'iso', 'ax', or 'rh'."
         )
 
     return analytic
 
 
 def compute_g_sq_components(g_tensor: np.ndarray) -> dict[str, float]:
-    """Compute g² invariants for susceptibility components.
+    """Compute g invariants for susceptibility components.
 
-    This helper evaluates the squared g-tensor invariants corresponding to the
-    isotropic, axial, and rhombic susceptibility components. It assumes that
-    the g-tensor is expressed in its working principal-axis basis, i.e. the
-    diagonal elements correspond to (g_x, g_y, g_z).
+    Returns both g² invariants (used for ax/rh components) and g_e·g
+    cross-products (used for the g-corrected iso component).
 
-    The returned quantities are defined as:
+    g² invariants:
         g_sq_iso = (g_x² + g_y² + g_z²) / 3
         g_sq_ax  = 3/2 · (g_z² − g_sq_iso)
         g_sq_rh  = (g_x² − g_y²) / 2
 
-    These invariants are used in analytic high-temperature expansions of the
-    magnetic susceptibility.
+    g_e·g cross-products (for the g-corrected iso formula):
+        ge_g_iso = g_e · (g_x + g_y + g_z) / 3
+        ge_g_ax  = g_e · 3/2 · (g_z − g_iso)
+        ge_g_rh  = g_e · (g_x − g_y) / 2
+
+    The g² tensor G = gᵀg is diagonalised; eigenvalues are sorted by
+    ascending deviation from their mean — matching the chi-frame convention
+    where axes are ordered by |χ_i − χ_iso|. g-values are recovered as
+    sqrt of the G eigenvalues.
 
     Args:
-        g_tensor: 3×3 g-tensor matrix in the principal-axis representation.
+        g_tensor: 3×3 g-tensor matrix (need not be diagonal or symmetric).
 
     Returns:
-        dict[str, float]:
-            A mapping with keys `g_sq_iso`, `g_sq_ax`, `g_sq_rh`.
+        dict with keys ``g_sq_iso``, ``g_sq_ax``, ``g_sq_rh``,
+        ``ge_g_iso``, ``ge_g_ax``, ``ge_g_rh``.
     """
-    g_x2 = float(g_tensor[0, 0] ** 2)
-    g_y2 = float(g_tensor[1, 1] ** 2)
-    g_z2 = float(g_tensor[2, 2] ** 2)
+    g = np.asarray(g_tensor, dtype=float)
+    G = g.T @ g  # symmetric, positive semi-definite
+    g_sq_eig = np.linalg.eigvalsh(G)  # ascending order by default
+    g_sq_mean = float(np.mean(g_sq_eig))
+    order = np.argsort(np.abs(g_sq_eig - g_sq_mean))  # x=min dev, z=max dev
+    g_sq_eig = g_sq_eig[order]
+    g_x = float(np.sqrt(max(g_sq_eig[0], 0.0)))
+    g_y = float(np.sqrt(max(g_sq_eig[1], 0.0)))
+    g_z = float(np.sqrt(max(g_sq_eig[2], 0.0)))
 
-    g_sq_iso = (g_x2 + g_y2 + g_z2) / 3.0
-    g_sq_ax = 1.5 * (g_z2 - g_sq_iso)
-    g_sq_rh = (g_x2 - g_y2) / 2.0
+    g_sq_iso = float(np.mean(g_sq_eig))
+    g_sq_ax = 1.5 * (g_sq_eig[2] - g_sq_iso)
+    g_sq_rh = (g_sq_eig[0] - g_sq_eig[1]) / 2.0
+
+    g_iso = (g_x + g_y + g_z) / 3.0
+    ge_g_iso = GE * g_iso
+    ge_g_ax = GE * 1.5 * (g_z - g_iso)
+    ge_g_rh = GE * (g_x - g_y) / 2.0
 
     return {
         "g_sq_iso": g_sq_iso,
         "g_sq_ax": g_sq_ax,
         "g_sq_rh": g_sq_rh,
+        "ge_g_iso": ge_g_iso,
+        "ge_g_ax": ge_g_ax,
+        "ge_g_rh": ge_g_rh,
     }
 
 
@@ -443,8 +500,27 @@ def compute_tip_correction(
     ab_initio_chi: float,
     analytic_chi: float,
     spin: float,
+    total_J: float | None = None,
 ) -> float:
-    norm_factor = compute_curie_prefactor(spin)
+    """Compute the TIP correction as the residual between ab initio and analytic chi.
+
+    Converts the ab initio susceptibility to Curie-normalised units and
+    returns the difference from the analytic high-temperature value.  The
+    result is a dimensionless reduced TIP contribution suitable for use as a
+    fixed ``tip`` variable in :func:`fit_chit_linear_model`.
+
+    Args:
+        ab_initio_chi: Ab initio susceptibility component in Å³.
+        analytic_chi: Analytic chi/prefactor value (units 1/K) at the same
+            reference temperature.
+        spin: Spin quantum number S.
+        total_J: Total angular momentum quantum number J.  When provided,
+            J replaces S in the Curie prefactor J(J+1).
+
+    Returns:
+        Dimensionless TIP correction (reduced units).
+    """
+    norm_factor = compute_chi_prefactor(spin, total_J)
 
     # Convert Å^3 to reduced units
     ab_initio_chi = ab_initio_chi / norm_factor
@@ -454,17 +530,25 @@ def compute_tip_correction(
     return chi_tip
 
 
-def compute_curie_prefactor(spin: float) -> float:
-    """
-    Compute the Curie prefactor for a given spin quantum number.
+def compute_chi_prefactor(
+    spin: float,
+    total_J: float | None = None,
+) -> float:
+    """Return the bare angular-momentum susceptibility prefactor (Å³·K).
 
-    The prefactor is used to normalise susceptibility data and is returned in
-    Å^3·K (using 1 Å^3 = 1e-30 m^3).
+    Defined as C = μ₀ μ_B² J(J+1) / (3 k_B), with no g-factor of any kind.
+    g² enters the analytic susceptibility formula separately through the
+    ``g_sq`` dict passed to :func:`compute_analytic_component`.
+
+    When ``total_J`` is ``None``, J(J+1) is replaced by S(S+1).
 
     Args:
-        spin (float): Total spin quantum number S.
+        spin: Spin quantum number S.
+        total_J: Total angular momentum J. When provided, replaces S(S+1).
 
     Returns:
-        float: Curie prefactor in Å^3·K.
+        C in Å³·K.
     """
-    return (MU0 * MUB**2 * spin * (spin + 1)) / (3 * KB) * 1e30  # [Å^3·K]
+    J_eff = total_J if total_J is not None else spin
+    return (MU0 * MUB**2 * J_eff * (J_eff + 1)) / (3 * KB) * 1e30  # [Å³·K]
+

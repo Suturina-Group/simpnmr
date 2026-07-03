@@ -209,7 +209,7 @@ def plot_orbital_shift_distance_dependence(
         f"{label}\n{distance:.2f} Å" for label, distance in zip(labels, distances)
     ]
     ax.set_xticks(xcentres)
-    ax.set_xticklabels(tick_labels, rotation=45)
+    ax.set_xticklabels(tick_labels, rotation=90)
     ax.set_xlabel("Mean distance to PM centre (Å)")
     if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
         ax.set_ylabel(

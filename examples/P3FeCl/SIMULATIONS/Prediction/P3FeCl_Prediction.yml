@@ -1,0 +1,35 @@
+project:
+  name: P3FeCl_13C_Prediction
+
+hyperfine:
+  method: dft
+  file: ../../DATA/HFC/P3FeCl_HFC.out
+  paramagnetic_centre: [9.122358, 5.108520, 11.946464]
+    
+diamagnetic:
+  method: csv
+  file: ../../DATA/DIA/P3FeCl_Diamagnetic_Shifts_13C.csv
+  
+chem_labels:
+  file: ../../DATA/LABELS/P3FeCl_Chemical_Labels_13C.csv
+  
+experiment:
+  files: ../../DATA/PARA/P3FeCl_13C_Exp_Decomposition_298K.csv
+  spectrum_files: ../../DATA/PARA/SPECTRUM/P3FeCl_DReaM_13C_298K.csv
+  exp_reference: 1000.56
+          
+nuclei:
+  include: C
+
+susceptibility:
+  format: csv
+  file: ../../DATA/CHI/P3FeCl_Susceptibility_NEVPT2.out
+  temperatures: [298]
+  
+relaxation:
+  model: sbm curie
+  magnetic_field_tesla: 11.75
+  temperature: 297.220
+  T1e: 10e-12
+  T2e: 10e-12
+  tR: 300e-12

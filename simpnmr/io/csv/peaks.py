@@ -66,6 +66,15 @@ def save_peak_data_to_csv(
         None.
     """
     label_to_chem_label = {nuc.label: nuc.chem_label for nuc in molecule.nuclei}
+    # Map each chemical label to the isotope of the first nucleus that carries it
+    chem_label_to_isotope: dict[str, str] = {}
+    chem_label_count: dict[str, int] = {}
+    for nuc in molecule.nuclei:
+        if nuc.chem_label:
+            if nuc.chem_label not in chem_label_to_isotope:
+                chem_label_to_isotope[nuc.chem_label] = nuc.isotope
+            chem_label_count[nuc.chem_label] = chem_label_count.get(nuc.chem_label, 0) + 1
+
     if linewidth_by_label is None:
         lw_by_label = {
             nuc.label: nuc.shift.lw
@@ -76,11 +85,41 @@ def save_peak_data_to_csv(
         lw_by_label = dict(linewidth_by_label)
 
     relaxation = getattr(molecule, "relaxation", None)
+
+    # Record the correlation times used (next to T / B0 in the header) since
+    # the relaxation decomposition below is τ- and field-dependent.
+    if relaxation is not None:
+        _tau_R = getattr(relaxation, "tau_R", None)
+        _tau_e1 = getattr(relaxation, "tau_e1", None)
+        _tau_e2 = getattr(relaxation, "tau_e2", None)
+        _tau_bits: list[str] = []
+        if _tau_R is not None:
+            _tau_bits.append(f"τ_R = {_tau_R * 1e12:.1f} ps")
+        if _tau_e1 is not None and _tau_e2 is not None:
+            if abs(_tau_e1 - _tau_e2) < 1e-18:
+                _tau_bits.append(f"τ_e = {_tau_e1 * 1e12:.3f} ps")
+            else:
+                _tau_bits.append(
+                    f"τ_e1 = {_tau_e1 * 1e12:.3f} ps, "
+                    f"τ_e2 = {_tau_e2 * 1e12:.3f} ps"
+                )
+        elif _tau_e1 is not None:
+            _tau_bits.append(f"τ_e = {_tau_e1 * 1e12:.3f} ps")
+        if _tau_bits:
+            _tau_str = ", ".join(_tau_bits)
+            comment = f"{comment}, {_tau_str}" if comment else _tau_str
+
     r1_by_label = relaxation.r1.total if relaxation is not None else None
-    r2_by_label = relaxation.r2.total if relaxation is not None else None
     dipolar_r1_by_label = relaxation.r1.dipolar if relaxation is not None else None
     contact_r1_by_label = relaxation.r1.contact if relaxation is not None else None
     curie_r1_by_label = relaxation.r1.curie if relaxation is not None else None
+    # R2 is written as its decomposition (SBM dipolar/contact + Curie) rather
+    # than the total, which is redundant with the linewidth column
+    # (linewidth = R2 / (π |γ| B0)).
+    _r2 = getattr(relaxation, "r2", None) if relaxation is not None else None
+    dipolar_r2_by_label = _r2.dipolar if _r2 is not None else None
+    contact_r2_by_label = _r2.contact if _r2 is not None else None
+    curie_r2_by_label = _r2.curie if _r2 is not None else None
 
     has_fc_gcorr = (
         getattr(molecule.susc, "iso_g_corr", None) is not None
@@ -135,9 +174,19 @@ def save_peak_data_to_csv(
         if r1_by_label is not None
         else None
     )
-    avg_r2_by_chem_label = (
-        _average_by_chem_label(label_to_chem_label, r2_by_label)
-        if r2_by_label is not None
+    avg_dipolar_r2_by_chem_label = (
+        _average_by_chem_label(label_to_chem_label, dipolar_r2_by_label)
+        if dipolar_r2_by_label is not None
+        else None
+    )
+    avg_contact_r2_by_chem_label = (
+        _average_by_chem_label(label_to_chem_label, contact_r2_by_label)
+        if contact_r2_by_label is not None
+        else None
+    )
+    avg_curie_r2_by_chem_label = (
+        _average_by_chem_label(label_to_chem_label, curie_r2_by_label)
+        if curie_r2_by_label is not None
         else None
     )
 
@@ -221,8 +270,12 @@ def save_peak_data_to_csv(
 
     if avg_r1_by_chem_label is not None:
         chem_labels |= set(avg_r1_by_chem_label.keys())
-    if avg_r2_by_chem_label is not None:
-        chem_labels |= set(avg_r2_by_chem_label.keys())
+    if avg_dipolar_r2_by_chem_label is not None:
+        chem_labels |= set(avg_dipolar_r2_by_chem_label.keys())
+    if avg_contact_r2_by_chem_label is not None:
+        chem_labels |= set(avg_contact_r2_by_chem_label.keys())
+    if avg_curie_r2_by_chem_label is not None:
+        chem_labels |= set(avg_curie_r2_by_chem_label.keys())
     if avg_dipolar_by_chem_label is not None:
         chem_labels |= set(avg_dipolar_by_chem_label.keys())
     if avg_contact_by_chem_label is not None:
@@ -250,9 +303,11 @@ def save_peak_data_to_csv(
 
     chem_labels = sorted(chem_labels)
 
-    # Base columns: chem_label only, then shift columns, then linewidth, then R1/R2 etc.
+    # Base columns: chem_label, isotope, count, then shift columns, linewidth, R1/R2
     out: dict[str, list] = {
         "chem_label": chem_labels,
+        "isotope": [chem_label_to_isotope.get(lbl, "") for lbl in chem_labels],
+        "count": [chem_label_count.get(lbl, 0) for lbl in chem_labels],
     }
 
     if avg_delta_total_avg_by_chem_label is not None:
@@ -271,9 +326,13 @@ def save_peak_data_to_csv(
         out[fc_column_name] = [
             avg_delta_fc_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
         ]
-    if avg_delta_fc_spin_only_by_chem_label is not None:
+    # Only write the dedicated spin-only column when the FC column above was
+    # named something else (has_fc_gcorr) — otherwise we'd get two columns
+    # with the same name "δ_fc_spin_only_avg (ppm)".
+    if avg_delta_fc_spin_only_by_chem_label is not None and not has_fc_spin_only:
         out["δ_fc_spin_only_avg (ppm)"] = [
-            avg_delta_fc_spin_only_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+            avg_delta_fc_spin_only_by_chem_label.get(lbl, np.nan)
+            for lbl in chem_labels
         ]
     if avg_delta_fc_g_corr_by_chem_label is not None:
         out["Δδ_fc_g_corr_avg (ppm)"] = [
@@ -300,12 +359,9 @@ def save_peak_data_to_csv(
         out["R1_total (s^-1)"] = [
             avg_r1_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
         ]
-    if avg_r2_by_chem_label is not None:
-        out["R2_total (s^-1)"] = [
-            avg_r2_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
-        ]
 
-    # Optional decompositions
+    # Optional decompositions. R1 is written as total + components; R2 is
+    # written as components only (its total is the linewidth column).
     if avg_dipolar_by_chem_label is not None:
         out["R1_sbm_dipolar (s^-1)"] = [
             avg_dipolar_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
@@ -318,6 +374,18 @@ def save_peak_data_to_csv(
         out["R1_curie (s^-1)"] = [
             avg_curie_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
         ]
+    if avg_dipolar_r2_by_chem_label is not None:
+        out["R2_sbm_dipolar (s^-1)"] = [
+            avg_dipolar_r2_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_contact_r2_by_chem_label is not None:
+        out["R2_sbm_contact (s^-1)"] = [
+            avg_contact_r2_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
+    if avg_curie_r2_by_chem_label is not None:
+        out["R2_curie (s^-1)"] = [
+            avg_curie_r2_by_chem_label.get(lbl, np.nan) for lbl in chem_labels
+        ]
 
     df = pd.DataFrame(data=out)
 
@@ -325,5 +393,3 @@ def save_peak_data_to_csv(
 
     if verbose:
         logger.info("pNMR data written to %s", file_name)
-
-    return

@@ -34,7 +34,7 @@ def test_resolve_susc_fit_variables_defaults_to_a3_values():
         raw_variables={
             "iso": ["fit", 0.2],
             "ax": ["fit", -0.1],
-            "rho_over_ax": ["fix", 0.25],
+            "rh_over_ax": ["fix", 0.25],
         },
         input_units=None,
         temperature=300.0,
@@ -42,7 +42,7 @@ def test_resolve_susc_fit_variables_defaults_to_a3_values():
     )
 
     assert fit_vars == {"iso": 0.2, "ax": -0.1}
-    assert fix_vars == {"rho_over_ax": 0.25}
+    assert fix_vars == {"rh_over_ax": 0.25}
 
 
 @pytest.mark.unit
@@ -69,7 +69,7 @@ def test_resolve_susc_fit_variables_converts_reduced_per_temperature():
         raw_variables={
             "iso": ["fit", 0.5],
             "ax": ["fit", -0.2],
-            "rho_over_ax": ["fix", 1.0 / 3.0],
+            "rh_over_ax": ["fix", 1.0 / 3.0],
         },
         input_units="reduced",
         temperature=200.0,
@@ -81,7 +81,7 @@ def test_resolve_susc_fit_variables_converts_reduced_per_temperature():
 
     assert fit_vars["iso"] == pytest.approx(0.5 * scale)
     assert fit_vars["ax"] == pytest.approx(-0.2 * scale)
-    assert fix_vars["rho_over_ax"] == pytest.approx(1.0 / 3.0)
+    assert fix_vars["rh_over_ax"] == pytest.approx(1.0 / 3.0)
 
 
 @pytest.mark.unit

@@ -1,0 +1,369 @@
+.. _whats_new:
+
+What's New
+==========
+
+This page summarises the major features and improvements introduced in the
+current development branch relative to the last stable release.
+
+----
+
+Conformer ensemble averaging
+-----------------------------
+
+A new ``average_conformers`` CLI command computes population-weighted averages
+of A tensors and ⟨r⁻⁶⟩ over a set of conformers from quantum-chemistry output
+files, and writes a canonical molecule CSV suitable for use as a
+``method: csv`` hyperfine input.
+
+.. code-block:: bash
+
+    simpnmr average_conformers conf1.out conf2.out conf3.out \
+        --centre Fe1 \
+        --weights 0.6 0.3 0.1 \
+        --output averaged.csv
+
+Weights are optional (defaults to equal weights) and need not be normalised.
+All conformer files must have the same atom order. The output CSV is used
+directly in any ``predict`` or ``fit_susc`` workflow via::
+
+    hyperfine:
+      method: csv
+      file: averaged.csv
+
+See :ref:`standalone_cli` for the full option reference.
+
+----
+
+New susceptibility methods for ``predict``
+-------------------------------------------
+
+Three additional susceptibility methods are available in the ``susceptibility``
+block of the predict configuration.
+
+**Spin-Hamiltonian (``sh``)**
+
+Compute the susceptibility analytically from a full spin-Hamiltonian
+parameterisation: principal g values, axial and rhombic ZFS parameters, and
+the ZYZ Euler angles relating the g / ZFS eigenframe to the molecular frame.
+
+.. code-block:: yaml
+
+    susceptibility:
+      method: sh
+      sh:
+        gx: 2.00
+        gy: 2.10
+        gz: 2.40
+        D: 15.0          # cm⁻¹
+        E_over_D: 0.10   # must be in [0, 1/3]
+        alpha: 0.0
+        beta: 30.0       # ZYZ Euler angles (degrees)
+        gamma: 0.0
+
+**Reduced-chiT (``reduced_chi``)**
+
+Supply the three irreducible components of chiT directly (iso, ax, rh/ax
+ratio) with Euler angles.  The full tensor is reconstructed from the Curie
+prefactor.
+
+**Bleaney (``bleaney``)**
+
+Specify Stevens B²₀ and B²₂ parameters together with an isotropic g_J;
+requires ``total_momentum_J`` to be set (lanthanide / actinide J-multiplets).
+
+.. code-block:: yaml
+
+    susceptibility:
+      method: bleaney
+      bleaney:
+        B20: -0.12    # cm⁻¹
+        B22: 0.04     # cm⁻¹
+        g_J: 1.333
+
+**J-multiplet support throughout**
+
+All susceptibility and VT fitting code now uses J(J+1) and (2J−1)(2J+3)
+when ``total_momentum_J`` is set, correctly describing lanthanide/actinide
+systems.
+
+----
+
+g-corrected isotropic susceptibility
+--------------------------------------
+
+The VT susceptibility fitting now uses a fully g-corrected isotropic
+susceptibility formula for the analytic reference component:
+
+.. math::
+
+   \chi_\text{iso} T \propto g_e g_\text{iso}
+     - \frac{f(S)}{45 k_B T}\!\left(D\,g_e g_\text{ax} + 3E\,g_e g_\text{rh}\right)
+
+where the products :math:`g_e g_\text{iso}`, :math:`g_e g_\text{ax}`, and
+:math:`g_e g_\text{rh}` are computed directly from the g-tensor (frame-independent
+invariants), matching the observable from an Evans-method measurement.
+
+A frame-alignment check warns when the g-tensor and susceptibility eigenframes
+are significantly misaligned.
+
+----
+
+Automatic τ\ :sub:`R` and rotational correlation time tools
+--------------------------------------------------------------
+
+**Ellipsoid hydrodynamic model (``calc_tau_c``)**
+
+A new CLI command estimates τ\ :sub:`R` from molecular geometry using either
+the Perrin ellipsoid or bead-shell hydrodynamic model with Arrhenius solvent
+viscosity correction:
+
+.. code-block:: bash
+
+    simpnmr calc_tau_c structure.xyz --solvent water --method ellipsoid
+
+**Auto-linewidth from structure**
+
+When no relaxation model is configured in a ``predict`` run, τ\ :sub:`R` is
+estimated automatically from the Perrin ellipsoid (Stokes–Einstein–Debye,
+water at 298 K, B₀ = 11.75 T, τ\ :sub:`e` = 1 ps).
+
+**Config keys for τ\ :sub:`R` per temperature**
+
+In ``fit_relaxation``, set ``tau_r_method``, ``tau_r_solvent``, and related
+keys to compute τ\ :sub:`R` automatically at each experimental temperature
+instead of supplying a fixed value.
+
+----
+
+Per-isotope support
+--------------------
+
+Nuclei in a multi-isotope molecule (e.g. ¹H / ¹³C / ¹⁴N) are now handled
+consistently throughout the pipeline:
+
+- The ``chem_labels`` CSV accepts an optional ``isotope`` column to assign
+  isotopes per nucleus (e.g. ``1H``, ``15N``).  Absent entries default to the
+  element's natural NMR isotope.
+- Prediction and fitting plots are generated separately per isotope.
+- Support for ¹⁴N, ¹⁵N, and ¹⁹F added to the gamma / default-isotope tables.
+
+----
+
+r\ :sup:`−6` relaxation fitting and τ-space analysis
+------------------------------------------------------
+
+- Fit the distance-weighted sum of contributions to R\ :sub:`1` against
+  experimental linewidths; CSV output of per-nucleus contributions.
+- New τ-space plots show the accessible (τ\ :sub:`c`, τ\ :sub:`e`) space,
+  with R\ :sub:`1` contours and τ\ :sub:`R` overlay lines.
+- Combined τ-space overlay for all nuclei in a single figure.
+
+----
+
+Assignment improvements
+------------------------
+
+The Hungarian-algorithm assignment now incorporates:
+
+- **Width cost** — penalises assignments whose predicted linewidths differ
+  significantly from observed.
+- **R\ :sub:`1` cost** — penalises assignments inconsistent with the observed
+  R\ :sub:`1` relaxation rate.
+- **Area-weighted** assignment uses peak integrals to improve assignments in
+  crowded spectra.
+- **Multi-exponential** support for overlapping peaks with a single chemical
+  label.
+
+----
+
+Visualisation improvements
+----------------------------
+
+- **1σ confidence bands** on g\ :sub:`iso` solution-line plots and VT fits.
+- **g\ :sub:`iso` Evans plot** — new panel showing ζ\ :sub:`eff` vs g\ :sub:`iso`
+  with L-arrows for axial/rhombic contributions.
+- **CSV export** of plotted data from shift, g\ :sub:`iso`, and spectrum figures.
+- **Axis breaks** in spectrum plots for widely separated shift ranges.
+- **Spectrum scaling** and dynamic peak labels proportional to linewidth.
+- **Euler angle confidence intervals** reported with compact ± notation.
+- **PCS isosurface colouring** — positive lobes red, negative lobes blue.
+
+----
+
+GUI improvements
+-----------------
+
+- **Unified predict / fit_susc GUI** (``simpnmr.gui.app``).
+- **Embedded 3D molecule viewer** via 3Dmol.js / PyQt6-WebEngine.
+- **Split fitter panel** with per-group Lorentzian controls.
+- **Per-isotope shift plots** and a shared isotope / temperature selector.
+- **Diamagnetic correction** controls with per-isotope reference shieldings.
+- **Susceptibility method panels** show/hide dynamically based on the selected
+  method (file, sh, bleaney, reduced_chi).
+
+----
+
+``label_groups`` CLI utility
+------------------------------
+
+A new standalone utility automatically assigns NMR-equivalent group labels
+(methyl, *tert*-butyl) based on geometry:
+
+.. code-block:: bash
+
+    simpnmr label_groups structure.xyz --output labels.csv
+
+----
+
+HMBC/HSQC correlation constraints for permutation assignment
+-------------------------------------------------------------
+
+When using ``assignment: method: permute``, HMBC and HSQC correlation data
+can be provided to **eliminate impossible permutations before the search**,
+dramatically reducing the combinatorial space.
+
+Each correlation specifies a pair of experimental signal labels (H and C)
+that are known to be connected by 1 bond (HSQC) or 2–3 bonds (HMBC).  Any
+permutation that would assign the H label to a nucleus too far from the
+corresponding C nucleus is discarded.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [Ha1, Ha2, Ha3]
+      correlations:
+        - {h: Ha1, c: Ca1, type: hsqc}   # direct H–C bond (cutoff 1.7 Å)
+        - {h: Ha2, c: Cb3, type: hmbc}   # 2–3 bond H–C (cutoff 4.5 Å)
+        - {h: Ha3, c: Ca2, type: hmbc, cutoff: 5.0}  # custom cutoff
+
+Distance cutoffs default to 1.7 Å for HSQC and 4.5 Å for HMBC; override
+with ``cutoff`` in Å.  Constraints are also applied to the shared
+multi-temperature permute search when ``shared: true``.
+
+In the GUI, the **Correlations** field accepts comma-separated entries in
+the form ``H_label:C_label:type``, e.g.::
+
+    Ha1:Ca1:hsqc, Ha2:Cb3:hmbc
+
+----
+
+Shared permutation assignment across temperatures
+--------------------------------------------------
+
+When using ``assignment: method: permute`` with multiple experimental
+temperatures, the new ``shared: true`` option finds a **single permutation
+that minimises the sum of RMSEs across all temperatures simultaneously**,
+rather than optimising each temperature independently.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [Ha1, Ha2, Ha3]
+        - [Hb1, Hb2]
+      shared: true
+
+Each temperature is still fitted with its own susceptibility parameters after
+the shared assignment is locked in.  The search is parallelised over
+permutations in the same way as the standard per-temperature permute.
+
+In the GUI, a **Shared assignment across temperatures** checkbox appears when
+the ``permute`` method is selected.
+
+----
+
+Correlation-driven assignment permutations
+-------------------------------------------
+
+When ``assignment: correlations`` are supplied, only the proton (driver) groups
+listed under ``groups`` need to be permuted — every HSQC/HMBC-correlated
+heteronucleus is reassigned automatically to preserve the correlation. This
+collapses the search from the independent product over *all* groups to the
+product of just the driver-group factorials.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [H_tBu2a, H_tBu2e, H_tBu3a, H_tBu3e, H_tBu4a, H_tBu4e]   # protons only
+      correlations:
+        - {h: H_tBu2a, c: C_tBu2a, type: hsqc}
+        - {h: H_tBu2a, c: tBu2a_q, type: hmbc}
+
+The correlated carbons are not listed under ``groups``; they follow their
+proton. Listing a group explicitly retains the previous independent-permutation
+behaviour for that group.
+
+----
+
+Broken-axis spectrum figures
+----------------------------
+
+The predicted/experimental spectrum figure can be split into multiple panels
+with independent ppm windows, per-panel vertical magnification (shown as
+``×N``), custom panel width ratios, and scalable peak labels, via the new
+``susc_fit: spectra_break`` block.
+
+.. code-block:: yaml
+
+    susc_fit:
+      spectra_break:
+        segments: [[14, -3], [-13, -43], [-70, -76]]
+        scales: [1, 4, 20]
+        width_ratios: [2, 1, 0.5]
+        label_scale: 0.7
+
+The fitted-shifts and mean-components figures also gained ``shifts_format``
+(size variant), ``shifts_width_scale`` and ``shifts_labels`` options.
+
+----
+
+Relaxation-rate decomposition and peak-data files
+-------------------------------------------------
+
+Both ``fit_susc`` and ``predict`` now write a
+``peak_data_<TEMPERATURE>_K_<FIELD>_T.csv`` file with per-chemical-label
+averaged shift components, linewidths, and the R\ :sub:`1`/R\ :sub:`2`
+relaxation-rate decomposition (SBM dipolar/contact + Curie).
+
+In ``fit_susc``, when a τ\ :sub:`R` estimate and an r\ :sup:`−6` relaxation fit
+are available, a single molecular τ\ :sub:`e` is derived by inverting the fitted
+``p1`` — choosing the most trustworthy of the linewidth/R\ :sub:`1` fits — and
+the decomposition is computed from ``(τR, τe)``. The correlation times and field
+are recorded in the file header.
+
+----
+
+Output and figure polish
+------------------------
+
+- CSV outputs use a general number format that keeps full precision for very
+  small magnitudes, so ⟨r⁻⁶⟩ values no longer round to zero.
+- Default marker-edge and legend-frame line weights are thinner across all
+  figures.
+
+----
+
+Bug fixes
+----------
+
+- ORCA 6.1 output files now detected correctly (ASCII banner changed between
+  6.0.x and 6.1.0; version-string fallback added).
+- Atoms with no default NMR isotope (e.g. Ga, Co) no longer crash the
+  molecule loader; they are assigned ``isotope = None`` and ignored by
+  NMR-specific steps.
+- PCS isosurface origin fixed: cube centred on the paramagnetic centre in
+  the original molecular frame.
+- τ-space combined plot: τ\ :sub:`R` overlay lines were transposed; corrected.
+- ``fit_susc`` incomplete chemical labels now emit a warning rather than
+  silently producing wrong assignments.
+- The permutation search streams work to the parallel worker pool instead of
+  building every trial up front, avoiding out-of-memory failures on large
+  permutation spaces.
+- The r\ :sup:`−6` fit no longer aborts when a signal has a non-finite or zero
+  ⟨r⁻⁶⟩ (missing geometry/HFC data); such signals are excluded with a warning.

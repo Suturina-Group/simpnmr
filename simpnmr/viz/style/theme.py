@@ -13,6 +13,22 @@ from simpnmr.viz.style import glyphs, legend, palette, patterns, typography
 from simpnmr.viz.style.patterns import AccessibilityMode
 
 
+def _apply_global_stroke_defaults() -> None:
+    """Set thin default stroke widths shared by every figure.
+
+    - ``lines.markeredgewidth`` controls marker outline width (e.g. the
+      circle/cross edges on scatter plots).
+    - ``patch.linewidth`` controls patch borders, including the legend frame.
+
+    Plot modules that pass an explicit ``markeredgewidth`` / frame linewidth
+    still override these per-figure.
+    """
+    mpl.rcParams.update({
+        "lines.markeredgewidth": 0.5,
+        "patch.linewidth": 0.5,
+    })
+
+
 @dataclass(frozen=True)
 class PlotSpec:
     """Resolved plotting style contract for a run.
@@ -48,6 +64,7 @@ class PlotSpec:
             mpl.rcdefaults()
             typography.apply_global_typography(self.profile)
             legend.apply_global_legend_style(self.profile)
+            _apply_global_stroke_defaults()
             yield
 
     def skin_axes(self, ax: Axes):
@@ -101,5 +118,6 @@ def apply_profile(
     mpl.rcdefaults()
     typography.apply_global_typography(profile)
     legend.apply_global_legend_style(profile)
+    _apply_global_stroke_defaults()
 
     return spec

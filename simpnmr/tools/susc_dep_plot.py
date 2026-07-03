@@ -4,7 +4,7 @@
 """Plot fitted susceptibility metrics across multiple sources.
 
 Reads per-source susceptibility results and generates comparison plots for
-chi_iso, chi_ax, chi_rho, and selected fit quality metrics.
+chi_iso, chi_ax, chi_rh, and selected fit quality metrics.
 """
 
 import argparse
@@ -134,7 +134,7 @@ def main() -> None:
         table[name] = {
             "chi_iso": _susc["chi_iso (Å^3)"][0],
             "chi_ax": _susc["chi_ax (Å^3)"][0],
-            "chi_rho": _susc["chi_rho (Å^3)"][0],
+            "chi_rh": _susc["chi_rh (Å^3)"][0],
             "r2_adjusted": _susc["r2_adjusted ()"][0],
             "MAE": _susc["MAE (ppm)"][0],
         }
@@ -157,8 +157,8 @@ def main() -> None:
 
     # rhombic parts
     plot_component(
-        {name: val["chi_rho"] for name, val in table.items()},
-        r"$\Delta\chi_\mathregular{rho} \mathregular{(\AA^{3})}$",
+        {name: val["chi_rh"] for name, val in table.items()},
+        r"$\Delta\chi_\mathregular{rh} \mathregular{(\AA^{3})}$",
         show=False,
         figure_title="rhombic susceptibility " + uargs.window_append,
     )

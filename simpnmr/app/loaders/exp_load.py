@@ -39,20 +39,23 @@ def save_experiment(
     delimiter: str = ",",
     comment: str | None = None,
 ) -> None:
-    """
-    Save a single Experiment object to CSV.
-
-    Args:
-        experiment: Experiment instance to save.
-        file_name: Output CSV path.
-        delimiter: CSV delimiter.
-        comment: Optional comment written to the file header.
-    """
+    """Save a single Experiment object to a wide-format CSV file."""
     from simpnmr.io.csv.exp import write_experiment_to_csv
 
     write_experiment_to_csv(
         experiment,
         file_name=file_name,
         delimiter=delimiter,
-        comment=comment,
     )
+
+
+def save_experiments(
+    experiments: list[Experiment],
+    file_name: str,
+    *,
+    delimiter: str = ",",
+) -> None:
+    """Save multiple Experiment objects to a single wide-format CSV file."""
+    from simpnmr.io.csv.exp import write_experiments_to_csv
+
+    write_experiments_to_csv(experiments, file_name, delimiter=delimiter)

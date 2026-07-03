@@ -32,6 +32,7 @@ def _create_label_texts(
     entries: Sequence[LabelEntry],
     *,
     fontsize: float,
+    colors: dict[str, str] | None = None,
 ) -> list[plt.Text]:
     """Create annotation artists in an unresolved state for later placement.
 
@@ -45,22 +46,32 @@ def _create_label_texts(
         ax: Target axes that will own the annotation artists.
         entries: Label definitions as ``(label, x, y)`` tuples in data space.
         fontsize: Rendered font size used later for bbox measurement.
+        colors: Optional mapping from label string to color.  When provided,
+            each annotation is rendered in its label's color.
 
     Returns:
         Text artists ready to be measured and repositioned by the solver.
     """
-    return [
-        ax.annotate(
-            label,
-            (x, y),
-            xytext=(0.0, 0.0),
-            textcoords="offset points",
-            fontsize=fontsize,
-            ha="left",
-            va="bottom",
+    texts = []
+    for label, x, y in entries:
+        kwargs: dict = {}
+        if colors is not None:
+            color = colors.get(label)
+            if color is not None:
+                kwargs["color"] = color
+        texts.append(
+            ax.annotate(
+                label,
+                (x, y),
+                xytext=(0.0, 0.0),
+                textcoords="offset points",
+                fontsize=fontsize,
+                ha="left",
+                va="bottom",
+                **kwargs,
+            )
         )
-        for label, x, y in entries
-    ]
+    return texts
 
 
 def _build_safe_bbox(
@@ -587,6 +598,7 @@ def resolve_label_layout(
     fontsize: float,
     marker_size: float,
     diag_line: plt.Line2D | None = None,
+    colors: dict[str, str] | None = None,
 ) -> list[plt.Text]:
     """Resolve scatter-label placement with a greedy pass plus local repair.
 
@@ -620,6 +632,8 @@ def resolve_label_layout(
         fontsize: Font size used for label rendering and bbox measurement.
         marker_size: Marker size used to approximate point obstacles.
         diag_line: Optional plotted reference diagonal treated as an obstacle.
+        colors: Optional mapping from label string to color passed through to
+            ``_create_label_texts`` so each annotation matches its marker fill.
 
     Returns:
         The placed label artists, updated in-place on the axes.
@@ -640,7 +654,7 @@ def resolve_label_layout(
         return []
 
     # Create label artists first; positions are resolved after the plot is drawn.
-    label_texts = _create_label_texts(ax, entries, fontsize=fontsize)
+    label_texts = _create_label_texts(ax, entries, fontsize=fontsize, colors=colors)
 
     # Resolve all obstacle geometry in display coordinates.
     fig = ax.figure

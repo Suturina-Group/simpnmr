@@ -29,11 +29,13 @@ __pycache__/
 # These directories contain generated data from example workflows.
 # Do not version them.
 #
-# Pattern notes:
-#   - `examples/**/X/` matches X at any depth under examples/
-#   - Trailing slash ensures only directories are ignored.
+# Ignore everything generated under SIMULATIONS/ (project-named output dirs
+# with CSVs, PDFs, cubes) but keep the input .yml configs the tests drive.
 # ============================================================================
-examples/**/SIMULATIONS/
+examples/**/SIMULATIONS/**
+!examples/**/SIMULATIONS/**/
+!examples/**/SIMULATIONS/**/*.yml
+!examples/**/SIMULATIONS/*.yml
 
 # ============================================================================
 # Generated test artefacts
@@ -42,3 +44,5 @@ examples/**/SIMULATIONS/
 tests/data/pipelines/pcs_isosurface/csv_susceptibility_dyl1/pcs_isosurface_*.cube
 tests/data/pipelines/pcs_isosurface/nevpt2_susceptibility_p3fecl/pcs_isosurface_*.cube
 tests/data/pipelines/spinham/spin_hamiltonian_from_chiT.csv
+# Claude Code local settings
+.claude/

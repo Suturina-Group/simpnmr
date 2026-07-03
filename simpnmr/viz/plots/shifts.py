@@ -33,6 +33,8 @@ def plot_shift_spread(
     spec: PlotSpec,
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
+    isotope_filter: str | None = None,
+    label_colors: dict[str, str] | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "shift_spread.pdf",
@@ -59,6 +61,13 @@ def plot_shift_spread(
         A tuple ``(fig, ax)``.
     """
 
+    _nuclei = [
+        n for n in molecule.nuclei
+        if isotope_filter is None or n.isotope == isotope_filter
+    ]
+    if not _nuclei:
+        return None, None
+
     # Make plot
     fig, ax = create_canvas(
         spec.profile,
@@ -71,19 +80,18 @@ def plot_shift_spread(
     palette = spec.palette
     shift_colours = spec.shift_colours
 
-    unique_chemlabels = {nuc.chem_math_label for nuc in molecule.nuclei}
-
-    xvals = np.arange(1, len(unique_chemlabels) + 1)
-
-    # width of bars, and shift to apply for starting positions
-    width = 1 / (len(terms) + 2)
-    widthscaler = 1.0
+    # chem_label → math_label mapping for color lookup
+    _math_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in _nuclei:
+            if nuc.chem_label in label_colors:
+                _math_to_color[nuc.chem_math_label] = label_colors[nuc.chem_label]
 
     # Total theoretical
-    total = {nuc.chem_math_label: [] for nuc in molecule.nuclei}
+    total = {nuc.chem_math_label: [] for nuc in _nuclei}
     # Grouped by chem_label
     # Remove diamagnetic part if diamagnetic term not included
-    for nuc in molecule.nuclei:
+    for nuc in _nuclei:
         total[nuc.chem_math_label].append(nuc.shift.total)
 
     # Order using total theoretical shift
@@ -99,15 +107,21 @@ def plot_shift_spread(
             ]
     # or order using experimental shift
     else:
+        def _exp_key(nuc):
+            k = (nuc.chem_label, nuc.isotope) if nuc.isotope is not None else nuc.chem_label
+            return k
+
         exps = {
-            nuc.chem_math_label: experiment[nuc.chem_label].shift
-            for nuc in molecule.nuclei
+            nuc.chem_math_label: experiment[_exp_key(nuc)].shift
+            for nuc in _nuclei
+            if _exp_key(nuc) in experiment
         }
 
         # Remove diamagnetic part of experiment if not included in terms list
         if "d" not in terms:
-            for nuc in molecule.nuclei:
-                exps[nuc.chem_math_label] -= nuc.shift.dia
+            for nuc in _nuclei:
+                if _exp_key(nuc) in experiment:
+                    exps[nuc.chem_math_label] -= nuc.shift.dia
 
         # Order by low to high experimental shift
         # and store order as list of chemical math labels
@@ -118,6 +132,12 @@ def plot_shift_spread(
                 k
                 for k, _ in sorted(exps.items(), key=lambda item: item[1], reverse=True)
             ]
+
+    xvals = np.arange(1, len(_order) + 1)
+
+    # width of bars, and shift to apply for starting positions
+    width = 1 / (len(terms) + 2)
+    widthscaler = 1.0
 
     # Total Theoretical shift violin plot
     _violin = ax.violinplot(
@@ -162,8 +182,8 @@ def plot_shift_spread(
 
     # Fermi contact shift violin plot
     if "fc" in terms:
-        fc = {nuc.chem_math_label: [] for nuc in molecule.nuclei}
-        for nuc in molecule.nuclei:
+        fc = {nuc.chem_math_label: [] for nuc in _nuclei}
+        for nuc in _nuclei:
             fc[nuc.chem_math_label].append(nuc.shift.fc)
         _violin = ax.violinplot(
             dataset=[fc[o] for o in _order],
@@ -181,8 +201,8 @@ def plot_shift_spread(
 
     # Pseudo contact shift violin plot
     if "pc" in terms:
-        pc = {nuc.chem_math_label: [] for nuc in molecule.nuclei}
-        for nuc in molecule.nuclei:
+        pc = {nuc.chem_math_label: [] for nuc in _nuclei}
+        for nuc in _nuclei:
             pc[nuc.chem_math_label].append(nuc.shift.pc)
         _violin = ax.violinplot(
             dataset=[pc[o] for o in _order],
@@ -200,8 +220,8 @@ def plot_shift_spread(
 
     # Diamagnetic shift violin plot
     if "d" in terms:
-        dia = {nuc.chem_math_label: [] for nuc in molecule.nuclei}
-        for nuc in molecule.nuclei:
+        dia = {nuc.chem_math_label: [] for nuc in _nuclei}
+        for nuc in _nuclei:
             dia[nuc.chem_math_label].append(nuc.shift.dia)
         _violin = ax.violinplot(
             dataset=[dia[o] for o in _order],
@@ -219,35 +239,36 @@ def plot_shift_spread(
         legend_labels.append("Dia.")
 
     # Add zero line to y axis
-    ax.hlines(
+    ax.axhline(
         0.0,
-        1,
-        len(unique_chemlabels) + 1,
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
     # Add grey gridlinesand ticks on x axis
-    ax.grid(axis="x", ls="--", which="minor")
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
     # Shift label, specify isotope/nucleus if only one type plotted
-    if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
+    if np.unique([nuc.isotope for nuc in _nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(isotope_format(molecule.nuclei[0].isotope))
+            r"{} $\delta$ (ppm)".format(isotope_format(_nuclei[0].isotope))
         )
     else:
         ax.set_ylabel(r"$\delta$ (ppm)")
 
-    ax.yaxis.set_major_locator(ticker.AutoLocator())
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
     ax.set_xticks(xvals[::1] + 0.5)
-    ax.set_xticklabels(_order, rotation=45)
+    ax.set_xticklabels(_order, rotation=90)
+    if _math_to_color:
+        for tick, lab in zip(ax.get_xticklabels(), _order):
+            tick.set_color(_math_to_color.get(lab, palette.primary))
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
-    ax.grid(axis="x", ls="--", which="minor")
-    ax.set_xlim(0.5, len(_order) + 1.5)
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
+    ax.set_xlim(1, len(_order) + 1)
     ax.xaxis.set_tick_params("major", length=0)
 
     # Manually create custom legend
@@ -272,11 +293,15 @@ def plot_shift_contrib(
     spec: PlotSpec,
     terms: list[str] = ["pc", "fc", "d"],
     order="ascending",
+    isotope_filter: str | None = None,
+    label_colors: dict[str, str] | None = None,
     save: bool = True,
     show: bool = True,
     save_name: str = "shift_components.pdf",
     window_title: str = "Shift components",
     verbose: bool = True,
+    variant: str = "standard",
+    width_scale: float = 1.0,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plots shift components alongside total and optional experimental values.
 
@@ -296,30 +321,43 @@ def plot_shift_contrib(
         A tuple ``(fig, ax)``.
     """
 
-    # Chemical math label to list of nuclei labels
+    _nuclei = [
+        n for n in molecule.nuclei
+        if isotope_filter is None or n.isotope == isotope_filter
+    ]
+    if not _nuclei:
+        return None, None
+
+    # Chemical math label → group size
     cl_to_al = {
         nuc.chem_math_label: len(
-            [
-                nnuc.label
-                for nnuc in molecule.nuclei
-                if nnuc.chem_math_label == nuc.chem_math_label
-            ]
+            [n for n in _nuclei if n.chem_math_label == nuc.chem_math_label]
         )
-        for nuc in molecule.nuclei
+        for nuc in _nuclei
     }
     xvals = np.arange(len(cl_to_al))
 
     # Experiment
+    _exp_math_labels: set[str] = set()  # math labels with real experimental data
     if experiment is not None:
-        # Take average
+        def _exp_key2(nuc):
+            k = (nuc.chem_label, nuc.isotope) if nuc.isotope is not None else nuc.chem_label
+            return k
+
+        # Take average (skip nuclei absent from experiment)
         exps = dict.fromkeys(cl_to_al, 0)
-        for nuc in molecule.nuclei:
+        for nuc in _nuclei:
+            if _exp_key2(nuc) not in experiment:
+                continue
             exps[nuc.chem_math_label] += (
-                experiment[nuc.chem_label].shift / cl_to_al[nuc.chem_math_label]
+                experiment[_exp_key2(nuc)].shift / cl_to_al[nuc.chem_math_label]
             )
+            _exp_math_labels.add(nuc.chem_math_label)
 
         if "d" not in terms:
-            for nuc in molecule.nuclei:
+            for nuc in _nuclei:
+                if _exp_key2(nuc) not in experiment:
+                    continue
                 exps[nuc.chem_math_label] -= (
                     nuc.shift.dia / cl_to_al[nuc.chem_math_label]
                 )
@@ -340,26 +378,22 @@ def plot_shift_contrib(
     # Make plot
     fig, ax = create_canvas(
         spec.profile,
-        variant="standard",
+        variant=variant,
         window_title=window_title,
         layout="constrained",
+        width_scale=width_scale,
     )
     glyphs = spec.glyphs
     scale = spec.skin_axes(ax)
     palette = spec.palette
     shift_colours = spec.shift_colours
 
-    # Chemical math label to list of nuclei labels
-    cl_to_al = {
-        nuc.chem_math_label: len(
-            [
-                nnuc.label
-                for nnuc in molecule.nuclei
-                if nnuc.chem_math_label == nuc.chem_math_label
-            ]
-        )
-        for nuc in molecule.nuclei
-    }
+    _math_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in _nuclei:
+            if nuc.chem_label in label_colors:
+                _math_to_color[nuc.chem_math_label] = label_colors[nuc.chem_label]
+
     xvals = np.arange(len(cl_to_al))
 
     widthscaler = 1
@@ -367,11 +401,11 @@ def plot_shift_contrib(
     # Total theoretical
     # Take average
     total = dict.fromkeys(cl_to_al, 0)
-    for nuc in molecule.nuclei:
+    for nuc in _nuclei:
         total[nuc.chem_math_label] += nuc.shift.total / cl_to_al[nuc.chem_math_label]
 
     if "d" not in terms:
-        for nuc in molecule.nuclei:
+        for nuc in _nuclei:
             total[nuc.chem_math_label] -= nuc.shift.dia / cl_to_al[nuc.chem_math_label]
 
     if experiment is None:
@@ -399,7 +433,7 @@ def plot_shift_contrib(
     if "fc" in terms:
         # Take average
         fc = dict.fromkeys(cl_to_al, 0)
-        for nuc in molecule.nuclei:
+        for nuc in _nuclei:
             fc[nuc.chem_math_label] += nuc.shift.fc / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
@@ -414,7 +448,7 @@ def plot_shift_contrib(
     if "pc" in terms:
         # Take average
         pc = dict.fromkeys(cl_to_al, 0)
-        for nuc in molecule.nuclei:
+        for nuc in _nuclei:
             pc[nuc.chem_math_label] += nuc.shift.pc / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
@@ -429,7 +463,7 @@ def plot_shift_contrib(
     if "d" in terms:
         # Take average
         dia = dict.fromkeys(cl_to_al, 0)
-        for nuc in molecule.nuclei:
+        for nuc in _nuclei:
             dia[nuc.chem_math_label] += nuc.shift.dia / cl_to_al[nuc.chem_math_label]
         ax.bar(
             (xvals + width * widthscaler),
@@ -441,9 +475,13 @@ def plot_shift_contrib(
         widthscaler += 1
 
     if experiment is not None:
+        _exp_xpos = [
+            i + 0.5 for i, o in enumerate(order) if o in _exp_math_labels
+        ]
+        _exp_yvals = [exps[o] for o in order if o in _exp_math_labels]
         ax.plot(
-            (xvals + 0.5),
-            [exps[o] for o in order],
+            _exp_xpos,
+            _exp_yvals,
             label="Exp.",
             color=palette.primary,
             lw=0,
@@ -452,30 +490,31 @@ def plot_shift_contrib(
             markersize=(glyphs.ms if glyphs is not None else 7),
         )
 
-    ax.hlines(
+    ax.axhline(
         0.0,
-        0,
-        len(total.values()),
         color=palette.primary,
         lw=(glyphs.line_lw if glyphs is not None else 0.5),
     )
-    ax.grid(axis="x", ls="--", which="minor")
+    ax.grid(axis="x", ls="--", which="minor", linewidth=0.2)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
-    if np.unique([nuc.isotope for nuc in molecule.nuclei]).size == 1:
+    if np.unique([nuc.isotope for nuc in _nuclei]).size == 1:
         ax.set_ylabel(
-            r"{} $\delta$ (ppm)".format(isotope_format(molecule.nuclei[0].isotope))
+            r"{} $\delta$ (ppm)".format(isotope_format(_nuclei[0].isotope))
         )
     else:
         ax.set_ylabel(r"$\delta$ (ppm)")
 
-    ax.set_xlim([-0.5, xvals[-1] + 1.5])
+    ax.set_xlim([0, xvals[-1] + 1])
 
     ax.set_xticks(xvals + 0.5)
-    ax.set_xticklabels(order, rotation=45)
+    ax.set_xticklabels(order, rotation=90)
+    if _math_to_color:
+        for tick, lab in zip(ax.get_xticklabels(), order):
+            tick.set_color(_math_to_color.get(lab, palette.primary))
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
-    ax.yaxis.set_major_locator(ticker.AutoLocator())
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
     ax.xaxis.set_tick_params("major", length=0)
@@ -543,7 +582,12 @@ def plot_shift_tdep(
     )
 
     # Group signals of each experiment by assignment label
-    labels = {signal.assignment for experiment in experiments for signal in experiment}
+    labels = {
+        signal.assignment
+        for experiment in experiments
+        for signal in experiment
+        if signal.assignment is not None
+    }
 
     colour_cycle_len = len(colour_cycle)
     colours = {
@@ -553,6 +597,8 @@ def plot_shift_tdep(
 
     for experiment in experiments:
         for signal in experiment.signals:
+            if signal.assignment is None:
+                continue
             ax.plot(
                 experiment.temperature,
                 signal.shift * experiment.temperature,

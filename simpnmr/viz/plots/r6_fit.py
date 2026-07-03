@@ -1,0 +1,999 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Suturina Group
+
+"""Plot r^-6 distance-model fit results."""
+
+import logging
+
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+import numpy as np
+
+from simpnmr.core.fitting.r6_fit import compute_p1_theoretical
+from simpnmr.viz.layout.canvas import create_canvas
+from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.layout.label import resolve_label_layout
+from simpnmr.viz.style.theme import PlotSpec
+from simpnmr.viz.utils.uncertainty import format_compact_uncertainty
+
+logger = logging.getLogger(__name__)
+
+
+def _fmt_ps(t_s: float) -> str:
+    """Format a time in seconds as a plain ps string without sci notation."""
+    val = t_s * 1e12
+    if val >= 10:
+        return f"{val:.0f} ps"
+    if val >= 1:
+        return f"{val:.1f} ps"
+    return f"{val:.2g} ps"
+
+
+def _fmt_sci(val: float, err: float | None) -> str:
+    """Format ``val ± err`` as compact scientific notation, e.g. ``4.2(3)e5``."""  # noqa: E501
+    exp = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
+    scale = 10**exp
+    scaled_err = err / scale if err is not None else None
+    return f"{format_compact_uncertainty(val / scale, scaled_err)}e{exp}"
+
+
+_OBS_LABELS = {
+    "r1": r"$R_1$ (s$^{-1}$)",
+    "width": "Linewidth (ppm)",
+}
+
+_P1_UNITS = {
+    "r1": r"s$^{-1}$Å$^{6}$",
+    "width": r"Hz·Å$^{6}$",
+}
+
+_P2_UNITS = {
+    "r1": r"s$^{-1}$",
+    "width": "Hz",
+}
+
+
+def plot_r6_fit(
+    fit_result: dict,
+    observable: str = "r1",
+    spec: PlotSpec = None,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "r6_fit",
+    verbose: bool = True,
+    window_title: str = "r⁻⁶ Fit",
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot observed vs fitted values from a :func:`fit_r6` result.
+
+    Draws the data points as a scatter plot against ``r^-6`` and overlays
+    the smooth fitted line ``p1 * r^-6 + p2``.
+
+    Args:
+        fit_result: Dict returned by
+            :func:`~simpnmr.core.fitting.r6_fit.fit_r6`.
+        observable: ``"r1"`` or ``"width"`` — used for axis label only.
+        spec: Plot style specification.
+        save: If ``True``, saves the figure.
+        show: If ``True``, displays the figure.
+        save_name: Output file base name (extension added automatically).
+        verbose: If ``True``, logs the saved file path.
+        window_title: Figure window title.
+
+    Returns:
+        A tuple ``(fig, ax)``.
+    """
+    r6_inv = 1.0 / fit_result["r_eff"] ** 6
+    obs = fit_result["obs"]
+    labels = fit_result.get("math_labels", fit_result["labels"])
+    p1 = fit_result["p1"]
+    p2 = fit_result["p2"]
+    p1_err = fit_result["p1_err"]
+    p2_err = fit_result["p2_err"]
+    rmse = fit_result["rmse"]
+
+    # Scale x to avoid leading zeros. Pick the nearest power of 10 that
+    # brings the mean r^-6 value close to 1.
+    _x_exp = -int(np.floor(np.log10(float(np.mean(r6_inv)))))
+    _x_scale = 10 ** _x_exp     # multiply r6_inv by this for plotting
+    r6_inv_plot = r6_inv * _x_scale
+
+    fig, ax = create_canvas(
+        spec.profile,
+        variant="standard",
+        window_title=window_title,
+        layout="constrained",
+    )
+
+    palette = spec.palette
+    glyphs = spec.glyphs
+    spec.skin_axes(ax)
+
+    fig.patch.set_facecolor(palette.annotation_bg)
+    ax.set_facecolor(palette.annotation_bg)
+
+    ax.grid(True, which="major", color=palette.grid, linewidth=0.3)
+    ax.grid(True, which="minor", color=palette.grid, linewidth=0.2, alpha=0.8)
+    ax.set_axisbelow(True)
+
+    # Assign one color per label from the Matplotlib color cycle.
+    _color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    _colors = {
+        lbl: _color_cycle[i % len(_color_cycle)]
+        for i, lbl in enumerate(labels)
+    }
+
+    # Scatter: one point per label, filled with its label color.
+    for x, y, lbl in zip(r6_inv_plot, obs, labels):
+        ax.plot(
+            x, y,
+            lw=0,
+            marker="o",
+            color=palette.primary,
+            markersize=glyphs.ms,
+            markerfacecolor=_colors[lbl],
+            markeredgecolor=palette.primary,
+            markeredgewidth=0.8,
+            zorder=3,
+        )
+
+    _fsize = (
+        glyphs.annotation_size if hasattr(glyphs, "annotation_size") else 7
+    )
+
+    # Smooth fitted curve — slope is p1/_x_scale because x is scaled.
+    x_smooth = np.linspace(
+        r6_inv_plot.min() * 0.9, r6_inv_plot.max() * 1.1, 300
+    )
+    y_smooth = (p1 / _x_scale) * x_smooth + p2
+    ax.plot(
+        x_smooth,
+        y_smooth,
+        color=palette.primary,
+        lw=1.2,
+        label="Fit",
+        zorder=2,
+    )
+
+    obs_label = _OBS_LABELS.get(observable, observable)
+    ax.set_xlabel(
+        rf"$r^{{-6}}$ ($10^{{-{_x_exp}}}$ Å$^{{-6}}$)"
+    )
+    ax.set_ylabel(obs_label)
+
+    # Annotation box
+    p1_unit = _P1_UNITS.get(observable, "")
+    p2_unit = _P2_UNITS.get(observable, "")
+    ann = (
+        f"$p_1$ = {_fmt_sci(p1, p1_err)} {p1_unit}\n"
+        f"$p_2$ = {format_compact_uncertainty(p2, p2_err)} {p2_unit}\n"
+        f"RMSE = {rmse:.3g}"
+    )
+    ax.text(
+        0.03,
+        0.97,
+        ann,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=spec.typography.annotation,
+        color=palette.primary,
+        bbox=dict(
+            boxstyle="round,pad=0.3",
+            facecolor=palette.annotation_bg,
+            edgecolor=palette.grid,
+            alpha=0.8,
+        ),
+    )
+
+    # Obstacle-aware label placement (same algorithm as the shift scatter).
+    label_entries = list(zip(labels, r6_inv_plot, obs))
+    resolve_label_layout(
+        ax,
+        label_entries,
+        fontsize=_fsize,
+        marker_size=glyphs.ms,
+        diag_line=None,
+        colors=_colors,
+    )
+
+    render_figure(fig, save=save, show=show, save_name=save_name)
+
+    if save and verbose:
+        logger.info("r^-6 fit plot saved to %s", f"{save_name}.pdf")
+
+    return fig, ax
+
+
+def plot_tau_space(
+    fit_result: dict,
+    observable: str,
+    omega_I: float,
+    omega_S: float,
+    gamma_I: float,
+    spin: float,
+    orbit: float,
+    total_momentum_J: float | None,
+    temperature: float,
+    relaxation_model: str,
+    spec: PlotSpec = None,
+    tau_e_range: list[float] | None = None,
+    tau_r_range: list[float] | None = None,
+    n_points: int = 120,
+    confidence: float = 0.95,
+    tau_R_fixed: float | None = None,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "r6_tau_space",
+    verbose: bool = True,
+    window_title: str = "τ parameter space",
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot the (τe, τR) parameter space consistent with the fitted p1.
+
+    Draws filled contours showing the region of (τe, τR) pairs that
+    reproduce the fitted p1 within the requested confidence interval.
+    The central contour corresponds to p1_fit exactly.
+
+    Args:
+        fit_result: Dict returned by
+            :func:`~simpnmr.core.fitting.r6_fit.fit_r6`.
+        observable: ``"r1"`` or ``"width"``.
+        omega_I: Nuclear Larmor angular frequency (rad s⁻¹).
+        omega_S: Electron Larmor angular frequency (rad s⁻¹).
+        gamma_I: Nuclear gyromagnetic ratio (rad s⁻¹ T⁻¹).
+        spin: Electron spin quantum number S.
+        orbit: Orbital angular momentum L.
+        total_momentum_J: Total angular momentum J, or None.
+        temperature: Temperature in Kelvin.
+        relaxation_model: One of ``"sbm"``, ``"curie"``,
+            ``"sbm curie"``.
+        spec: Plot style specification.
+        n_points: Grid resolution along each axis.
+        confidence: Confidence level for the shaded band (default 0.95).
+        tau_R_fixed: Optional fixed τ_R value (seconds). When provided, a
+            horizontal line is drawn at this τ_R, its intersection with the
+            central contour (p1_calc = p1_fit) is found, and the derived τ_e
+            is annotated on the figure.
+        save: Save the figure if ``True``.
+        show: Display the figure if ``True``.
+        save_name: Output file base name.
+        verbose: Log path when ``True``.
+        window_title: Figure window title.
+
+    Returns:
+        A tuple ``(fig, ax)``.
+    """
+    p1_fit = fit_result["p1"]
+    p1_err = fit_result["p1_err"]
+
+    # z-score for the requested confidence level (two-sided)
+    from scipy.stats import norm as _norm
+    z = _norm.ppf(0.5 + confidence / 2.0)
+
+    # Grid in log space — use user-supplied ranges or sensible defaults
+    # Default τe: 0.01 fs to 10 ps; default τR: 1 ps to 10 µs
+    _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
+    _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
+    _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    # Ensure tau_R_fixed is within the computed grid
+    if tau_R_fixed is not None:
+        _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
+        _tau_r_hi = max(_tau_r_hi, np.log10(tau_R_fixed) + 0.5)
+    tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
+    tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
+
+    p1_grid = compute_p1_theoretical(
+        tau_e, tau_R,
+        omega_I=omega_I,
+        omega_S=omega_S,
+        gamma_I=gamma_I,
+        spin=spin,
+        orbit=orbit,
+        total_momentum_J=total_momentum_J,
+        temperature=temperature,
+        observable=observable,
+        relaxation_model=relaxation_model,
+    )
+
+    fig, ax = create_canvas(
+        spec.profile,
+        variant="narrow",
+        window_title=window_title,
+        layout="constrained",
+        width_scale=1.3,
+        height_scale=0.8,
+    )
+    palette = spec.palette
+    spec.skin_axes(ax)
+
+    # log-ratio: log10(p1_theoretical / p1_fit)
+    # zero = exact match, ±log10(1 ± z*p1_err/p1_fit) = CI boundary
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_ratio = np.log10(np.abs(p1_grid) / abs(p1_fit))
+
+    log_ratio = np.clip(log_ratio, -3, 3)
+
+    # Meshgrid for plotting — note: contourf(x, y, z) expects
+    # z[row, col] where row ~ y and col ~ x.
+    # With indexing="ij": axis-0 = tau_e (→ x), axis-1 = tau_R (→ y)
+    # so we transpose before plotting.
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
+
+    TAU_E_2D, TAU_R_2D = np.meshgrid(
+        tau_e * _tau_e_scale, tau_R * _tau_r_scale
+    )
+    log_ratio_plot = log_ratio.T  # (N_R, N_e) for contourf
+
+    # Set log scale and limits before any drawing so clip paths are correct
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
+    # Contour lines only — no heatmap/colorbar — matching
+    # plot_tau_space_combined's style for a single observable.
+    z = _norm.ppf(0.5 + confidence / 2.0)
+    if p1_err is not None and p1_fit != 0:
+        rel_err = z * abs(p1_err / p1_fit)
+        log_lo = np.log10(max(1.0 - rel_err, 1e-6))
+        log_hi = np.log10(1.0 + rel_err)
+    else:
+        rel_err = None
+        log_lo, log_hi = -0.1, 0.1
+
+    if rel_err is not None:
+        logger.info(
+            "p1 relative uncertainty (%.0f%% CI): ±%.1f%%",
+            confidence * 100, rel_err * 100,
+        )
+
+    _obs_color = (
+        palette.highlight if observable == "width" else palette.primary
+    )
+    _obs_label = {"r1": r"$R_1$", "width": r"$\Delta\nu$"}.get(
+        observable, _OBS_LABELS.get(observable, observable)
+    )
+
+    _lo_data = float(log_ratio_plot.min())
+    _hi_data = float(log_ratio_plot.max())
+
+    legend_handles: list = []
+    legend_labels_list: list = []
+
+    # CI boundary dashed lines
+    ci_levels = [lv for lv in [log_lo, log_hi] if _lo_data <= lv <= _hi_data]
+    if ci_levels:
+        ax.contour(
+            TAU_E_2D, TAU_R_2D, log_ratio_plot,
+            levels=sorted(ci_levels),
+            colors=[_obs_color] * len(ci_levels),
+            linewidths=[0.6] * len(ci_levels),
+            linestyles=["--"] * len(ci_levels),
+        )
+
+    # Central solid line (p1_calc = p1_fit)
+    if _lo_data <= 0.0 <= _hi_data:
+        ax.contour(
+            TAU_E_2D, TAU_R_2D, log_ratio_plot,
+            levels=[0.0],
+            colors=[_obs_color],
+            linewidths=[1.0],
+        )
+        legend_handles.append(Line2D([0], [0], color=_obs_color, lw=1.0))
+        legend_labels_list.append(_obs_label)
+    else:
+        logger.warning(
+            "Central contour (p1_calc = p1_fit) not visible for '%s'.",
+            _obs_label,
+        )
+
+    # Clip all contour collections in one pass after drawing is complete
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
+    if legend_handles:
+        ax.legend(
+            legend_handles, legend_labels_list,
+            fontsize=spec.typography.legend, framealpha=0.8,
+            loc="upper right",
+        )
+    ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
+    ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
+
+    if tau_R_fixed is not None:
+        tau_R_plot = tau_R_fixed * _tau_r_scale
+        _x_left = TAU_E_2D.min()
+        _y_bottom = TAU_R_2D.min()
+        _arrow_kw = dict(
+            xycoords="data", textcoords="data",
+            annotation_clip=False, zorder=8,
+        )
+
+        r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
+        ann_lines: list[tuple[str, str]] = [
+            (f"$\\tau_R$ = {_fmt_ps(tau_R_fixed)}", "royalblue"),
+        ]
+
+        lr_row = log_ratio_plot[r_idx, :]  # fixes tau_R, varies with tau_e
+        sign_changes = np.where(np.diff(np.sign(lr_row)))[0]
+        tau_e_intersections: list[float] = []
+        for sc in sign_changes:
+            lr0, lr1 = lr_row[sc], lr_row[sc + 1]
+            te0, te1 = tau_e[sc], tau_e[sc + 1]
+            frac = -lr0 / (lr1 - lr0)
+            tau_e_intersections.append(te0 * (te1 / te0) ** frac)
+
+        for tau_e_cross in tau_e_intersections:
+            tau_e_cross_plot = tau_e_cross * _tau_e_scale
+            # Horizontal arrow: y-axis → cross
+            ax.annotate(
+                "",
+                xy=(tau_e_cross_plot, tau_R_plot),
+                xytext=(_x_left, tau_R_plot),
+                arrowprops=dict(
+                    arrowstyle="-|>", color="royalblue",
+                    lw=0.7, mutation_scale=5,
+                ),
+                **_arrow_kw,
+            )
+            # Vertical arrow: cross → x-axis
+            ax.annotate(
+                "",
+                xy=(tau_e_cross_plot, _y_bottom),
+                xytext=(tau_e_cross_plot, tau_R_plot),
+                arrowprops=dict(
+                    arrowstyle="-|>", color=_obs_color,
+                    lw=0.7, mutation_scale=5,
+                ),
+                **_arrow_kw,
+            )
+            ax.plot(
+                tau_e_cross_plot, tau_R_plot,
+                marker="o", color=_obs_color,
+                markersize=3, markeredgewidth=0, zorder=9,
+            )
+
+        if tau_e_intersections:
+            te_strs = ", ".join(_fmt_ps(t) for t in tau_e_intersections)
+            ann_lines.append(
+                (f"$\\tau_e$({_obs_label}) = {te_strs}", _obs_color)
+            )
+        else:
+            logger.warning(
+                "tau_R_fixed=%.3g s: no intersection with central contour "
+                "found. Adjust tau_e_range or tau_r_range.",
+                tau_R_fixed,
+            )
+
+        if ann_lines:
+            _fs = spec.typography.tick_label
+            _lh = _fs * 1.6 / (fig.get_figheight() * 72)
+            n = len(ann_lines)
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (0.03, 0.03), 0.55, n * _lh,
+                boxstyle="square,pad=0.0",
+                facecolor="white", edgecolor="none",
+                alpha=0.7, transform=ax.transAxes, zorder=4,
+            ))
+            for i, (txt, col) in enumerate(reversed(ann_lines)):
+                ax.text(
+                    0.03, 0.03 + i * _lh, txt,
+                    transform=ax.transAxes,
+                    ha="left", va="bottom",
+                    fontsize=_fs, color=col,
+                    zorder=5,
+                )
+
+    render_figure(fig, save=save, show=show, save_name=save_name)
+
+    if save and verbose:
+        logger.info("τ-space plot saved to %s", f"{save_name}.pdf")
+
+    return fig, ax
+
+
+def plot_tau_space_combined(
+    r1_fit_result: dict,
+    width_fit_result: dict,
+    omega_I: float,
+    omega_S: float,
+    gamma_I: float,
+    spin: float,
+    orbit: float,
+    total_momentum_J: float | None,
+    temperature: float,
+    relaxation_model: str,
+    spec: PlotSpec = None,
+    tau_e_range: list[float] | None = None,
+    tau_r_range: list[float] | None = None,
+    tau_R_fixed: float | None = None,
+    n_points: int = 120,
+    confidence: float = 0.95,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "r6_tau_space_combined",
+    verbose: bool = True,
+    window_title: str = "τ parameter space (R1 + width)",
+) -> tuple[plt.Figure, plt.Axes]:
+    """Overlay R1 and linewidth τ-space contours on one plot.
+
+    Draws the CI band for each observable in a different colour and
+    the exact-match contour (p1_calc = p1_fit) as a solid line. The
+    overlap region is where both observables are simultaneously
+    consistent with their fitted p1 values.
+
+    Args:
+        r1_fit_result: Dict returned by ``fit_r6`` for ``observable="r1"``.
+        width_fit_result: Dict returned by ``fit_r6`` for
+            ``observable="width"``.
+        omega_I: Nuclear Larmor angular frequency (rad s⁻¹).
+        omega_S: Electron Larmor angular frequency (rad s⁻¹).
+        gamma_I: Nuclear gyromagnetic ratio (rad s⁻¹ T⁻¹).
+        spin: Electron spin quantum number S.
+        orbit: Orbital angular momentum L.
+        total_momentum_J: Total angular momentum J, or None.
+        temperature: Temperature in Kelvin.
+        relaxation_model: One of ``"sbm"``, ``"curie"``,
+            ``"sbm curie"``.
+        spec: Plot style specification.
+        tau_e_range: Optional [min, max] in seconds for τe axis.
+        tau_r_range: Optional [min, max] in seconds for τR axis.
+        tau_R_fixed: Optional fixed τ_R value (seconds). When provided, a
+            dashed horizontal line is drawn at that τ_R for both observables.
+            Dotted vertical lines and cross markers are placed at each
+            observable's intersection with the central contour, using that
+            observable's colour.
+        n_points: Grid resolution along each axis.
+        confidence: Confidence level for shaded bands.
+        save: Save the figure if ``True``.
+        show: Display the figure if ``True``.
+        save_name: Output file base name.
+        verbose: Log path when ``True``.
+        window_title: Figure window title.
+
+    Returns:
+        A tuple ``(fig, ax)``.
+    """
+    from scipy.stats import norm as _norm
+
+    z = _norm.ppf(0.5 + confidence / 2.0)
+
+    _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
+    _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
+    _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+
+    if tau_R_fixed is not None:
+        _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
+        _tau_r_hi = max(_tau_r_hi, np.log10(tau_R_fixed) + 0.5)
+    tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
+    tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
+
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
+
+    TAU_E_2D, TAU_R_2D = np.meshgrid(
+        tau_e * _tau_e_scale, tau_R * _tau_r_scale
+    )
+
+    def _log_ratio_grid(fit_result, obs):
+        p1_fit = fit_result["p1"]
+        grid = compute_p1_theoretical(
+            tau_e, tau_R,
+            omega_I=omega_I, omega_S=omega_S, gamma_I=gamma_I,
+            spin=spin, orbit=orbit,
+            total_momentum_J=total_momentum_J,
+            temperature=temperature,
+            observable=obs,
+            relaxation_model=relaxation_model,
+        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lr = np.log10(np.abs(grid) / abs(p1_fit))
+        return np.clip(lr.T, -3, 3)
+
+    lr_r1 = _log_ratio_grid(r1_fit_result, "r1")
+    lr_lw = _log_ratio_grid(width_fit_result, "width")
+
+    fig, ax = create_canvas(
+        spec.profile,
+        variant="narrow",
+        window_title=window_title,
+        layout="constrained",
+        width_scale=1.3,
+        height_scale=0.8,
+    )
+    palette = spec.palette
+    spec.skin_axes(ax)
+
+    # Set log scale and explicit limits before drawing any contours so that
+    # set_clip_path(ax.patch) uses the correct transform.
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
+    # CI boundary contours (dashed) and central contours (solid)
+    def _ci_levels(fit_result):
+        p1_fit = fit_result["p1"]
+        p1_err = fit_result["p1_err"]
+        if p1_err is None or p1_fit == 0:
+            return -0.1, 0.1
+        rel = z * abs(p1_err / p1_fit)
+        return np.log10(max(1.0 - rel, 1e-6)), np.log10(1.0 + rel)
+
+    lo_r1, hi_r1 = _ci_levels(r1_fit_result)
+    lo_lw, hi_lw = _ci_levels(width_fit_result)
+
+    legend_handles = []
+    legend_labels_list = []
+
+    for lr, color, label, lo_ci, hi_ci in [
+        (lr_r1, palette.primary, r"$R_1$", lo_r1, hi_r1),
+        (lr_lw, palette.highlight, r"$\Delta\nu$", lo_lw, hi_lw),
+    ]:
+        lo_data = float(lr.min())
+        hi_data = float(lr.max())
+
+        # CI boundary dashed lines
+        ci_levels = [
+            lv for lv in [lo_ci, hi_ci]
+            if lo_data <= lv <= hi_data
+        ]
+        if ci_levels:
+            ax.contour(
+                TAU_E_2D, TAU_R_2D, lr,
+                levels=sorted(ci_levels),
+                colors=[color] * len(ci_levels),
+                linewidths=[0.6] * len(ci_levels),
+                linestyles=["--"] * len(ci_levels),
+            )
+
+        # Central solid line
+        if lo_data <= 0.0 <= hi_data:
+            ax.contour(
+                TAU_E_2D, TAU_R_2D, lr,
+                levels=[0.0],
+                colors=[color],
+                linewidths=[1.0],
+            )
+            legend_handles.append(
+                Line2D([0], [0], color=color, lw=1.0)
+            )
+            legend_labels_list.append(label)
+        else:
+            logger.warning(
+                "Central contour for '%s' not visible in grid.", label
+            )
+
+    # Clip all line collections in one pass after drawing is complete
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
+    if legend_handles:
+        ax.legend(
+            legend_handles, legend_labels_list,
+            fontsize=spec.typography.legend, framealpha=0.8,
+            loc="upper right",
+        )
+    ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
+    ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
+
+    if tau_R_fixed is not None:
+        tau_R_plot = tau_R_fixed * _tau_r_scale
+        _x_left = TAU_E_2D.min()
+        _y_bottom = TAU_R_2D.min()
+        _arrow_kw = dict(
+            xycoords="data", textcoords="data",
+            annotation_clip=False, zorder=8,
+        )
+
+        _fmt_tau = _fmt_ps
+        _fmt_tau_r = _fmt_ps
+
+        r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
+        # Each entry: (text, colour)
+        ann_lines: list[tuple[str, str]] = [
+            (f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}", "royalblue"),
+        ]
+
+        for lr, color, obs_label in [
+            (lr_r1, palette.primary, r"$R_1$"),
+            (lr_lw, palette.highlight, r"$\Delta\nu$"),
+        ]:
+            # lr_r1 / lr_lw come from _log_ratio_grid which returns lr.T,
+            # shape (n_tau_R, n_tau_e).  Row r_idx fixes tau_R, columns vary
+            # with tau_e — the same slice used in plot_tau_space's log_ratio.
+            lr_row = lr[r_idx, :]
+            sign_changes = np.where(np.diff(np.sign(lr_row)))[0]
+            tau_e_intersections = []
+            for sc in sign_changes:
+                lr0, lr1 = lr_row[sc], lr_row[sc + 1]
+                te0, te1 = tau_e[sc], tau_e[sc + 1]
+                frac = -lr0 / (lr1 - lr0)
+                tau_e_intersections.append(te0 * (te1 / te0) ** frac)
+
+            for tau_e_cross in tau_e_intersections:
+                tau_e_cross_plot = tau_e_cross * _tau_e_scale
+                # Horizontal arrow: y-axis → cross
+                ax.annotate(
+                    "",
+                    xy=(tau_e_cross_plot, tau_R_plot),
+                    xytext=(_x_left, tau_R_plot),
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color="royalblue",
+                        lw=0.7,
+                        mutation_scale=5,
+                    ),
+                    **_arrow_kw,
+                )
+                # Vertical arrow: cross → x-axis
+                ax.annotate(
+                    "",
+                    xy=(tau_e_cross_plot, _y_bottom),
+                    xytext=(tau_e_cross_plot, tau_R_plot),
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color=color,
+                        lw=0.7,
+                        mutation_scale=5,
+                    ),
+                    **_arrow_kw,
+                )
+                ax.plot(
+                    tau_e_cross_plot,
+                    tau_R_plot,
+                    marker="o",
+                    color=color,
+                    markersize=3,
+                    markeredgewidth=0,
+                    zorder=9,
+                )
+
+            if tau_e_intersections:
+                te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
+                ann_lines.append(
+                    (f"$\\tau_e$({obs_label}) = {te_strs}", color)
+                )
+            else:
+                logger.warning(
+                    "tau_R_fixed=%.3g s: no intersection with %s central "
+                    "contour. Adjust tau_e_range or tau_r_range.",
+                    tau_R_fixed, obs_label,
+                )
+
+        if ann_lines:
+            # Stack bottom-up so visual reading order (top→bottom) matches
+            # the list order: T, B, τ_R, R1, Δν.
+            _fs = spec.typography.tick_label
+            _lh = _fs * 1.6 / (fig.get_figheight() * 72)
+            n = len(ann_lines)
+            # Single white background rectangle behind all lines
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (0.03, 0.03), 0.55, n * _lh,
+                boxstyle="square,pad=0.0",
+                facecolor="white", edgecolor="none",
+                alpha=0.7, transform=ax.transAxes, zorder=4,
+            ))
+            for i, (txt, col) in enumerate(reversed(ann_lines)):
+                ax.text(
+                    0.03, 0.03 + i * _lh, txt,
+                    transform=ax.transAxes,
+                    ha="left", va="bottom",
+                    fontsize=_fs, color=col,
+                    zorder=5,
+                )
+
+    render_figure(fig, save=save, show=show, save_name=save_name)
+
+    if save and verbose:
+        logger.info(
+            "Combined τ-space plot saved to %s", f"{save_name}.pdf"
+        )
+
+    return fig, ax
+
+
+def plot_tau_space_multitemp(
+    records: list[dict],
+    observable: str,
+    spin: float,
+    orbit: float,
+    total_momentum_J: float | None,
+    relaxation_model: str,
+    spec: PlotSpec = None,
+    tau_e_range: list[float] | None = None,
+    tau_r_range: list[float] | None = None,
+    n_points: int = 120,
+    confidence: float = 0.95,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "r6_tau_space_multitemp",
+    verbose: bool = True,
+    window_title: str = "τ parameter space (multi-T)",
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot τ-space constraint contours for multiple temperatures.
+
+    Each temperature produces a different constraint curve in (τe, τR)
+    space. The intersection of all curves indicates the (τe, τR) pair
+    consistent with all experimental temperatures simultaneously.
+
+    Args:
+        records: List of dicts, one per temperature, each containing:
+            ``"fit_result"`` (from ``fit_r6``),
+            ``"temperature"`` (K),
+            ``"omega_I"`` (rad s⁻¹),
+            ``"omega_S"`` (rad s⁻¹),
+            ``"gamma_I"`` (rad s⁻¹ T⁻¹).
+        observable: ``"r1"`` or ``"width"``.
+        spin: Electron spin quantum number S.
+        orbit: Orbital angular momentum L.
+        total_momentum_J: Total angular momentum J, or None.
+        relaxation_model: One of ``"sbm"``, ``"curie"``,
+            ``"sbm curie"``.
+        spec: Plot style specification.
+        tau_e_range: Optional [min, max] in seconds for τe axis.
+        tau_r_range: Optional [min, max] in seconds for τR axis.
+        n_points: Grid resolution along each axis.
+        confidence: Confidence level for shaded CI bands.
+        save: Save the figure if ``True``.
+        show: Display the figure if ``True``.
+        save_name: Output file base name.
+        verbose: Log path when ``True``.
+        window_title: Figure window title.
+
+    Returns:
+        A tuple ``(fig, ax)``.
+    """
+    from scipy.stats import norm as _norm
+    import matplotlib.cm as cm
+
+    if not records:
+        logger.warning("No records provided to plot_tau_space_multitemp.")
+        return None, None
+
+    z = _norm.ppf(0.5 + confidence / 2.0)
+    ci_pct = int(round(confidence * 100))
+
+    _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
+    _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
+    _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
+    tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
+
+    _tau_e_scale, _tau_e_unit = 1e12, "ps"
+    _tau_r_scale, _tau_r_unit = 1e12, "ps"
+
+    TAU_E_2D, TAU_R_2D = np.meshgrid(
+        tau_e * _tau_e_scale, tau_R * _tau_r_scale
+    )
+
+    fig, ax = create_canvas(
+        spec.profile,
+        variant="standard",
+        window_title=window_title,
+        layout="constrained",
+    )
+    palette = spec.palette
+    spec.skin_axes(ax)
+    ax.set_facecolor(palette.annotation_bg)
+
+    # Set log scale and explicit limits before drawing contours
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
+    ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
+
+    # Colour cycle across temperatures
+    colors = cm.plasma(
+        np.linspace(0.1, 0.9, len(records))
+    )
+
+    legend_handles = []
+    legend_labels = []
+
+    for rec, color in zip(records, colors):
+        fit_result = rec["fit_result"]
+        T = rec["temperature"]
+        omega_I = rec["omega_I"]
+        omega_S = rec["omega_S"]
+        gamma_I = rec["gamma_I"]
+        p1_fit = fit_result["p1"]
+        p1_err = fit_result["p1_err"]
+
+        p1_grid = compute_p1_theoretical(
+            tau_e, tau_R,
+            omega_I=omega_I, omega_S=omega_S, gamma_I=gamma_I,
+            spin=spin, orbit=orbit,
+            total_momentum_J=total_momentum_J,
+            temperature=T,
+            observable=observable,
+            relaxation_model=relaxation_model,
+        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lr = np.log10(np.abs(p1_grid) / abs(p1_fit))
+        lr = np.clip(lr.T, -3, 3)
+
+        lo_val = float(lr.min())
+        hi_val = float(lr.max())
+
+        # CI band
+        if p1_err is not None and p1_fit != 0:
+            rel = z * abs(p1_err / p1_fit)
+            log_lo = np.log10(max(1.0 - rel, 1e-6))
+            log_hi = np.log10(1.0 + rel)
+            if lo_val <= log_lo <= hi_val or lo_val <= log_hi <= hi_val:
+                ax.contourf(
+                    TAU_E_2D, TAU_R_2D, lr,
+                    levels=[log_lo, log_hi],
+                    colors=[color],
+                    alpha=0.20,
+                )
+
+        # Central contour
+        if lo_val <= 0.0 <= hi_val:
+            ax.contour(
+                TAU_E_2D, TAU_R_2D, lr,
+                levels=[0.0],
+                colors=[color],
+                linewidths=[1.6],
+            )
+            legend_handles.append(Line2D([0], [0], color=color, lw=1.6))
+            legend_labels.append(f"{T:.0f} K")
+        else:
+            logger.warning(
+                "Central contour for T=%.1f K not visible in grid "
+                "(p1_fit=%.4g, grid range [%.4g, %.4g]).",
+                T, p1_fit,
+                float(np.min(p1_grid)), float(np.max(p1_grid)),
+            )
+
+    # Clip all contour collections to the axes patch in one pass after drawing
+    for coll in ax.collections:
+        coll.set_clip_on(True)
+        coll.set_clip_box(ax.bbox)
+
+    obs_label = _OBS_LABELS.get(observable, observable)
+    if legend_handles:
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            title="Temperature",
+            fontsize=spec.typography.legend,
+            framealpha=0.8,
+        )
+    ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
+    ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
+    ax.set_title(
+        f"{obs_label}  —  {ci_pct}% CI per temperature",
+        fontsize=spec.typography.title,
+    )
+
+    ann = f"model: {relaxation_model}"
+    ax.text(
+        0.97, 0.03, ann,
+        transform=ax.transAxes,
+        ha="right", va="bottom",
+        fontsize=spec.typography.annotation,
+        color=palette.primary,
+        bbox=dict(
+            boxstyle="round,pad=0.3",
+            facecolor=palette.annotation_bg,
+            edgecolor=palette.grid,
+            alpha=0.8,
+        ),
+    )
+
+    render_figure(fig, save=save, show=show, save_name=save_name)
+
+    if save and verbose:
+        logger.info(
+            "Multi-T τ-space plot saved to %s", f"{save_name}.pdf"
+        )
+
+    return fig, ax

@@ -10,9 +10,8 @@ nuclear gyromagnetic ratios.
 import numpy as np
 from numpy.typing import NDArray
 
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import NUCLEAR_GAMMAS, get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA, MU0, H
-from simpnmr.core.util.strings import remove_numbers
 
 
 def a_tensor_mhz_to_ang(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
@@ -29,11 +28,16 @@ def a_tensor_mhz_to_ang(a_tensors: dict[str, NDArray]) -> dict[str, NDArray]:
         element has no gamma defined (gamma=0) are omitted.
     """
 
+    def _gamma_or_zero(k):
+        try:
+            return get_nuclear_gamma(k)
+        except KeyError:
+            return 0.0
+
     a_tensors_ang = {
-        key: _mhz_to_angstrom(val, NUCLEAR_GAMMAS[remove_numbers(key)])
+        key: _mhz_to_angstrom(val, _gamma_or_zero(key))
         for key, val in a_tensors.items()
-        if remove_numbers(key) in NUCLEAR_GAMMAS.keys()
-        and NUCLEAR_GAMMAS[remove_numbers(key)]
+        if _gamma_or_zero(key) != 0
     }
 
     return a_tensors_ang

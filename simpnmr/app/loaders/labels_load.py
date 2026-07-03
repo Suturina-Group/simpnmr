@@ -8,9 +8,18 @@ Reads external data and returns plain mappings for downstream use.
 
 from __future__ import annotations
 
+import re
 from typing import Dict, Optional, Tuple
 
+import pandas as pd
+
+from simpnmr.core.const.isotopes import DEFAULT_ISOTOPES
 from simpnmr.io.csv.csv_util import read_csv_safe
+
+
+def _element_from_label(atom_label: str) -> str:
+    """Extract element symbol by removing all digit characters."""
+    return re.sub(r"\d", "", atom_label)
 
 
 def load_chem_labels_from_csv(
@@ -18,11 +27,16 @@ def load_chem_labels_from_csv(
 ) -> Tuple[
     Dict[str, str],
     Optional[Dict[str, str]],
+    Dict[str, str],
 ]:
     """Load chemical labels from a CSV file.
 
     The CSV must include columns ``atom_label`` and ``chem_label``.
-    Optionally, it may include ``chem_math_label``.
+    Optionally, it may include ``chem_math_label`` and ``isotope``.
+
+    When the ``isotope`` column is absent or a row's entry is empty, the
+    isotope is auto-populated from :data:`~simpnmr.core.const.isotopes.DEFAULT_ISOTOPES`
+    using the element symbol extracted from the atom label.
 
     Args:
         file_name: Path to the CSV file.
@@ -30,6 +44,8 @@ def load_chem_labels_from_csv(
     Returns:
         al_to_cl: Mapping atom_label -> chem_label.
         al_to_cml: Mapping atom_label -> chem_math_label, or None if not provided.
+        al_to_isotope: Mapping atom_label -> isotope string (e.g. ``"1H"``).
+            Entries are omitted for elements not in ``DEFAULT_ISOTOPES``.
 
     Raises:
         KeyError: If duplicate atom labels exist or required entries are missing.
@@ -68,4 +84,16 @@ def load_chem_labels_from_csv(
             for al, cml in zip(table["atom_label"], table["chem_math_label"])
         }
 
-    return al_to_cl, al_to_cml
+    # Optional isotope column — auto-populate from DEFAULT_ISOTOPES if absent
+    al_to_isotope: Dict[str, str] = {}
+    has_isotope_col = "isotope" in table.columns
+    for _, row in table.iterrows():
+        al = row["atom_label"]
+        if has_isotope_col and pd.notna(row["isotope"]) and str(row["isotope"]).strip():
+            al_to_isotope[al] = str(row["isotope"]).strip()
+        else:
+            element = _element_from_label(str(al))
+            if element in DEFAULT_ISOTOPES:
+                al_to_isotope[al] = DEFAULT_ISOTOPES[element]
+
+    return al_to_cl, al_to_cml, al_to_isotope

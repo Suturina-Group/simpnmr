@@ -304,23 +304,42 @@ def build_hfc_from_csv(
     tensors = payload.get("tensors")
     chem_labels = payload.get("chem_labels")
     chem_math_labels = payload.get("chem_math_labels")
+    r_inv6_list = payload.get("r_inv6")
+
+    r_inv6_by_label: dict[str, float] = {}
+    if r_inv6_list is not None:
+        for lab, val in zip(labels, r_inv6_list):
+            try:
+                fval = float(val)
+            except (TypeError, ValueError):
+                fval = float("nan")
+            if np.isfinite(fval):
+                r_inv6_by_label[lab] = fval
 
     if tensors is not None:
         if isinstance(tensors, dict):
-            tensor_by_label = {k: np.asarray(v, float) for k, v in tensors.items()}
+            tensor_by_label = {
+                k: np.asarray(v, float) for k, v in tensors.items()
+            }
         else:
             tensor_by_label = {
-                lab: np.asarray(t, float) for lab, t in zip(labels, tensors)
+                lab: np.asarray(t, float)
+                for lab, t in zip(labels, tensors)
             }
 
         hfc_by_label: dict[str, Hyperfine] = {}
         for lab in labels:
             if lab not in tensor_by_label:
-                raise KeyError(f"Missing hyperfine tensor for label: {lab}")
-            hfc_by_label[lab] = _assemble_hfc_from_full_tensor(
+                raise KeyError(
+                    f"Missing hyperfine tensor for label: {lab}"
+                )
+            hfc = _assemble_hfc_from_full_tensor(
                 tensor_full=tensor_by_label[lab],
                 label=lab,
             )
+            if lab in r_inv6_by_label:
+                hfc.r_inv6 = r_inv6_by_label[lab]
+            hfc_by_label[lab] = hfc
 
         molecule.set_available_hfc_by_label(hfc_by_label)
 

@@ -44,6 +44,8 @@ def resolve_output_linewidths(
         Resolved linewidth values and their CSV column contract.
     """
     relaxation = getattr(molecule, "relaxation", None)
+    nuclei_with_lw = [nuc for nuc in molecule.nuclei if nuc.shift.lw is not None]
+
     if relaxation is not None:
         missing = [nuc.label for nuc in molecule.nuclei if nuc.shift.lw is None]
         if missing:
@@ -51,10 +53,18 @@ def resolve_output_linewidths(
         return LinewidthOutput(
             mode="relax",
             column_name="linewidth_avg_relax (ppm)",
+            values_by_label={nuc.label: nuc.shift.lw for nuc in molecule.nuclei},
+        )
+
+    # r6-fit linewidths written directly to nuc.shift.lw (no relaxation object).
+    if nuclei_with_lw:
+        auto_lw = _auto_display_linewidth_ppm(shift_range)
+        return LinewidthOutput(
+            mode="relax",
+            column_name="linewidth_avg_relax (ppm)",
             values_by_label={
-                nuc.label: nuc.shift.lw
+                nuc.label: nuc.shift.lw if nuc.shift.lw is not None else auto_lw
                 for nuc in molecule.nuclei
-                if nuc.shift.lw is not None
             },
         )
 

@@ -10,7 +10,6 @@ writes tables and plots for selected temperatures.
 import copy
 import logging
 import os
-import re
 from pathlib import Path
 
 import numpy as np
@@ -31,11 +30,19 @@ from simpnmr.app.loaders.susc_load import load_susceptibilities
 from simpnmr.app.params.options import PredictRunOptions
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import resolve_output_linewidths
+from simpnmr.core.domain.tensor import Susceptibility
+from simpnmr.core.phys.susc import (
+    build_susceptibility_from_bleaney,
+    build_susceptibility_from_reduced_chi,
+    build_susceptibility_from_sh,
+    get_spin_only_susc,
+)
 from simpnmr.app.policies.relax import resolve_relaxation_conditions
 from simpnmr.app.policies.susc import resolve_susceptibility_source
 
 # Core / domain
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
+from simpnmr.core.phys.tau_c import get_viscosity, run_ellipsoid
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.domain.mol import Molecule
@@ -54,12 +61,37 @@ from simpnmr.io.qc.backends.orca.geom import read_orca5_output_xyz  # TODO: remo
 from simpnmr.io.xyz import xyz_write
 
 # Visualisation
+from simpnmr.viz.plots.corr_time import plot_corr_time_contrib
 from simpnmr.viz.plots.orb_dep import plot_orbital_shift_distance_dependence
 from simpnmr.viz.plots.shifts import plot_shift_contrib, plot_shift_spread
 from simpnmr.viz.plots.spect import plot_pred_spectrum, plot_raw_deconv_pred
 from simpnmr.viz.style.theme import apply_profile
 
+try:
+    from simpnmr.gui.molecule_view import (
+        assign_label_colors, _CPK_COLORS, parse_xyz,
+    )
+    _HAS_VIEWER = True
+except ImportError:
+    _HAS_VIEWER = False
+
 logger = logging.getLogger(__name__)
+
+
+def _colors_from_xyz(xyz_path: str) -> "dict[str, str] | None":
+    """Return the exact chem-label → color mapping the GUI viewer computes."""
+    if not _HAS_VIEWER:
+        return None
+    try:
+        mol = parse_xyz(xyz_path)
+    except (FileNotFoundError, ValueError):
+        return None
+    groups = mol.grouped_by_label()
+    if not groups:
+        return None
+    unlabelled_elems = {a.element for a in mol.atoms if not a.label}
+    reserved = {_CPK_COLORS[e] for e in unlabelled_elems if e in _CPK_COLORS}
+    return assign_label_colors(list(groups.keys()), reserved_colors=reserved)
 
 
 def run_predict(config, options: PredictRunOptions | None = None) -> int:
@@ -78,6 +110,14 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
 
     # Make output directory and file
     os.makedirs(config.project_name, exist_ok=True)
+
+    # Remove stale per-run CSVs so the GUI never shows results from a
+    # previous run alongside the current one.
+    for _stale in [
+        *Path(config.project_name).glob("shift_vs_intensity_*.csv"),
+        *Path(config.project_name).glob("peak_data_*.csv"),
+    ]:
+        _stale.unlink(missing_ok=True)
 
     if options is None:
         raise ValueError("PredictRunOptions is required")
@@ -144,24 +184,158 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 exc,
             )
 
-    # Load magnetic susceptibility objects.
-    suscs = load_susceptibilities(
-        config.susceptibility_file,
-        config.susceptibility_format,
-        electronic=base_molecule.electronic,
-        g_tensor=base_molecule.sh.g_tensor_ab_initio,
-    )
-
-    suscs = [
-        susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
-    ]
+    # Build magnetic susceptibility objects.
+    if getattr(config, "susceptibility_method", None) == "spin_only":
+        # Spin-only path: no file required. Build isotropic-only Susceptibility
+        # objects directly from quantum numbers (S, L, J) using the Curie law.
+        # This gives Fermi contact shifts only (isotropic A × isotropic χ).
+        spin = base_molecule.electronic.spin_S
+        orbit = base_molecule.electronic.orbit_L
+        total_J = base_molecule.electronic.total_J
+        suscs = []
+        for T in config.susceptibility_temperatures:
+            chi_iso = get_spin_only_susc(spin, orbit, total_J, T)
+            tensor = np.eye(3) * chi_iso
+            suscs.append(Susceptibility(tensor=tensor, temperature=T))
+        logger.info(
+            "Spin-only susceptibility built for %d temperature(s) "
+            "(S=%.1f, L=%.1f, J=%.1f)",
+            len(suscs),
+            spin,
+            orbit,
+            total_J if total_J is not None else float("nan"),
+        )
+        if config.hyperfine_method == "pdip":
+            logger.warning(
+                "susceptibility:method spin_only produces an isotropic "
+                "susceptibility tensor, so only the Fermi contact shift "
+                "(A_iso × χ_iso) contributes. The point-dipole hyperfine "
+                "model (pdip) gives A_iso = 0, so all predicted paramagnetic "
+                "shifts will be zero. Provide a contact hyperfine file "
+                "(e.g. from DFT) and set hyperfine:method to 'qc' or "
+                "'pdip+fc'."
+            )
+    elif getattr(config, "susceptibility_method", None) == "sh":
+        # Spin-Hamiltonian path: build chi tensors from g-tensor principal
+        # values, ZFS parameters (D, E in cm⁻¹), and ZYZ Euler angles
+        # (molecular frame → SH eigenframe).
+        orbit_L = base_molecule.electronic.orbit_L
+        if orbit_L is not None and orbit_L != 0:
+            raise ValueError(
+                f"susceptibility:method sh requires L=0 (pure spin system), "
+                f"but L={orbit_L} was loaded. Use a file-based susceptibility "
+                "source for systems with orbital angular momentum."
+            )
+        spin = base_molecule.electronic.spin_S
+        sh = config.susceptibility_sh
+        D_cmm1 = float(sh["D"])
+        E_over_D = float(sh["E_over_D"])
+        if not (0.0 <= E_over_D <= 1.0 / 3.0):
+            raise ValueError(
+                f"susceptibility:sh E_over_D={E_over_D:.4f} is outside "
+                "[0, 1/3]. Rhombicity must satisfy 0 ≤ E/D ≤ 1/3."
+            )
+        suscs = build_susceptibility_from_sh(
+            gx=float(sh["gx"]),
+            gy=float(sh["gy"]),
+            gz=float(sh["gz"]),
+            D_cmm1=D_cmm1,
+            E_cmm1=E_over_D * D_cmm1,
+            alpha_deg=float(sh["alpha"]),
+            beta_deg=float(sh["beta"]),
+            gamma_deg=float(sh["gamma"]),
+            spin=spin,
+            temperatures=config.susceptibility_temperatures,
+        )
+        logger.info(
+            "SH susceptibility built for %d temperature(s) "
+            "(S=%.1f, D=%.4f cm⁻¹, E/D=%.4f)",
+            len(suscs),
+            spin,
+            D_cmm1,
+            E_over_D,
+        )
+    elif getattr(config, "susceptibility_method", None) == "reduced_chi":
+        # Reduced-chiT path: build tensors directly from the dimensionless
+        # Δχ·T/C components (as read from the isoaxrh plot after fit_susc)
+        # and ZYZ Euler angles.  No L=0 restriction — the Curie prefactor
+        # only scales the tensor, and the user is supplying fitted values.
+        rc = config.susceptibility_reduced_chi
+        rh_over_ax = float(rc["rh_over_ax"])
+        if not (0.0 <= rh_over_ax <= 1.0 / 3.0):
+            raise ValueError(
+                f"susceptibility:reduced_chi rh_over_ax={rh_over_ax:.4f} "
+                "is outside [0, 1/3]. Rhombicity must satisfy 0 ≤ rh/ax ≤ 1/3."
+            )
+        chi_ax_T = rc["chi_ax_T"]
+        if isinstance(chi_ax_T, list):
+            chi_rh_T = [rh_over_ax * v for v in chi_ax_T]
+        else:
+            chi_rh_T = rh_over_ax * float(chi_ax_T)
+        suscs = build_susceptibility_from_reduced_chi(
+            chi_iso_T=rc["chi_iso_T"],
+            chi_ax_T=chi_ax_T,
+            chi_rh_T=chi_rh_T,
+            alpha_deg=float(rc["alpha"]),
+            beta_deg=float(rc["beta"]),
+            gamma_deg=float(rc["gamma"]),
+            spin=base_molecule.electronic.spin_S,
+            temperatures=config.susceptibility_temperatures,
+            total_J=base_molecule.electronic.total_J,
+        )
+        logger.info(
+            "Reduced-chiT susceptibility built for %d temperature(s) "
+            "(rh/ax=%.4f)",
+            len(suscs),
+            rh_over_ax,
+        )
+    elif getattr(config, "susceptibility_method", None) == "bleaney":
+        # Bleaney crystal-field path: D = 3·B²₀, E = B²₂, isotropic g_J.
+        # Requires total_J (L≠0 systems only).
+        total_J = base_molecule.electronic.total_J
+        if not total_J:
+            raise ValueError(
+                "susceptibility:method bleaney requires hyperfine:total_momentum_J "
+                "to be set (L≠0 systems only)"
+            )
+        bl = config.susceptibility_bleaney
+        suscs = build_susceptibility_from_bleaney(
+            B20_cmm1=float(bl["B20"]),
+            B22_cmm1=float(bl["B22"]),
+            alpha_deg=float(bl["alpha"]),
+            beta_deg=float(bl["beta"]),
+            gamma_deg=float(bl["gamma"]),
+            spin=base_molecule.electronic.spin_S,
+            orbit_L=base_molecule.electronic.orbit_L,
+            total_J=total_J,
+            temperatures=config.susceptibility_temperatures,
+        )
+        logger.info(
+            "Bleaney susceptibility built for %d temperature(s) "
+            "(B20=%.4f cm⁻¹, B22=%.4f cm⁻¹, g_J=computed)",
+            len(suscs),
+            float(bl["B20"]),
+            float(bl["B22"]),
+        )
+    else:
+        suscs = load_susceptibilities(
+            config.susceptibility_file,
+            config.susceptibility_format,
+            electronic=base_molecule.electronic,
+            g_tensor=base_molecule.sh.g_tensor_ab_initio,
+        )
+        suscs = [
+            susc for susc in suscs if susc.temperature in config.susceptibility_temperatures
+        ]
 
     if not suscs:
         raise ValueError("No susceptibility data found for specified temperature(s)")
 
     # Load chemical labels
     if len(config.chem_labels_file):
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(
+            config.chem_labels_file
+        )
         if has_missing_selected_chem_labels(base_molecule, al_to_cl):
             logger.warning(
                 "Chemical labels file does not define labels for all selected nuclei; "
@@ -185,18 +359,24 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         comment=f"Structure from {config.hyperfine_file}",
     )
 
+    # Compute label → color once by re-running the viewer's exact parse_xyz
+    # pipeline on the chemcraft XYZ we just wrote.
+    _xyz_path = os.path.join(config.project_name, "chemcraft_structure.xyz")
+    _mol_label_colors_all: dict[str, str] | None = _colors_from_xyz(_xyz_path)
+
     # Load diamagnetic shift file
     if len(config.diamagnetic_file):
-        dia_by_key, key_kind, ref_avg_by_label_nn = load_diamagnetic_shifts(
+        dia_by_key, key_kind, ref_avg_by_isotope = load_diamagnetic_shifts(
             file_name=config.diamagnetic_file,
             file_type=config.diamagnetic_method,
             ref_file_name=config.diamagnetic_ref_file,
             ref_file_type=config.diamagnetic_ref_method,
+            ref_values=getattr(config, "diamagnetic_ref_values", None),
         )
         base_molecule.apply_diamagnetic_shifts(
             dia_by_key=dia_by_key,
             key_kind=key_kind,
-            ref_avg_by_label_nn=ref_avg_by_label_nn,
+            ref_avg_by_isotope=ref_avg_by_isotope,
         )
 
     # Load experimental data from file into list of experiment objects
@@ -212,12 +392,6 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     susc.temperature,
                     exp.temperature,
                     susc.temperature,
-                )
-            if re.sub("[0-9]", "", exp.isotope) not in config.nuclei_include:
-                logger.warning(
-                    "Experimental isotope (%s) not requested in input file (%s)",
-                    exp.isotope,
-                    config.nuclei_include,
                 )
     else:
         experiments = [None] * len(suscs)
@@ -298,101 +472,309 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         # Calculate average shifts
         molecule.average_shifts()
 
-        # Plot theoretical shifts
-        with spec.context():
-            # Spread
-            plot_shift_spread(
-                molecule,
-                experiment=experiment,
-                spec=spec,
-                save=True,
-                show=options.runtime.show_plots,
-                terms=_terms,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"pred_shift_spread_{molecule.susc.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=f"Spread of predicted shifts at {susc.temperature:.2f} K",
-                order="descending",
+        unique_isotopes = sorted({nuc.isotope for nuc in molecule.nuclei if nuc.isotope is not None})
+        _iso_suffix = len(unique_isotopes) > 1
+
+        for iso in unique_isotopes:
+            iso_nuclei = [nuc for nuc in molecule.nuclei if nuc.isotope == iso]
+            iso_mol = copy.copy(molecule)
+            iso_mol.nuclei = iso_nuclei
+            _suffix = f"_{iso}" if _iso_suffix else ""
+
+            # Build chem_label -> math_label mapping for axis labels
+            _cl_to_ml = {
+                nuc.chem_label: nuc.chem_math_label
+                for nuc in iso_nuclei
+                if nuc.chem_label and nuc.chem_math_label
+            }
+
+            # Plot R1 decomposition if relaxation was computed
+            if molecule.relaxation is not None and molecule.relaxation.r1 is not None:
+                r1_channels = molecule.relaxation.r1
+                # Average per-atom R1 channels into per-chem-label values
+                _cl_total: dict[str, list] = {}
+                _cl_dipolar: dict[str, list] = {}
+                _cl_contact: dict[str, list] = {}
+                _cl_curie: dict[str, list] = {}
+                for nuc in iso_nuclei:
+                    cl = nuc.chem_label
+                    if r1_channels.total and nuc.label in r1_channels.total:
+                        _cl_total.setdefault(cl, []).append(r1_channels.total[nuc.label])
+                    if r1_channels.dipolar and nuc.label in r1_channels.dipolar:
+                        _cl_dipolar.setdefault(cl, []).append(r1_channels.dipolar[nuc.label])
+                    if r1_channels.contact and nuc.label in r1_channels.contact:
+                        _cl_contact.setdefault(cl, []).append(r1_channels.contact[nuc.label])
+                    if r1_channels.curie and nuc.label in r1_channels.curie:
+                        _cl_curie.setdefault(cl, []).append(r1_channels.curie[nuc.label])
+
+                _chem_labels = sorted(_cl_total.keys())
+                _theory_r1 = np.array([np.mean(_cl_total[cl]) for cl in _chem_labels])
+                _theory_dipolar = (
+                    np.array([np.mean(_cl_dipolar.get(cl, [0.0])) for cl in _chem_labels])
+                    if _cl_dipolar else None
+                )
+                _theory_contact = (
+                    np.array([np.mean(_cl_contact.get(cl, [0.0])) for cl in _chem_labels])
+                    if _cl_contact else None
+                )
+                _theory_curie = (
+                    np.array([np.mean(_cl_curie.get(cl, [0.0])) for cl in _chem_labels])
+                    if _cl_curie else None
+                )
+                # Use experimental R1 if available
+                _exp_r1_dict = {
+                    sig.assignment: float(sig.r1)
+                    for sig in experiment.signals
+                    if sig.r1 is not None and not np.isnan(float(sig.r1))
+                } if experiment is not None else {}
+                _exp_r1 = (
+                    np.array([_exp_r1_dict[cl] for cl in _chem_labels if cl in _exp_r1_dict])
+                    if _exp_r1_dict and all(cl in _exp_r1_dict for cl in _chem_labels)
+                    else None
+                )
+
+                with spec.context():
+                    plot_corr_time_contrib(
+                        theory_r1=_theory_r1,
+                        theory_r1_dipolar=_theory_dipolar,
+                        theory_r1_contact=_theory_contact,
+                        theory_r1_curie=_theory_curie,
+                        exp_r1=_exp_r1,
+                        chem_labels=[_cl_to_ml.get(cl, cl) for cl in _chem_labels],
+                        spec=spec,
+                        save=True,
+                        show=options.runtime.show_plots,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"pred_r1_decomposition_{susc.temperature:.2f}_K{_suffix}",
+                        ),
+                        verbose=True,
+                    )
+
+            # Plot linewidth (R2/π) decomposition if relaxation was computed
+            if molecule.relaxation is not None and molecule.relaxation.r2 is not None:
+                r2_channels = molecule.relaxation.r2
+                _cl_total_r2: dict[str, list] = {}
+                _cl_dipolar_r2: dict[str, list] = {}
+                _cl_contact_r2: dict[str, list] = {}
+                _cl_curie_r2: dict[str, list] = {}
+                for nuc in iso_nuclei:
+                    cl = nuc.chem_label
+                    if r2_channels.total and nuc.label in r2_channels.total:
+                        _cl_total_r2.setdefault(cl, []).append(r2_channels.total[nuc.label] / np.pi)
+                    if r2_channels.dipolar and nuc.label in r2_channels.dipolar:
+                        _cl_dipolar_r2.setdefault(cl, []).append(r2_channels.dipolar[nuc.label] / np.pi)
+                    if r2_channels.contact and nuc.label in r2_channels.contact:
+                        _cl_contact_r2.setdefault(cl, []).append(r2_channels.contact[nuc.label] / np.pi)
+                    if r2_channels.curie and nuc.label in r2_channels.curie:
+                        _cl_curie_r2.setdefault(cl, []).append(r2_channels.curie[nuc.label] / np.pi)
+
+                _chem_labels_r2 = sorted(_cl_total_r2.keys())
+                _theory_lw = np.array([np.mean(_cl_total_r2[cl]) for cl in _chem_labels_r2])
+                _theory_lw_dipolar = (
+                    np.array([np.mean(_cl_dipolar_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                    if _cl_dipolar_r2 else None
+                )
+                _theory_lw_contact = (
+                    np.array([np.mean(_cl_contact_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                    if _cl_contact_r2 else None
+                )
+                _theory_lw_curie = (
+                    np.array([np.mean(_cl_curie_r2.get(cl, [0.0])) for cl in _chem_labels_r2])
+                    if _cl_curie_r2 else None
+                )
+                _exp_lw_dict = {
+                    sig.assignment: float(sig.width)
+                    for sig in experiment.signals
+                    if sig.width is not None
+                } if experiment is not None else {}
+                _exp_lw = (
+                    np.array([_exp_lw_dict[cl] for cl in _chem_labels_r2])
+                    if _exp_lw_dict and all(cl in _exp_lw_dict for cl in _chem_labels_r2)
+                    else None
+                )
+
+                with spec.context():
+                    plot_corr_time_contrib(
+                        theory_r1=_theory_lw,
+                        theory_r1_dipolar=_theory_lw_dipolar,
+                        theory_r1_contact=_theory_lw_contact,
+                        theory_r1_curie=_theory_lw_curie,
+                        exp_r1=_exp_lw,
+                        chem_labels=[_cl_to_ml.get(cl, cl) for cl in _chem_labels_r2],
+                        spec=spec,
+                        ylabel=r"Linewidth (Hz)",
+                        save=True,
+                        show=options.runtime.show_plots,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"pred_linewidth_decomposition_{susc.temperature:.2f}_K{_suffix}",
+                        ),
+                        verbose=True,
+                    )
+
+            # Slice the all-label color map to this isotope's chem_labels so
+            # palette positions stay consistent with the GUI viewer.
+            _iso_chem_labels_pr = {n.chem_label for n in iso_nuclei}
+            _iso_label_colors: dict[str, str] | None = (
+                {lbl: c for lbl, c in _mol_label_colors_all.items()
+                 if lbl in _iso_chem_labels_pr}
+                if _mol_label_colors_all else None
             )
 
-            # Bar chart for means
-            plot_shift_contrib(
-                molecule,
-                experiment=experiment,
-                spec=spec,
-                save=True,
-                show=options.runtime.show_plots,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"pred_mean_components_{molecule.susc.temperature:.2f}_K",
-                ),
-                verbose=True,
-                window_title=(
-                    f"Predicted mean shifts and components at {susc.temperature:.2f} K"
-                ),
-                order="descending",
-            )
-
-            if molecule.metadata.get("hyperfine", {}).get("orbital_contribution") == (
-                "available"
-            ):
-                plot_orbital_shift_distance_dependence(
-                    molecule,
+            # Plot theoretical shifts
+            with spec.context():
+                # Spread
+                plot_shift_spread(
+                    iso_mol,
+                    experiment=experiment,
                     spec=spec,
                     save=True,
                     show=options.runtime.show_plots,
+                    terms=_terms,
+                    label_colors=_iso_label_colors,
                     save_name=os.path.join(
                         config.project_name,
-                        f"pred_orbital_distance_dependence_{molecule.susc.temperature:.2f}_K",
+                        f"pred_shift_spread_"
+                        f"{molecule.susc.temperature:.2f}_K{_suffix}",
                     ),
                     verbose=True,
                     window_title=(
-                        f"Orbital shift distance dependence at {susc.temperature:.2f} K"
+                        f"Spread of predicted shifts at "
+                        f"{susc.temperature:.2f} K"
                     ),
-                    order="ascending",
+                    order="descending",
                 )
 
-        shift_range = [
-            np.min([nuc.shift.avg for nuc in molecule.nuclei]),
-            np.max([nuc.shift.avg for nuc in molecule.nuclei]),
-        ]
-        linewidth_output = resolve_output_linewidths(molecule, shift_range)
-        linewidth_outputs.append(linewidth_output)
-
-        with spec.context():
-            if len(config.experiment_files):
-                plot_raw_deconv_pred(
-                    molecule=molecule,
-                    isotope=molecule.nuclei[0].isotope,
-                    shift_range=shift_range,
+                # Bar chart for means
+                plot_shift_contrib(
+                    iso_mol,
                     experiment=experiment,
                     spec=spec,
-                    effective_linewidths_by_label=linewidth_output.values_by_label,
+                    save=True,
+                    show=options.runtime.show_plots,
+                    label_colors=_iso_label_colors,
+                    save_name=os.path.join(
+                        config.project_name,
+                        f"pred_mean_components_"
+                        f"{molecule.susc.temperature:.2f}_K{_suffix}",
+                    ),
+                    verbose=True,
+                    window_title=(
+                        f"Predicted mean shifts and components at "
+                        f"{susc.temperature:.2f} K"
+                    ),
+                    order="descending",
+                )
+
+                if molecule.metadata.get("hyperfine", {}).get("orbital_contribution") == (
+                    "available"
+                ):
+                    plot_orbital_shift_distance_dependence(
+                        iso_mol,
+                        spec=spec,
+                        save=True,
+                        show=options.runtime.show_plots,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"pred_orbital_distance_dependence_{molecule.susc.temperature:.2f}_K{_suffix}",
+                        ),
+                        verbose=True,
+                        window_title=(
+                            f"Orbital shift distance dependence at {susc.temperature:.2f} K"
+                        ),
+                        order="ascending",
+                    )
+
+            shift_range = [
+                np.min([nuc.shift.avg for nuc in iso_nuclei]),
+                np.max([nuc.shift.avg for nuc in iso_nuclei]),
+            ]
+
+            with spec.context():
+                if len(config.experiment_files):
+                    plot_raw_deconv_pred(
+                        molecule=iso_mol,
+                        isotope=iso,
+                        shift_range=shift_range,
+                        experiment=experiment,
+                        spec=spec,
+                        save=True,
+                        show=options.runtime.show_plots,
+                        save_name=os.path.join(
+                            config.project_name,
+                            f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K{_suffix}",
+                        ),
+                    )
+
+                plot_pred_spectrum(
+                    iso_mol,
+                    isotope=iso,
+                    shift_range=shift_range,
+                    spec=spec,
                     save=True,
                     show=options.runtime.show_plots,
                     save_name=os.path.join(
                         config.project_name,
-                        f"pred_and_exp_spectrum_{molecule.susc.temperature:.2f}_K",
+                        f"pred_spectrum_{molecule.susc.temperature:.2f}_K{_suffix}",
                     ),
                 )
 
-            plot_pred_spectrum(
-                molecule,
-                isotope=molecule.nuclei[0].isotope,
-                shift_range=shift_range,
-                spec=spec,
-                effective_linewidths_by_label=linewidth_output.values_by_label,
-                save=True,
-                show=options.runtime.show_plots,
-                save_name=os.path.join(
-                    config.project_name,
-                    f"pred_spectrum_{molecule.susc.temperature:.2f}_K",
-                ),
-            )
+        _all_avgs = [nuc.shift.avg for nuc in molecule.nuclei if nuc.shift.avg is not None]
+        _overall_range = [np.min(_all_avgs), np.max(_all_avgs)] if _all_avgs else [0.0, 1.0]
+        linewidth_output = resolve_output_linewidths(molecule, _overall_range)
+        linewidth_outputs.append(linewidth_output)
 
     # TODO If more than one temperature, then make a stacked plot of spectra
+
+    from simpnmr.core.domain.tensor import Hyperfine
+    from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
+    from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
+
+    for molecule in molecules:
+        molecule.susc.calc_irred()
+
+        if molecule.paramagnetic_centre is None:
+            logger.warning(
+                "paramagnetic_centre not set on molecule — "
+                "skipping PCS isosurface for T=%.2f K",
+                molecule.susc.temperature,
+            )
+            continue
+
+        labels_arr = np.asarray(molecule.labels)
+        coords_bohr = np.asarray(molecule.coords, dtype=float) * 1.88973
+
+        # Paramagnetic centre in bohr (from the molecule's Å coordinates).
+        centre_bohr = np.asarray(molecule.paramagnetic_centre, dtype=float) * 1.88973
+
+        values, origin_bohr_rel, step_bohr, grid_shape = compute_pcs_isosurface(
+            chi_dtensor=molecule.susc.dtensor,
+            pdip_fn=Hyperfine.calc_pdip,
+        )
+
+        # Grid origin in the molecule's absolute bohr frame.
+        origin_bohr = tuple(
+            float(centre_bohr[i]) + origin_bohr_rel[i] for i in range(3)
+        )
+
+        file_name = os.path.join(
+            config.project_name,
+            f"pcs_isosurf_{molecule.susc.temperature:.2f}_K.cube",
+        )
+
+        write_pcs_cube(
+            file_name=file_name,
+            comment=f"PCS Isosurface (T = {molecule.susc.temperature:.2f} K)",
+            labels=labels_arr,
+            coords_bohr=coords_bohr,
+            origin_bohr=origin_bohr,
+            step_bohr=step_bohr,
+            grid_shape=grid_shape,
+            values=values,
+        )
+
+        logger.info("PCS isosurface written to %s", file_name)
 
     # Save susceptibility data to file
     save_susc(
@@ -412,27 +794,37 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
     )
 
     # Write shift and peak data to file
-    for molecule, linewidth_output in zip(molecules, linewidth_outputs):
+    for molecule, linewidth_output, experiment in zip(
+        molecules, linewidth_outputs, experiments
+    ):
+        _T = molecule.susc.temperature
         save_molecule_to_csv(
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
-                f"hyperfines_and_shifts_{molecule.susc.temperature:.2f}_K.csv",
+                f"hyperfines_and_shifts_{_T:.2f}_K.csv",
             ),
             delimiter=options.runtime.csv_delimiter,
-            comment=f"T = {molecule.susc.temperature:.2f} K",
+            comment=f"T = {_T:.2f} K",
             verbose=True,
         )
 
+        # Encode the magnetic field in the peak-data name — the linewidths
+        # (relaxation) are field-dependent.
+        _, _b0 = resolve_relaxation_conditions(config, experiment)
+        _field_tag = f"_{_b0:.2f}_T" if _b0 is not None else ""
+        _peak_comment = f"T = {_T:.2f} K"
+        if _b0 is not None:
+            _peak_comment += f", B0 = {_b0:.2f} T"
         save_peak_data_to_csv(
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
-                f"peak_data_{molecule.susc.temperature:.2f}_K.csv",
+                f"peak_data_{_T:.2f}_K{_field_tag}.csv",
             ),
             linewidth_by_label=linewidth_output.values_by_label,
             linewidth_column_name=linewidth_output.column_name,
-            comment=f"T = {molecule.susc.temperature:.2f} K",
+            comment=_peak_comment,
             verbose=True,
         )
 
@@ -445,11 +837,22 @@ def _apply_relaxation_linewidths(
     experiment,
 ):
     """
-    Apply linewidths using a user-specified relaxation model.
+    Apply linewidths using a relaxation model.
+
+    When ``relaxation_model`` is not set in *config*, the rotational
+    correlation time is estimated automatically from the molecular geometry
+    via the Perrin ellipsoid model (water viscosity, temperature-corrected).
+    Temperature defaults to 298 K and magnetic field to 11.75 T when not
+    available from the experiment.  The electronic correlation time defaults
+    to 1 ps and the SBM model is used.  All chosen parameters are logged at
+    INFO level.
+
+    When a ``relaxation_model`` is explicitly configured, the user-supplied
+    ``relaxation_tR``, ``relaxation_T1e``, and ``relaxation_T2e`` are used.
 
     This function updates `base_molecule` in-place by storing the computed
     relaxation evaluation in the domain object and by setting `nuc.shift.lw`
-    when relaxation inputs are provided in the config.
+    when relaxation inputs are available.
 
     Args:
         config (PredictConfig): Prediction configuration containing relaxation
@@ -463,22 +866,58 @@ def _apply_relaxation_linewidths(
         None
     """
 
-    if not getattr(config, "relaxation_model", None):
-        logger.warning(
-            "No relaxation model specified; linewidths will be scaled "
-            "automatically for plotting and CSV output"
-        )
-        base_molecule.relaxation = None
-        return
+    _DEFAULT_TAU_E = 1e-12  # 1 ps
+    _DEFAULT_SOLVENT = "water"
+    _DEFAULT_MODEL = "sbm curie"
+    _DEFAULT_TEMPERATURE = 298.0   # K
+    _DEFAULT_FIELD = 11.75         # T  (500 MHz ¹H)
+
+    auto_mode = not getattr(config, "relaxation_model", None)
 
     temperature, magnetic_field_tesla = resolve_relaxation_conditions(
         config,
         experiment,
     )
 
+    if auto_mode:
+        if temperature is None:
+            temperature = _DEFAULT_TEMPERATURE
+        if magnetic_field_tesla is None:
+            magnetic_field_tesla = _DEFAULT_FIELD
+
     if magnetic_field_tesla is None or temperature is None:
         base_molecule.relaxation = None
         return
+
+    if auto_mode:
+        eta = get_viscosity(_DEFAULT_SOLVENT, temperature)
+        atoms = [
+            (remove_numbers(lbl), coord)
+            for lbl, coord in zip(base_molecule.labels, base_molecule.coords)
+        ]
+        tau_r_result = run_ellipsoid(atoms, eta, temperature)
+        tau_r = tau_r_result["tau_iso"]
+        tau_e = _DEFAULT_TAU_E
+        relaxation_model = _DEFAULT_MODEL
+        logger.info(
+            "No relaxation model configured — auto τ_R = %.1f ps "
+            "(Perrin ellipsoid, η=%.3f mPa·s, T=%.1f K), τ_e = %.1f ps, "
+            "B0 = %.2f T, model = %s",
+            tau_r * 1e12, eta * 1e3, temperature, tau_e * 1e12,
+            magnetic_field_tesla, relaxation_model,
+        )
+        tau_c1 = 1.0 / (1.0 / tau_r + 1.0 / tau_e)
+        tau_c2 = tau_c1
+        tau_e1 = tau_e
+        tau_e2 = tau_e
+        tau_R = tau_r
+    else:
+        relaxation_model = config.relaxation_model
+        tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
+        tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
+        tau_e1 = config.relaxation_T1e
+        tau_e2 = config.relaxation_T2e
+        tau_R = config.relaxation_tR
 
     # Solomon linewidths if relaxation model is SBM
     nuclei_labels = (
@@ -486,12 +925,17 @@ def _apply_relaxation_linewidths(
         if isinstance(config.nuclei_include, list)
         else [config.nuclei_include]
     )
+    nuclei_labels = [lbl for lbl in nuclei_labels if lbl]
 
-    # Use all nuclei in the molecule that match the requested element(s)
+    # Use all nuclei in the molecule that match the requested element(s).
+    # nuclei_labels may contain element symbols ("H") or specific atom
+    # labels ("H1", "H_tBu1a_1") when include_groups expansion is used.
+    nuclei_labels_set = set(nuclei_labels)
     nuclei_coords = {
         nuc.label: nuc.coord
         for nuc in base_molecule.nuclei
-        if remove_numbers(nuc.label) in nuclei_labels
+        if (remove_numbers(nuc.label) in nuclei_labels_set
+            or nuc.label in nuclei_labels_set)
     }
     B0 = magnetic_field_tesla
 
@@ -509,7 +953,7 @@ def _apply_relaxation_linewidths(
             nuc.label: float(
                 angstrom_to_mhz(
                     1.0 / 3.0 * np.trace(nuc.A.fc),
-                    nuclear_gamma=NUCLEAR_GAMMAS[remove_numbers(nuc.label)],
+                    nuclear_gamma=get_nuclear_gamma(nuc.isotope),
                 )
             )
             for nuc in base_molecule.nuclei
@@ -520,16 +964,12 @@ def _apply_relaxation_linewidths(
         A_iso_dict = {label: val_mhz * 1e6 for label, val_mhz in A_iso_dict_MHz.items()}
 
     gamma_I_dict = {
-        label: NUCLEAR_GAMMAS[remove_numbers(label)] * 2 * np.pi * 1e6
-        for label in nuclei_coords
+        nuc.label: get_nuclear_gamma(nuc.isotope) * 2 * np.pi * 1e6
+        for nuc in base_molecule.nuclei
+        if nuc.label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}
     omega_S = EGAMMA * B0 * 2 * np.pi * 1e6
-    tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
-    tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
-    tau_e1 = config.relaxation_T1e
-    tau_e2 = config.relaxation_T2e
-    tau_R = config.relaxation_tR
 
     # Load electronic states
     spin = base_molecule.electronic.spin_S
@@ -537,7 +977,7 @@ def _apply_relaxation_linewidths(
     total_momentum_J = base_molecule.electronic.total_J
 
     relaxation_eval = evaluate_relaxation_rates(
-        relaxation_model=config.relaxation_model,
+        relaxation_model=relaxation_model,
         nuclei_coords=nuclei_coords,
         electron_coords=base_molecule.paramagnetic_centre,
         gamma_I_dict=gamma_I_dict,
@@ -558,6 +998,9 @@ def _apply_relaxation_linewidths(
     )
 
     # Persist the computed relaxation evaluation on the molecule domain object.
+    relaxation_eval.tau_R = tau_R
+    relaxation_eval.tau_e1 = tau_e1
+    relaxation_eval.tau_e2 = tau_e2
     base_molecule.relaxation = relaxation_eval
 
     rates_r1 = base_molecule.relaxation.r1.total
@@ -581,12 +1024,12 @@ def _apply_relaxation_linewidths(
         for chem_label, rate_list in r2_by_chem_label.items()
     }
 
+    min_lw_hz = getattr(config, "relaxation_min_linewidth_hz", 0.0) or 0.0
+
     for nuc in base_molecule.nuclei:
         if nuc.chem_label in avg_lw_by_chem_label:
-            nuc.shift.lw = (
-                avg_lw_by_chem_label[nuc.chem_label]
-                / (abs(omega_I_dict[nuc.label]) / (2 * np.pi))
-                * 1e6
-            )
+            larmor_hz = abs(omega_I_dict[nuc.label]) / (2 * np.pi)
+            lw_hz = avg_lw_by_chem_label[nuc.chem_label] + min_lw_hz
+            nuc.shift.lw = lw_hz / larmor_hz * 1e6
 
     return

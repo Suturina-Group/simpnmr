@@ -77,10 +77,11 @@ class Config(ABC):
 
         # Check for unsupported keywords
         unsupported = [key for key in parsed if key not in cls.KEYWORDS]
-        # and subkeywords
+        # and subkeywords (only for top-level keys that are known)
         unsupported += [
             subkey
             for key in parsed
+            if key in cls.KEYWORDS
             for subkey in parsed[key]
             if subkey not in cls.KEYWORDS[key]
         ]
@@ -95,13 +96,17 @@ class Config(ABC):
                 raise KeyError(f"Error: missing keyword {keyword}")
             for subkeyword in cls.REQ_KEYWORDS[keyword]:
                 if subkeyword not in parsed[keyword]:
-                    # Allow nuclei: include to be omitted if
-                    # nuclei: include_groups is provided
-                    if keyword == "nuclei" and subkeyword == "include":
+                    # Allow nuclei: isotope (or legacy include) to be omitted
+                    # if the other form or include_groups is provided.
+                    if keyword == "nuclei" and subkeyword in ("isotope", "include"):
                         nuclei_block = (
                             parsed.get("nuclei", {}) if isinstance(parsed, dict) else {}
                         )
                         if isinstance(nuclei_block, dict):
+                            # Accept either key as satisfying the requirement.
+                            alt = "include" if subkeyword == "isotope" else "isotope"
+                            if nuclei_block.get(alt) not in (None, [], ""):
+                                continue
                             include_groups_val = nuclei_block.get("include_groups", [])
                             if include_groups_val not in (None, [], ""):
                                 continue
@@ -140,7 +145,7 @@ class FitSuscConfig(Config):
         "assignment": [
             "method",
         ],
-        "nuclei": ["include"],
+        "nuclei": ["isotope"],
         "susc_fit": ["type", "variables"],
         "project": ["name"],
         "chem_labels": ["file"],
@@ -162,22 +167,43 @@ class FitSuscConfig(Config):
             "method",
             "groups",
             "search",
+            "area_weight",
+            "width_weight",
+            "r1_weight",
+            "shared",
+            "correlations",
         ],
-        "nuclei": ["include", "include_groups"],
-        "susc_fit": ["type", "variables", "input_units", "average_shifts"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
+        "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures", "spectra_break", "shifts_format", "shifts_width_scale", "shifts_labels"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
             "method",
             "file",
         ],
-        "diamagnetic_ref": ["method", "file"],
+        "diamagnetic_ref": ["method", "file", "values"],
         "susc_vt": [
             "method",
             "variables",
             "tip_type",
             "ab_initio_file",
             "ab_initio_format",
+            "zeta_eff",
+            "zeta_eff_tol",
+            "evans_g_iso",
+            "evans_g_iso_err",
+        ],
+        "fit_relaxation": [
+            "tau_e_range",
+            "tau_r_range",
+            "tau_e",
+            "tau_r_fixed",
+            "tau_r_method",
+            "tau_r_solvent",
+            "tau_r_eta",
+            "tau_r_shell",
+            "tau_r_sigma",
+            "distance_power",
         ],
     }
 
@@ -206,18 +232,33 @@ class FitSuscConfig(Config):
         self._diamagnetic_method = ""
         self._diamagnetic_ref_method = ""
         self._diamagnetic_ref_file = ""
+        self._diamagnetic_ref_values = None
         self._assignment_method = ""
         self._assignment_groups = []
         self._assignment_search = ""
         self._assignment_n_attempts = None
         self._assignment_max_iter = None
-        self._assignment_r2_threshold = None
+        self._assignment_rmse_threshold = None
+        self._assignment_area_weight = 0.0
+        self._assignment_width_weight = 0.0
+        self._assignment_r1_weight = 0.0
+        self._assignment_shared = False
+        self._assignment_correlations: list[dict] = []
         self._nuclei_include = ""
         self._nuclei_include_groups = []
+        self._nuclei_isotope_order: list[str] = []
+        self._nuclei_exclude_groups = []
+        self._nuclei_exclude: list[str] = []
         self._susc_fit_type = ""
         self._susc_fit_variables = ""
         self._susc_fit_input_units = "A3"
         self._susc_fit_average_shifts = []
+        self._susc_fit_covariance_params: list[str] = []
+        self._susc_fit_figures: dict[str, bool] = {}
+        self._susc_fit_spectra_break: dict | None = None
+        self._susc_fit_shifts_format = "standard"
+        self._susc_fit_shifts_width_scale = 1.0
+        self._susc_fit_shifts_labels = True
         self._chem_labels_file = ""
         self._spin_S = None
         self._spin_multiplicity = None
@@ -231,6 +272,20 @@ class FitSuscConfig(Config):
         self._susc_vt_variables = None
         self._susc_vt_ab_initio_file = None
         self._susc_vt_ab_initio_format = None
+        self._susc_vt_zeta_eff: float | None = None
+        self._susc_vt_zeta_eff_tol: float = 0.15
+        self._susc_vt_evans_g_iso: float | None = None
+        self._susc_vt_evans_g_iso_err: float = 0.0
+        self._fit_relaxation_tau_e_range = None
+        self._fit_relaxation_tau_r_range = None
+        self._fit_relaxation_tau_e = None
+        self._fit_relaxation_tau_r_fixed = None
+        self._fit_relaxation_tau_r_method = None
+        self._fit_relaxation_tau_r_solvent = None
+        self._fit_relaxation_tau_r_eta = None
+        self._fit_relaxation_tau_r_shell = None
+        self._fit_relaxation_tau_r_sigma = None
+        self._fit_relaxation_distance_power = 0.0
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -245,13 +300,17 @@ class FitSuscConfig(Config):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            # Atom label (e.g. "Ni1") — resolved against molecule geometry at load time
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -261,7 +320,10 @@ class FitSuscConfig(Config):
                     "list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @property
     def hyperfine_orbital_contribution(self) -> str:
@@ -319,83 +381,221 @@ class FitSuscConfig(Config):
 
     @nuclei_include_groups.setter
     def nuclei_include_groups(self, values: list | str):
-        # Accept a single string or a list of strings representing chem_labels
+        # Accept a single string, a flat list of strings, or a list of lists
+        # (positional syntax pairing each sub-list with an isotope index).
         if isinstance(values, str):
             self._nuclei_include_groups = [values]
         else:
             self._nuclei_include_groups = list(values)
         return
 
-    def _resolve_nuclei_include_groups(self):
-        """Expands `nuclei:include_groups` into atom labels.
+    @property
+    def nuclei_exclude_groups(self) -> list:
+        return self._nuclei_exclude_groups
 
-        Uses `chem_labels_file` to map `chem_label` values to `atom_label` values.
-        The expanded atoms are merged into `self._nuclei_include` with duplicates
-        removed while preserving order.
+    @nuclei_exclude_groups.setter
+    def nuclei_exclude_groups(self, values: list | str):
+        # Same syntax as include_groups: flat list or list-of-lists.
+        if isinstance(values, str):
+            self._nuclei_exclude_groups = [values]
+        else:
+            self._nuclei_exclude_groups = list(values)
+        return
+
+    @property
+    def nuclei_exclude(self) -> list[str]:
+        return self._nuclei_exclude
+
+    def _resolve_nuclei_include_groups(self):
+        """Expands ``nuclei:include_groups`` into atom labels.
+
+        Uses ``chem_labels_file`` to map ``chem_label`` values to
+        ``atom_label`` values.
+
+        **Flat syntax** (single list of strings):
+            Each entry may be a bare chem_label (``"ring"``) or carry an
+            isotope prefix (``"1H:ring"``).  Bare entries expand all matching
+            atoms regardless of element; prefixed entries restrict to the
+            stated element (``"1H"`` → ``"H"``).  The result is merged with
+            the existing ``_nuclei_include`` content.
+
+        **Positional syntax** (list of lists):
+            Each sub-list is paired with the isotope at the same index in
+            ``nuclei:isotope``.  Only atom labels whose element matches the
+            paired isotope are selected.  The result *replaces* the broad
+            element symbols that ``nuclei_isotope`` stored in
+            ``_nuclei_include``, so only the explicitly listed groups are
+            retained::
+
+                nuclei:
+                  isotope: [1H, 13C]
+                  include_groups:
+                    - [Me1, Me2]   # selects H atoms for 1H
+                    - [Me1, Me3]   # selects C atoms for 13C
 
         This method is safe to call multiple times.
 
         Raises:
-            FileNotFoundError: If `chem_labels_file` does not exist.
+            FileNotFoundError: If ``chem_labels_file`` does not exist.
+            ValueError: If no atoms are matched.
         """
+        import re
+
         raw_groups = getattr(self, "_nuclei_include_groups", [])
         if raw_groups is None:
             raw_groups = []
         if isinstance(raw_groups, str):
             raw_groups = [raw_groups]
-        # Normalise groups to stripped strings to avoid whitespace mismatches.
-        groups = [str(g).strip() for g in raw_groups if str(g).strip()]
-        if not groups:
+
+        raw_excl = getattr(self, "_nuclei_exclude_groups", [])
+        if raw_excl is None:
+            raw_excl = []
+        if isinstance(raw_excl, str):
+            raw_excl = [raw_excl]
+
+        # Nothing to do if both lists are empty.
+        if not raw_groups and not raw_excl:
             return
-        # If chem_labels_file is not set yet, skip silently
+
+        # If chem_labels_file is not set yet, skip silently.
         chem_file = getattr(self, "_chem_labels_file", "")
         if not chem_file:
             return
-        expanded_atoms: list[str] = []
-        try:
-            with open(chem_file, newline="") as csvfile:
-                reader = csv.DictReader(csvfile, skipinitialspace=True)
 
-                # Strip header whitespace by matching keys after .strip().
-                def _get(row: dict, key: str):
-                    for k, v in row.items():
-                        if k is not None and k.strip() == key:
-                            return v
-                    return None
+        # ── helpers ───────────────────────────────────────────────────
+        def _load_csv(path: str) -> list[tuple[str, str]]:
+            pairs: list[tuple[str, str]] = []
+            try:
+                with open(path, newline="") as f:
+                    reader = csv.DictReader(f, skipinitialspace=True)
 
-                for row in reader:
-                    clabel = (_get(row, "chem_label") or "").strip()
-                    alabel = (_get(row, "atom_label") or "").strip()
-                    if clabel in groups and alabel:
-                        expanded_atoms.append(alabel)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"chem_labels_file not found: {chem_file}")
-        except Exception as e:
-            raise e
-        if not expanded_atoms:
-            raise ValueError(
-                "No nuclei selected: nuclei:include_groups did not match any "
-                "chem_label entries in chem_labels_file. "
-                f"Requested groups={groups}."
-            )
-        # Merge with existing nuclei_include
-        current = self._nuclei_include
-        if isinstance(current, str) and current:
-            merged = [current] + expanded_atoms
-        elif isinstance(current, list):
-            merged = current + expanded_atoms
-        elif not current:
-            merged = expanded_atoms
-        else:
-            merged = expanded_atoms
-        # Deduplicate preserving order
-        seen = set()
-        deduped = []
-        for x in merged:
-            if x not in seen:
-                seen.add(x)
-                deduped.append(x)
-        self._nuclei_include = deduped
+                    def _get(row: dict, key: str):
+                        for k, v in row.items():
+                            if k is not None and k.strip() == key:
+                                return v
+                        return None
+
+                    for row in reader:
+                        cl = (_get(row, "chem_label") or "").strip()
+                        al = (_get(row, "atom_label") or "").strip()
+                        if cl and al:
+                            pairs.append((cl, al))
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f"chem_labels_file not found: {path}"
+                )
+            return pairs
+
+        csv_pairs = _load_csv(chem_file)
+
+        def _atom_element(alabel: str) -> str:
+            m = re.match(r"[A-Za-z]+", alabel)
+            return m.group(0) if m else ""
+
+        def _expand(
+            chem_labels: list[str],
+            element_filter: str | None,
+        ) -> list[str]:
+            label_set = {str(c).strip() for c in chem_labels}
+            result: list[str] = []
+            for cl, al in csv_pairs:
+                if cl not in label_set:
+                    continue
+                if element_filter and _atom_element(al) != element_filter:
+                    continue
+                result.append(al)
+            return result
+
+        def _expand_flat_list(
+            entries: list,
+            isotope_order: list[str],
+        ) -> list[str]:
+            """Expand a flat or positional group list to atom labels."""
+            first = entries[0] if entries else None
+            if isinstance(first, (list, tuple)):
+                # Positional: pair sub-list[i] with isotope_order[i].
+                atoms: list[str] = []
+                for i, sub in enumerate(entries):
+                    if not isinstance(sub, (list, tuple)):
+                        sub = [sub]
+                    el = isotope_order[i] if i < len(isotope_order) else None
+                    atoms.extend(_expand(list(sub), el))
+                return atoms
+            # Flat: "1H:ring" prefix or bare "ring".
+            atoms = []
+            for entry in entries:
+                entry = str(entry).strip()
+                if ":" in entry:
+                    iso, cl = entry.split(":", 1)
+                    el = re.sub(r"^\d+", "", iso.strip()).strip() or None
+                    atoms.extend(_expand([cl.strip()], el))
+                else:
+                    atoms.extend(_expand([entry], None))
+            return atoms
+
+        isotope_order = getattr(self, "_nuclei_isotope_order", [])
+
+        # ── include_groups ────────────────────────────────────────────
+        if raw_groups:
+            first = raw_groups[0]
+            positional = isinstance(first, (list, tuple))
+
+            if positional:
+                expanded = _expand_flat_list(raw_groups, isotope_order)
+                if not expanded:
+                    raise ValueError(
+                        "No nuclei selected: positional "
+                        "nuclei:include_groups did not match any "
+                        "chem_label entries in chem_labels_file."
+                    )
+                seen: set[str] = set()
+                self._nuclei_include = [
+                    x for x in expanded
+                    if not (x in seen or seen.add(x))
+                ]
+            else:
+                # Flat syntax.
+                # Unprefixed entries (e.g. "tBu1a") inherit the element
+                # filter from isotope_order so that "isotope: 1H" +
+                # "include_groups: [tBu1a]" selects only H atoms from
+                # tBu1a rather than all atoms of any element.
+                # Explicitly prefixed entries ("1H:tBu1a") override.
+                expanded_flat: list[str] = []
+                for entry in raw_groups:
+                    entry = str(entry).strip()
+                    if ":" in entry:
+                        iso, cl = entry.split(":", 1)
+                        el = (
+                            re.sub(r"^\d+", "", iso.strip()).strip()
+                            or None
+                        )
+                        expanded_flat.extend(_expand([cl.strip()], el))
+                    elif isotope_order:
+                        # Apply each isotope element as a filter.
+                        for el in isotope_order:
+                            expanded_flat.extend(_expand([entry], el))
+                    else:
+                        expanded_flat.extend(_expand([entry], None))
+
+                if not expanded_flat:
+                    raise ValueError(
+                        "No nuclei selected: nuclei:include_groups did "
+                        "not match any chem_label entries in "
+                        f"chem_labels_file. Requested groups={raw_groups}."
+                    )
+                # Replace _nuclei_include: include_groups is the
+                # authoritative selector, not a supplement to isotope:.
+                seen2: set[str] = set()
+                self._nuclei_include = [
+                    x for x in expanded_flat
+                    if not (x in seen2 or seen2.add(x))
+                ]
+
+        # ── exclude_groups ────────────────────────────────────────────
+        if raw_excl:
+            excluded = _expand_flat_list(raw_excl, isotope_order)
+            excl_set: set[str] = set(excluded)
+            self._nuclei_exclude = list(excl_set)
 
     @property
     def hyperfine_rotate(self) -> str:
@@ -507,7 +707,7 @@ class FitSuscConfig(Config):
             self._assignment_search = ""
             self._assignment_n_attempts = None
             self._assignment_max_iter = None
-            self._assignment_r2_threshold = None
+            self._assignment_rmse_threshold = None
             return None
 
         if not isinstance(value, dict):
@@ -530,7 +730,8 @@ class FitSuscConfig(Config):
                 + "'. Allowed values are: 'fast', 'balanced', 'robust', 'custom'."
             )
 
-        unknown = set(value) - {"mode", "n_attempts", "max_iter", "r2_threshold"}
+        allowed_keys = {"mode", "n_attempts", "max_iter", "rmse_threshold"}
+        unknown = set(value) - allowed_keys
         if unknown:
             raise ValueError(
                 "assignment:search contains unknown key(s): "
@@ -543,19 +744,19 @@ class FitSuscConfig(Config):
                 unexpected.append("n_attempts")
             if "max_iter" in value:
                 unexpected.append("max_iter")
-            if "r2_threshold" in value:
-                unexpected.append("r2_threshold")
+            if "rmse_threshold" in value:
+                unexpected.append("rmse_threshold")
             if unexpected:
                 raise ValueError(
                     "assignment:search only allows n_attempts, max_iter, and "
-                    "r2_threshold when mode is 'custom'; unexpected key(s): "
+                    "rmse_threshold when mode is 'custom'; unexpected key(s): "
                     + ", ".join(unexpected)
                 )
 
         self._assignment_search = mode
         self.assignment_n_attempts = value.get("n_attempts")
         self.assignment_max_iter = value.get("max_iter")
-        self.assignment_r2_threshold = value.get("r2_threshold")
+        self.assignment_rmse_threshold = value.get("rmse_threshold")
         return None
 
     @property
@@ -603,13 +804,13 @@ class FitSuscConfig(Config):
         return None
 
     @property
-    def assignment_r2_threshold(self) -> float | None:
-        return self._assignment_r2_threshold
+    def assignment_rmse_threshold(self) -> float | None:
+        return self._assignment_rmse_threshold
 
-    @assignment_r2_threshold.setter
-    def assignment_r2_threshold(self, value: float | None):
+    @assignment_rmse_threshold.setter
+    def assignment_rmse_threshold(self, value: float | None):
         if value is None or value == "":
-            self._assignment_r2_threshold = None
+            self._assignment_rmse_threshold = None
             return None
         if isinstance(value, (list, tuple)):
             value = value[0]
@@ -617,10 +818,134 @@ class FitSuscConfig(Config):
             fvalue = float(value)
         except Exception as exc:
             raise ValueError(
-                f"Cannot convert assignment:r2_threshold={value} to float"
+                f"Cannot convert assignment:rmse_threshold={value} to float"
             ) from exc
-        self._assignment_r2_threshold = fvalue
+        self._assignment_rmse_threshold = fvalue
         return None
+
+    @property
+    def assignment_area_weight(self) -> float:
+        return self._assignment_area_weight
+
+    @assignment_area_weight.setter
+    def assignment_area_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_area_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:area_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:area_weight must be non-negative")
+        self._assignment_area_weight = fvalue
+        return None
+
+    @property
+    def assignment_width_weight(self) -> float:
+        return self._assignment_width_weight
+
+    @assignment_width_weight.setter
+    def assignment_width_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_width_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:width_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:width_weight must be non-negative")
+        self._assignment_width_weight = fvalue
+        return None
+
+    @property
+    def assignment_r1_weight(self) -> float:
+        return self._assignment_r1_weight
+
+    @assignment_r1_weight.setter
+    def assignment_r1_weight(self, value: float | None):
+        if value is None or value == "":
+            self._assignment_r1_weight = 0.0
+            return None
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        try:
+            fvalue = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot convert assignment:r1_weight={value} to float"
+            ) from exc
+        if fvalue < 0.0:
+            raise ValueError("assignment:r1_weight must be non-negative")
+        self._assignment_r1_weight = fvalue
+        return None
+
+    @property
+    def assignment_correlations(self) -> list[dict]:
+        """List of HMBC/HSQC correlation constraints for permute assignment.
+
+        Each entry is a dict with keys ``h`` (H experimental signal label),
+        ``c`` (C experimental signal label), ``type`` (``"hsqc"`` or
+        ``"hmbc"``), and optionally ``cutoff`` (Å, overrides default).
+        """
+        return self._assignment_correlations
+
+    @assignment_correlations.setter
+    def assignment_correlations(self, value) -> None:
+        if value is None or value == "" or value == []:
+            self._assignment_correlations = []
+            return
+        if not isinstance(value, list):
+            raise ValueError(
+                "assignment:correlations must be a list of {h, c, type} dicts"
+            )
+        parsed = []
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"assignment:correlations[{i}] must be a mapping with keys "
+                    "'h', 'c', and optionally 'type' and 'cutoff'"
+                )
+            if "h" not in item or "c" not in item:
+                raise ValueError(
+                    f"assignment:correlations[{i}] must have 'h' and 'c' keys"
+                )
+            corr = {
+                "h": str(item["h"]),
+                "c": str(item["c"]),
+                "type": str(item.get("type", "hsqc")).lower(),
+            }
+            if corr["type"] not in ("hsqc", "hmbc"):
+                raise ValueError(
+                    f"assignment:correlations[{i}].type must be 'hsqc' or 'hmbc', "
+                    f"got {corr['type']!r}"
+                )
+            if "cutoff" in item:
+                corr["cutoff"] = float(item["cutoff"])
+            parsed.append(corr)
+        self._assignment_correlations = parsed
+
+    @property
+    def assignment_shared(self) -> bool:
+        return self._assignment_shared
+
+    @assignment_shared.setter
+    def assignment_shared(self, value) -> None:
+        if isinstance(value, bool):
+            self._assignment_shared = value
+        elif isinstance(value, str):
+            self._assignment_shared = value.lower() in ("true", "yes", "1")
+        else:
+            self._assignment_shared = bool(value)
 
     @property
     def chem_labels_file(self) -> str:
@@ -670,6 +995,247 @@ class FitSuscConfig(Config):
         return
 
     @property
+    def susc_fit_covariance_params(self) -> list[str]:
+        """Two parameter names for the covariance contour plot."""
+        return self._susc_fit_covariance_params
+
+    @susc_fit_covariance_params.setter
+    def susc_fit_covariance_params(self, value):
+        if value is None or value == "":
+            self._susc_fit_covariance_params = []
+            return
+        if isinstance(value, str):
+            value = [v.strip() for v in value.split(",") if v.strip()]
+        self._susc_fit_covariance_params = list(value)
+
+    # Valid figure-group keys
+    _FIGURE_KEYS = frozenset([
+        "fitted_shifts",
+        "shift_components",
+        "r6_fit",
+        "tau_space",
+        "bubble_plots",
+        "spectra",
+        "chi_t",
+    ])
+
+    @property
+    def susc_fit_figures(self) -> dict[str, bool]:
+        """Dict of figure-group key → enabled flag (missing key = enabled)."""
+        return self._susc_fit_figures
+
+    @susc_fit_figures.setter
+    def susc_fit_figures(self, value):
+        if value is None:
+            self._susc_fit_figures = {}
+            return
+        if not isinstance(value, dict):
+            raise ValueError("susc_fit:figures must be a mapping")
+        self._susc_fit_figures = {k: bool(v) for k, v in value.items()}
+
+    def susc_fit_figure(self, key: str) -> bool:
+        """Return whether a figure group is enabled (default True)."""
+        return self._susc_fit_figures.get(key, True)
+
+    @property
+    def susc_fit_shifts_format(self) -> str:
+        """Figure-size variant for the fitted-shifts (``shifts_*_K``) plot."""
+        return self._susc_fit_shifts_format
+
+    @susc_fit_shifts_format.setter
+    def susc_fit_shifts_format(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_format = "standard"
+            return
+        variant = str(value).strip().lower()
+        allowed = {"standard", "narrow", "vertical", "vertical_extended"}
+        if variant not in allowed:
+            raise ValueError(
+                "susc_fit:shifts_format must be one of "
+                + ", ".join(sorted(allowed))
+                + f"; got '{value}'"
+            )
+        self._susc_fit_shifts_format = variant
+
+    @property
+    def susc_fit_shifts_width_scale(self) -> float:
+        """Width multiplier for the fitted-shifts (``shifts_*_K``) figure."""
+        return self._susc_fit_shifts_width_scale
+
+    @susc_fit_shifts_width_scale.setter
+    def susc_fit_shifts_width_scale(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_width_scale = 1.0
+            return
+        try:
+            scale = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_fit:shifts_width_scale must be a number"
+            ) from exc
+        if scale <= 0.0:
+            raise ValueError("susc_fit:shifts_width_scale must be positive")
+        self._susc_fit_shifts_width_scale = scale
+
+    @property
+    def susc_fit_shifts_labels(self) -> bool:
+        """Whether to draw per-point labels on the fitted-shifts figure."""
+        return self._susc_fit_shifts_labels
+
+    @susc_fit_shifts_labels.setter
+    def susc_fit_shifts_labels(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_labels = True
+            return
+        self._susc_fit_shifts_labels = bool(value)
+
+    @property
+    def susc_fit_spectra_break(self) -> dict | None:
+        """Manual x-axis break spec for the pred/exp spectrum figure.
+
+        ``None`` (default) keeps the automatic gap-based segmentation. When
+        set, it is a normalised dict with keys:
+
+        - ``after_labels`` (list[str]): break just below each named peak.
+        - ``after_ppms`` (list[float]): break at each explicit ppm position.
+        - ``segments`` (list[[lo, hi]] | None): explicit per-panel ppm limits,
+          high→low ppm (left→right). When given, it overrides ``after_*`` and
+          fully controls each panel's displayed range.
+        - ``scales`` (list[float]): per-segment vertical scale, high→low ppm
+          (left→right). Length must equal the number of panels.
+        - ``equal_width`` (bool): equal panel widths instead of ppm-proportional.
+        - ``width_ratios`` (list[float] | None): explicit relative panel widths
+          (one per panel); overrides ``equal_width`` when set.
+        - ``label_scale`` (float): multiplier on peak-label font size (default 1).
+        """
+        return self._susc_fit_spectra_break
+
+    @susc_fit_spectra_break.setter
+    def susc_fit_spectra_break(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_spectra_break = None
+            return
+        if not isinstance(value, dict):
+            raise ValueError(
+                "susc_fit:spectra_break must be a mapping, e.g. "
+                "{after_label: tBu4a, scales: [1, 4], equal_width: true}"
+            )
+        allowed = {
+            "after_label", "after_ppm", "segments", "scales",
+            "equal_width", "width_ratios", "label_scale",
+        }
+        unknown = set(value) - allowed
+        if unknown:
+            raise ValueError(
+                "susc_fit:spectra_break contains unknown key(s): "
+                + ", ".join(sorted(unknown))
+            )
+
+        def _as_list(v):
+            if v is None:
+                return []
+            return list(v) if isinstance(v, (list, tuple)) else [v]
+
+        equal_width = bool(value.get("equal_width", False))
+
+        label_scale = float(value.get("label_scale", 1.0))
+        if label_scale <= 0.0:
+            raise ValueError(
+                "susc_fit:spectra_break:label_scale must be positive"
+            )
+
+        def _parse_width_ratios(n_panels: int) -> list[float] | None:
+            raw = value.get("width_ratios")
+            if raw is None:
+                return None
+            ratios = [float(x) for x in _as_list(raw)]
+            if len(ratios) != n_panels:
+                raise ValueError(
+                    "susc_fit:spectra_break:width_ratios must have "
+                    f"{n_panels} entries (one per panel) but got {len(ratios)}"
+                )
+            if any(r <= 0.0 for r in ratios):
+                raise ValueError(
+                    "susc_fit:spectra_break:width_ratios must all be positive"
+                )
+            return ratios
+
+        # Explicit per-panel limits take precedence over break points.
+        if value.get("segments") is not None:
+            raw_segs = value["segments"]
+            if not isinstance(raw_segs, (list, tuple)) or not raw_segs:
+                raise ValueError(
+                    "susc_fit:spectra_break:segments must be a non-empty list "
+                    "of [hi, lo] ppm pairs"
+                )
+            segs: list[list[float]] = []
+            for pair in raw_segs:
+                if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
+                    raise ValueError(
+                        "susc_fit:spectra_break:segments entries must be "
+                        "[hi, lo] ppm pairs"
+                    )
+                a, b = float(pair[0]), float(pair[1])
+                segs.append([min(a, b), max(a, b)])  # store as (lo, hi)
+            n_seg = len(segs)
+            scales = _as_list(value.get("scales")) or [1.0] * n_seg
+            scales = [float(x) for x in scales]
+            if len(scales) != n_seg:
+                raise ValueError(
+                    "susc_fit:spectra_break:scales must have "
+                    f"{n_seg} entries (one per segment) but got {len(scales)}"
+                )
+            width_ratios = _parse_width_ratios(n_seg)
+            # Order high→low ppm (left→right), keeping scales/widths aligned.
+            order = sorted(range(n_seg), key=lambda i: segs[i][1], reverse=True)
+            segs = [segs[i] for i in order]
+            scales = [scales[i] for i in order]
+            if width_ratios is not None:
+                width_ratios = [width_ratios[i] for i in order]
+            self._susc_fit_spectra_break = {
+                "after_labels": [],
+                "after_ppms": [],
+                "segments": segs,
+                "scales": scales,
+                "equal_width": equal_width,
+                "width_ratios": width_ratios,
+                "label_scale": label_scale,
+            }
+            return
+
+        if "after_label" not in value and "after_ppm" not in value:
+            raise ValueError(
+                "susc_fit:spectra_break requires 'after_label', 'after_ppm', "
+                "or 'segments'"
+            )
+
+        after_labels = [str(x) for x in _as_list(value.get("after_label"))]
+        after_ppms = [float(x) for x in _as_list(value.get("after_ppm"))]
+        n_breaks = len(after_labels) + len(after_ppms)
+        if n_breaks == 0:
+            raise ValueError(
+                "susc_fit:spectra_break must define at least one break"
+            )
+
+        scales = _as_list(value.get("scales")) or [1.0] * (n_breaks + 1)
+        scales = [float(x) for x in scales]
+        if len(scales) != n_breaks + 1:
+            raise ValueError(
+                "susc_fit:spectra_break:scales must have "
+                f"{n_breaks + 1} entries (n_breaks + 1) but got {len(scales)}"
+            )
+
+        self._susc_fit_spectra_break = {
+            "after_labels": after_labels,
+            "after_ppms": after_ppms,
+            "segments": None,
+            "scales": scales,
+            "equal_width": equal_width,
+            "width_ratios": _parse_width_ratios(n_breaks + 1),
+            "label_scale": label_scale,
+        }
+
+    @property
     def nuclei_include(self) -> list | str:
         return self._nuclei_include
 
@@ -677,6 +1243,36 @@ class FitSuscConfig(Config):
     def nuclei_include(self, values: list | str):
         self._nuclei_include = values
         return
+
+    @property
+    def nuclei_isotope(self) -> list | str:
+        return self._nuclei_include
+
+    @nuclei_isotope.setter
+    def nuclei_isotope(self, values: list | str):
+        """Accept isotope strings and convert to element symbols.
+
+        ``"1H"`` → ``"H"``, ``"13C"`` → ``"C"``, ``"H"`` → ``"H"``.
+        Stored in ``_nuclei_include`` to reuse existing element-filtering.
+        The ordered list is also stored in ``_nuclei_isotope_order`` so that
+        positional ``include_groups`` lists can be paired with isotopes.
+        """
+        import re as _re
+        if isinstance(values, str):
+            values = [values]
+        elements = [_re.sub(r"^\d+", "", str(v).strip()) for v in values]
+        self._nuclei_isotope_order = elements
+        current = self._nuclei_include
+        if isinstance(current, list) and current:
+            merged = current + elements
+        elif isinstance(current, str) and current:
+            merged = [current] + elements
+        else:
+            merged = elements
+        seen: set[str] = set()
+        self._nuclei_include = [
+            x for x in merged if not (x in seen or seen.add(x))
+        ]
 
     @property
     def experiment_files(self) -> list[str]:
@@ -745,21 +1341,47 @@ class FitSuscConfig(Config):
 
     @diamagnetic_ref_method.setter
     def diamagnetic_ref_method(self, value: str):
-        if value not in ["dft", "csv"]:
+        if value not in ["dft", "csv", "values"]:
             raise ValueError(f"Unknown diamagnetic_reference:method {value}")
         else:
             self._diamagnetic_ref_method = value
         return
 
     @property
-    def diamagnetic_ref_file(self) -> str:
+    def diamagnetic_ref_file(self) -> str | dict[str, str]:
         return self._diamagnetic_ref_file
 
     @diamagnetic_ref_file.setter
-    def diamagnetic_ref_file(self, value: str):
-        if not isinstance(value, str):
-            raise ValueError("Diamagnetic reference file should be string")
-        self._diamagnetic_ref_file = os.path.abspath(value)
+    def diamagnetic_ref_file(self, value: str | dict):
+        if isinstance(value, dict):
+            # Per-isotope file mapping: {isotope: path}
+            self._diamagnetic_ref_file = {
+                str(iso): os.path.abspath(str(path))
+                for iso, path in value.items()
+            }
+        elif isinstance(value, str):
+            self._diamagnetic_ref_file = os.path.abspath(value)
+        else:
+            raise ValueError("Diamagnetic reference file must be a string or dict")
+        return
+
+    @property
+    def diamagnetic_ref_values(self) -> dict[str, float] | None:
+        return self._diamagnetic_ref_values
+
+    @diamagnetic_ref_values.setter
+    def diamagnetic_ref_values(self, value: dict | None):
+        if value is None:
+            self._diamagnetic_ref_values = None
+            return
+        if not isinstance(value, dict):
+            raise ValueError(
+                "diamagnetic_ref:values must be a mapping of {isotope: float}, "
+                "e.g. {1H: 31.74, 13C: 188.07}"
+            )
+        self._diamagnetic_ref_values = {
+            str(iso): float(v) for iso, v in value.items()
+        }
         return
 
     @property
@@ -903,7 +1525,7 @@ class FitSuscConfig(Config):
         if not isinstance(value, dict):
             raise ValueError("susc_vt: variables must be a dict or None")
 
-        required_components = {"iso", "ax", "rho"}
+        required_components = {"iso", "ax", "rh"}
         unknown_components = set(value) - required_components
         if unknown_components:
             raise ValueError(
@@ -1046,6 +1668,238 @@ class FitSuscConfig(Config):
         self._susc_vt_ab_initio_format = fmt
         return None
 
+    @property
+    def susc_vt_zeta_eff(self) -> float | None:
+        """Effective spin-orbit coupling constant ζ̄_eff in cm⁻¹, or None."""
+        return self._susc_vt_zeta_eff
+
+    @susc_vt_zeta_eff.setter
+    def susc_vt_zeta_eff(self, value: float | None):
+        if value is None:
+            self._susc_vt_zeta_eff = None
+            return
+        try:
+            self._susc_vt_zeta_eff = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("susc_vt:zeta_eff must be a number or None") from exc
+
+    @property
+    def susc_vt_zeta_eff_tol(self) -> float:
+        """Fractional uncertainty on ζ̄_eff for the solution-line band (default 0.15)."""
+        return self._susc_vt_zeta_eff_tol
+
+    @susc_vt_zeta_eff_tol.setter
+    def susc_vt_zeta_eff_tol(self, value: float | None):
+        if value is None:
+            self._susc_vt_zeta_eff_tol = 0.15
+            return
+        try:
+            tol = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("susc_vt:zeta_eff_tol must be a number or None") from exc
+        if not (0.0 < tol < 1.0):
+            raise ValueError("susc_vt:zeta_eff_tol must be between 0 and 1")
+        self._susc_vt_zeta_eff_tol = tol
+
+    @property
+    def susc_vt_evans_g_iso(self) -> float | None:
+        """Isotropic g-value from an Evans-method measurement, or None."""
+        return self._susc_vt_evans_g_iso
+
+    @susc_vt_evans_g_iso.setter
+    def susc_vt_evans_g_iso(self, value: float | None):
+        if value is None:
+            self._susc_vt_evans_g_iso = None
+            return
+        try:
+            self._susc_vt_evans_g_iso = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_vt:evans_g_iso must be a number or None"
+            ) from exc
+
+    @property
+    def susc_vt_evans_g_iso_err(self) -> float:
+        """1-σ uncertainty on the Evans g_iso (default 0)."""
+        return self._susc_vt_evans_g_iso_err
+
+    @susc_vt_evans_g_iso_err.setter
+    def susc_vt_evans_g_iso_err(self, value: float | None):
+        if value is None:
+            self._susc_vt_evans_g_iso_err = 0.0
+            return
+        try:
+            self._susc_vt_evans_g_iso_err = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_vt:evans_g_iso_err must be a number or None"
+            ) from exc
+
+    @property
+    def fit_relaxation_tau_e_range(self) -> list[float] | None:
+        """τe plot range [min, max] in seconds, or None for defaults."""
+        return self._fit_relaxation_tau_e_range
+
+    @fit_relaxation_tau_e_range.setter
+    def fit_relaxation_tau_e_range(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_e_range = None
+            return
+        if isinstance(value, str):
+            import yaml as _yaml
+            value = _yaml.safe_load(value)
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ValueError(
+                "fit_relaxation:tau_e_range must be [min, max]"
+            )
+        lo, hi = float(value[0]), float(value[1])
+        if lo <= 0 or hi <= 0 or lo >= hi:
+            raise ValueError(
+                "fit_relaxation:tau_e_range values must be positive "
+                "and min < max"
+            )
+        self._fit_relaxation_tau_e_range = [lo, hi]
+
+    @property
+    def fit_relaxation_tau_r_range(self) -> list[float] | None:
+        """τR plot range [min, max] in seconds, or None for defaults."""
+        return self._fit_relaxation_tau_r_range
+
+    @fit_relaxation_tau_r_range.setter
+    def fit_relaxation_tau_r_range(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_range = None
+            return
+        if isinstance(value, str):
+            import yaml as _yaml
+            value = _yaml.safe_load(value)
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ValueError(
+                "fit_relaxation:tau_r_range must be [min, max]"
+            )
+        lo, hi = float(value[0]), float(value[1])
+        if lo <= 0 or hi <= 0 or lo >= hi:
+            raise ValueError(
+                "fit_relaxation:tau_r_range values must be positive "
+                "and min < max"
+            )
+        self._fit_relaxation_tau_r_range = [lo, hi]
+
+    @property
+    def fit_relaxation_tau_e(self) -> float | None:
+        """Fixed τe (s) for contact-contribution subtraction before r^-6 fit."""
+        return self._fit_relaxation_tau_e
+
+    @fit_relaxation_tau_e.setter
+    def fit_relaxation_tau_e(self, value):
+        if value is None:
+            self._fit_relaxation_tau_e = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_e must be positive")
+        self._fit_relaxation_tau_e = v
+
+    @property
+    def fit_relaxation_tau_r_fixed(self) -> float | None:
+        """Fixed τR (s) to overlay as a horizontal line on τ-space plots."""
+        return self._fit_relaxation_tau_r_fixed
+
+    @fit_relaxation_tau_r_fixed.setter
+    def fit_relaxation_tau_r_fixed(self, value):
+        if value is None:
+            self._fit_relaxation_tau_r_fixed = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_fixed must be positive")
+        self._fit_relaxation_tau_r_fixed = v
+
+    @property
+    def fit_relaxation_tau_r_method(self) -> str | None:
+        """Hydrodynamic model for τ_R calculation ('ellipsoid' or 'beadshell')."""
+        return self._fit_relaxation_tau_r_method
+
+    @fit_relaxation_tau_r_method.setter
+    def fit_relaxation_tau_r_method(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_method = None
+            return
+        if value not in ("ellipsoid", "beadshell"):
+            raise ValueError(
+                "fit_relaxation:tau_r_method must be 'ellipsoid' or 'beadshell'"
+            )
+        self._fit_relaxation_tau_r_method = value
+
+    @property
+    def fit_relaxation_tau_r_solvent(self) -> str | None:
+        """Solvent name for viscosity lookup when computing τ_R."""
+        return self._fit_relaxation_tau_r_solvent
+
+    @fit_relaxation_tau_r_solvent.setter
+    def fit_relaxation_tau_r_solvent(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_solvent = None
+            return
+        self._fit_relaxation_tau_r_solvent = str(value)
+
+    @property
+    def fit_relaxation_tau_r_eta(self) -> float | None:
+        """Explicit solvent viscosity (Pa·s) for τ_R calculation, overrides solvent."""
+        return self._fit_relaxation_tau_r_eta
+
+    @fit_relaxation_tau_r_eta.setter
+    def fit_relaxation_tau_r_eta(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_eta = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_eta must be positive")
+        self._fit_relaxation_tau_r_eta = v
+
+    @property
+    def fit_relaxation_tau_r_shell(self) -> float | None:
+        """Solvent shell thickness (Å) added to vdW radii when computing τ_R."""
+        return self._fit_relaxation_tau_r_shell
+
+    @fit_relaxation_tau_r_shell.setter
+    def fit_relaxation_tau_r_shell(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_shell = None
+            return
+        v = float(value)
+        if v < 0:
+            raise ValueError("fit_relaxation:tau_r_shell must be non-negative")
+        self._fit_relaxation_tau_r_shell = v
+
+    @property
+    def fit_relaxation_tau_r_sigma(self) -> float | None:
+        """Minibead radius (Å) for the bead-shell τ_R model."""
+        return self._fit_relaxation_tau_r_sigma
+
+    @fit_relaxation_tau_r_sigma.setter
+    def fit_relaxation_tau_r_sigma(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_tau_r_sigma = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("fit_relaxation:tau_r_sigma must be positive")
+        self._fit_relaxation_tau_r_sigma = v
+
+    @property
+    def fit_relaxation_distance_power(self) -> float:
+        """Exponent k for distance-based r^-6 fit weighting (w = r**k)."""
+        return self._fit_relaxation_distance_power
+
+    @fit_relaxation_distance_power.setter
+    def fit_relaxation_distance_power(self, value):
+        if value is None or value == "":
+            self._fit_relaxation_distance_power = 0.0
+            return
+        self._fit_relaxation_distance_power = float(value)
+
     @classmethod
     def from_file(cls, file_name) -> "FitSuscConfig":
         """Creates a `FitSuscConfig` from a YAML input file.
@@ -1059,12 +1913,15 @@ class FitSuscConfig(Config):
 
         config = super().from_file(file_name)
 
-        # If an optional VT susceptibility file is provided, require a ab_initio_format.
+        # If an ab initio file is provided without a format, warn but continue —
+        # comparison plots and ζ extraction require both; the pipeline skips
+        # the ab initio block when format is absent.
         if getattr(config, "susc_vt_ab_initio_file", ""):
             if not getattr(config, "susc_vt_ab_initio_format", ""):
-                raise ValueError(
-                    " Invalid VT configuration: 'susc_vt:ab_initio_file' was provided "
-                    "but 'susc_vt:ab_initio_format' is missing."
+                logger.warning(
+                    "susc_vt:ab_initio_file is set but susc_vt:ab_initio_format "
+                    "is missing — ab initio comparison and ζ extraction will be "
+                    "skipped. Add e.g. 'ab_initio_format: orca_nev'."
                 )
 
         if config.susc_vt_method == "ht_limit" and config.susc_vt_variables is not None:
@@ -1094,7 +1951,7 @@ class FitSuscConfig(Config):
                         "slope": ["fit", 0.0],
                         "tip": ["fit", 0.0],
                     },
-                    "rho": {
+                    "rh": {
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                         "tip": ["fit", 0.0],
@@ -1114,20 +1971,14 @@ class FitSuscConfig(Config):
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                     },
-                    "rho": {
+                    "rh": {
                         "intercept": ["fit", 0.0],
                         "slope": ["fit", 0.0],
                     },
                 }
 
-        if (
-            config.susc_vt_tip_type is None
-            and config.susc_vt_ab_initio_file is not None
-        ):
-            raise ValueError(
-                " Invalid VT configuration: TIP type is not provided, "
-                "Therefore 'susc_vt:ab_initio_file' variable can not be used"
-            )
+        # ab_initio_file is now useful without TIP (comparison plots, ζ extraction)
+        # so this is no longer an error.
 
         # exp_reference requires spectrum_files
         if getattr(
@@ -1170,7 +2021,7 @@ class PredictConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "susceptibility": ["temperatures"],
         "project": ["name"],
@@ -1188,7 +2039,7 @@ class PredictConfig(FitSuscConfig):
             "paramagnetic_centre",
         ],
         "experiment": ["files", "spectrum_files", "exp_reference"],
-        "nuclei": ["include"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
@@ -1196,7 +2047,10 @@ class PredictConfig(FitSuscConfig):
             "file",
         ],
         "diamagnetic_ref": ["method", "file"],
-        "susceptibility": ["file", "format", "temperatures"],
+        "susceptibility": [
+            "file", "format", "temperatures", "method", "sh",
+            "reduced_chi", "bleaney",
+        ],
         "relaxation": [
             "model",
             "temperature",
@@ -1204,6 +2058,7 @@ class PredictConfig(FitSuscConfig):
             "T1e",
             "T2e",
             "tR",
+            "min_linewidth_hz",
         ],
     }
 
@@ -1211,6 +2066,10 @@ class PredictConfig(FitSuscConfig):
         self._susceptibility_file = None
         self._susceptibility_format = None
         self._susceptibility_temperatures = []
+        self._susceptibility_method = None
+        self._susceptibility_sh = {}
+        self._susceptibility_reduced_chi = {}
+        self._susceptibility_bleaney = {}
         self._relaxation_model = ""
         self._hyperfine_paramagnetic_centre = None
         self._relaxation_temperature = None
@@ -1218,6 +2077,7 @@ class PredictConfig(FitSuscConfig):
         self._relaxation_T1e = None
         self._relaxation_T2e = None
         self._relaxation_tR = None
+        self._relaxation_min_linewidth_hz = 0.0
 
         super().__init__(**kwargs)
 
@@ -1267,6 +2127,89 @@ class PredictConfig(FitSuscConfig):
         return None
 
     @property
+    def susceptibility_method(self) -> str | None:
+        return self._susceptibility_method
+
+    @susceptibility_method.setter
+    def susceptibility_method(self, value: str | None):
+        if value is None or value == "":
+            self._susceptibility_method = None
+            return None
+        method = value.strip().lower()
+        allowed = {"spin_only", "sh", "reduced_chi", "bleaney"}
+        if method not in allowed:
+            raise ValueError(
+                f"Unknown susceptibility:method '{value}'. "
+                f"Allowed: {', '.join(sorted(allowed))}."
+            )
+        self._susceptibility_method = method
+        return None
+
+    @property
+    def susceptibility_bleaney(self) -> dict:
+        return self._susceptibility_bleaney
+
+    @susceptibility_bleaney.setter
+    def susceptibility_bleaney(self, value):
+        if value is None:
+            self._susceptibility_bleaney = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:bleaney must be a mapping")
+        required = {"B20", "B22", "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:bleaney is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_bleaney = value
+        return None
+
+    @property
+    def susceptibility_sh(self) -> dict:
+        return self._susceptibility_sh
+
+    @susceptibility_sh.setter
+    def susceptibility_sh(self, value):
+        if value is None:
+            self._susceptibility_sh = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:sh must be a mapping")
+        required = {"gx", "gy", "gz", "D", "E_over_D", "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:sh is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_sh = value
+        return None
+
+    @property
+    def susceptibility_reduced_chi(self) -> dict:
+        return self._susceptibility_reduced_chi
+
+    @susceptibility_reduced_chi.setter
+    def susceptibility_reduced_chi(self, value):
+        if value is None:
+            self._susceptibility_reduced_chi = {}
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("susceptibility:reduced_chi must be a mapping")
+        required = {"chi_iso_T", "chi_ax_T", "rh_over_ax",
+                    "alpha", "beta", "gamma"}
+        missing = required - set(value.keys())
+        if missing:
+            raise ValueError(
+                f"susceptibility:reduced_chi is missing required keys: "
+                f"{', '.join(sorted(missing))}"
+            )
+        self._susceptibility_reduced_chi = value
+        return None
+
+    @property
     def relaxation_model(self) -> str:
         return self._relaxation_model
 
@@ -1284,13 +2227,16 @@ class PredictConfig(FitSuscConfig):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -1300,7 +2246,10 @@ class PredictConfig(FitSuscConfig):
                     "list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @property
     def relaxation_temperature(self) -> float | None:
@@ -1394,6 +2343,20 @@ class PredictConfig(FitSuscConfig):
             raise ValueError(f"Cannot convert tR value {value} to float")
         return None
 
+    @property
+    def relaxation_min_linewidth_hz(self) -> float:
+        return self._relaxation_min_linewidth_hz
+
+    @relaxation_min_linewidth_hz.setter
+    def relaxation_min_linewidth_hz(self, value):
+        if value is None:
+            self._relaxation_min_linewidth_hz = 0.0
+        else:
+            v = float(value)
+            if v < 0:
+                raise ValueError("min_linewidth_hz must be non-negative")
+            self._relaxation_min_linewidth_hz = v
+
     @classmethod
     def from_file(cls, file_name: str) -> "PredictConfig":
         """Creates a `PredictConfig` from a YAML input file.
@@ -1425,7 +2388,7 @@ class FitCorrTimeConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "experiment": ["files"],
         "fit_corr_time": [
@@ -1449,7 +2412,7 @@ class FitCorrTimeConfig(FitSuscConfig):
             "total_momentum_J",
             "paramagnetic_centre",
         ],
-        "nuclei": ["include", "include_groups"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "experiment": ["files"],
         "fit_corr_time": [
             "tau_R",
@@ -1585,13 +2548,16 @@ class FitCorrTimeConfig(FitSuscConfig):
 
     @hyperfine_paramagnetic_centre.setter
     def hyperfine_paramagnetic_centre(
-        self, value: list[float] | tuple[float, float, float] | None
+        self, value: list[float] | tuple[float, float, float] | str | None
     ):
         if value is None or value == "":
             self._hyperfine_paramagnetic_centre = None
             return None
         if isinstance(value, str):
             value = yaml.safe_load(value)
+        if isinstance(value, str):
+            self._hyperfine_paramagnetic_centre = value
+            return None
         if isinstance(value, (list, tuple)) and len(value) == 3:
             try:
                 self._hyperfine_paramagnetic_centre = [float(val) for val in value]
@@ -1601,7 +2567,10 @@ class FitCorrTimeConfig(FitSuscConfig):
                     "to list of 3 floats"
                 ) from exc
             return None
-        raise ValueError("hyperfine:paramagnetic_centre must be a list of 3 floats")
+        raise ValueError(
+            "hyperfine:paramagnetic_centre must be an atom label (e.g. Ni1) "
+            "or a list of 3 floats [x, y, z]"
+        )
 
     @classmethod
     def from_file(cls, file_name: str) -> "FitCorrTimeConfig":
@@ -1626,7 +2595,7 @@ class PlotHFCConfig(FitSuscConfig):
     REQ_KEYWORDS = {
         "hyperfine": ["method", "file"],
         "nuclei": [
-            "include",
+            "isotope",
         ],
         "project": ["name"],
     }
@@ -1638,7 +2607,7 @@ class PlotHFCConfig(FitSuscConfig):
             "average",
             "orbital_contribution",
         ],
-        "nuclei": ["include", "include_groups"],
+        "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
         "project": ["name"],
         "chem_labels": ["file"],
     }

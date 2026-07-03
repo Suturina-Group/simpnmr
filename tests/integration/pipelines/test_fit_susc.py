@@ -29,14 +29,19 @@ def _cli_env(tmp_path: Path) -> dict[str, str]:
 
 
 @pytest.mark.integration
-def test_fit_susc_with_pdip_hfc_isoaxrho_and_permutation_assignment(tmp_path: Path):
+def test_fit_susc_with_pdip_hfc_isoaxrh_and_permutation_assignment(tmp_path: Path):
     """Run the canonical ``fit_susc`` workflow with PDIP hyperfine input.
 
     This public happy-path case uses point-dipole hyperfine data from XYZ
-    coordinates together with the ``isoaxrho`` susceptibility fit model and
+    coordinates together with the ``isoaxrh`` susceptibility fit model and
     permutation-based assignment.
     """
     cwd = Path("examples/DyL1/SIMULATIONS/Fitting")
+    if not (cwd / "DyL1_1H_Fitting.yml").exists():
+        pytest.skip(
+            "example config not available (examples/**/SIMULATIONS/ is "
+            f"gitignored): {cwd / 'DyL1_1H_Fitting.yml'}"
+        )
     cmd = ["simpnmr", "--hide", "fit_susc", "DyL1_1H_Fitting.yml"]
     result = subprocess.run(
         cmd, capture_output=True, text=True, cwd=cwd, env=_cli_env(tmp_path)
@@ -65,6 +70,11 @@ def test_fit_susc_with_qc_hfc_split_model_and_hungarian_assignment(tmp_path: Pat
     different temperatures.
     """
     cwd = Path("examples/P3FeCl/SIMULATIONS/Fitting")
+    if not (cwd / "P3FeCl_VT_Fitting.yml").exists():
+        pytest.skip(
+            "example config not available (examples/**/SIMULATIONS/ is "
+            f"gitignored): {cwd / 'P3FeCl_VT_Fitting.yml'}"
+        )
     cmd = ["simpnmr", "--hide", "fit_susc", "P3FeCl_VT_Fitting.yml"]
     result = subprocess.run(
         cmd, capture_output=True, text=True, cwd=cwd, env=_cli_env(tmp_path)

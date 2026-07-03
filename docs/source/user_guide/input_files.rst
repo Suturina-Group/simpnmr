@@ -129,6 +129,48 @@ Used in workflows that require hyperfine tensor information, including:
    quantities are available. At present, this pathway is implemented only for
    ORCA 5 and ORCA 6 outputs.
 
+.. note::
+
+   **Hyperfine CSV format (``method: csv``)**
+
+   The CSV file must be in the canonical SimpNMR molecule CSV format —
+   the same format produced by ``save_molecule_to_csv``. Comment lines
+   beginning with ``#`` are ignored.
+
+   **Required columns:**
+
+   - ``atom_label ()`` — atom label matching the structure (e.g. ``H1``, ``C3``)
+   - ``x (Å)``, ``y (Å)``, ``z (Å)`` — Cartesian coordinates in Ångströms
+
+   **Spin hyperfine columns** (all seven must be present together):
+
+   - ``A_fc_iso (ppm Å^-3)`` — isotropic Fermi-contact value, ⅓ Tr[**A**\ :sub:`FC`]
+   - ``A_sd_xx``, ``A_sd_xy``, ``A_sd_xz``, ``A_sd_yy``, ``A_sd_yz``,
+     ``A_sd_zz`` (all ``ppm Å^-3``) — unique elements of the symmetric
+     spin-dipole tensor **A**\ :sub:`SD`
+
+   The full hyperfine tensor is reconstructed internally as
+   **A** = **A**\ :sub:`SD` + *A*\ :sub:`fc,iso` · **I**.
+
+   **Optional orbital hyperfine columns** (all six must be present together):
+
+   - ``A_orb_xx``, ``A_orb_xy``, ``A_orb_xz``, ``A_orb_yy``, ``A_orb_yz``,
+     ``A_orb_zz`` (all ``ppm Å^-3``) — unique elements of the symmetric
+     orbital hyperfine tensor
+
+   **Optional label columns:**
+
+   - ``chem_label ()`` — chemical/symmetry label for each atom
+   - ``chem_math_label ()`` — LaTeX-formatted label for plot annotations
+
+   Example header line::
+
+       atom_label (),chem_label (),x (Å),y (Å),z (Å),A_fc_iso (ppm Å^-3),A_sd_xx (ppm Å^-3),A_sd_xy (ppm Å^-3),A_sd_xz (ppm Å^-3),A_sd_yy (ppm Å^-3),A_sd_yz (ppm Å^-3),A_sd_zz (ppm Å^-3)
+
+   The easiest way to produce a valid file is to run a ``dft`` calculation
+   first and save the result with ``save_molecule_to_csv``; the output can
+   then be edited or used directly as a ``csv`` input.
+
 Chemical Labels
 ^^^^^^^^^^^^^^^
 
@@ -150,6 +192,28 @@ Used in workflows that group nuclei by chemical labels.
 
    Chemical labels are used to group nuclei for averaging and assignment purposes.
    This block is optional for pNMR prediction, but is mandatory for susceptibility fitting.
+
+.. note::
+
+   **chem_labels CSV format**
+
+   The CSV file must contain at minimum the columns ``atom_label`` and ``chem_label``.
+   Two additional columns are optional:
+
+   - ``chem_math_label`` — a LaTeX-formatted label used in plot annotations
+     (e.g. ``$tBu_1$``). Falls back to ``chem_label`` if omitted.
+   - ``isotope`` — NMR isotope string for the atom group (e.g. ``1H``, ``13C``).
+     When absent or empty, the most abundant NMR-active isotope for the element
+     is used automatically (H → ``1H``, C → ``13C``, N → ``15N``, etc.).
+     Providing this column is only necessary when a non-default isotope is
+     required (e.g. ``2H`` for deuterium).
+
+   Example::
+
+       atom_label,chem_label,chem_math_label,isotope
+       H1,tBu1,$tBu_1$,1H
+       H2,tBu1,$tBu_1$,1H
+       C1,qC,$qC$,13C
 
 Nuclei
 ^^^^^^
@@ -215,6 +279,49 @@ Used in fitting workflows that require experimental shift data.
 
 .. note::
 
+   **Experiment CSV format (wide format)**
+
+   Experimental peak data are stored in a *wide-format* CSV file. Temperature
+   and magnetic field are specified as the first two header rows; one block of
+   signal columns is written for each (T, B) condition, allowing multiple
+   conditions to coexist in a single file::
+
+       temperature (K),298.15,298.15,298.15,305,305,305
+       magnetic field (T),4.7,4.7,4.7,4.7,4.7,4.7
+       assignment,shift (ppm),width (Hz),area (),assignment,shift (ppm),width (Hz),area ()
+       aax,82.89,587.31,4108.48,...
+       py5,24.14,97.24,5139.30,...
+
+   **Required columns** (repeated for each condition block):
+
+   - ``assignment`` — unique label for each signal (non-empty, unique per isotope)
+   - ``shift (ppm)`` — observed chemical shift in ppm
+   - ``width (Hz)`` — linewidth (FWHM) in Hz
+   - ``area`` — integrated signal area
+
+   **Optional columns:**
+
+   - ``r1 (Hz)`` — longitudinal relaxation rate R\ :sub:`1` in s\ :sup:`−1`
+   - ``L/G`` — Lorentzian-to-Gaussian lineshape ratio (default 1.0)
+   - ``isotope`` — nuclear isotope tag (e.g. ``1H``, ``13C``). When present,
+     each signal is attributed only to plots and filters for that isotope.
+     When absent, isotope attribution falls back to the ``chem_labels`` file
+     or a single-isotope shortcut if only one isotope is present.
+
+   Every signal must carry a non-empty assignment. Assignments must be unique
+   within each isotope in a given (T, B) block.
+
+   A trailing comma at the end of the temperature or magnetic field header row
+   (as produced by some spreadsheet applications) is ignored automatically.
+
+   .. rubric:: Legacy format
+
+   Files beginning with ``# temperature`` and ``# magnetic_field`` comment
+   lines (one file per condition) are still accepted for backwards
+   compatibility.
+
+.. note::
+
    An experimental spectrum reference (``exp_reference``) may be provided to
    define an absolute chemical shift reference (in ppm) for experimental
    spectrum files. The reference peak is recognised within a tolerance of ±1 ppm.
@@ -250,27 +357,66 @@ Optional. Used when diamagnetic shift data are provided explicitly.
 Diamagnetic Reference
 ^^^^^^^^^^^^^^^^^^^^^
 
-Defines a solvent-based diamagnetic reference used to calibrate diamagnetic shift
-values.
+Defines the reference compound used to convert absolute DFT shieldings into
+chemical shifts via δ\ :sup:`dia` = σ\ :sub:`ref` − σ.
 
-**Applicability:**  
+**Applicability:**
 Required when ``diamagnetic.method`` is set to ``dft``.
+
+Three modes are available:
+
+**Option 1 — explicit values per isotope (recommended)**
+
+Provide the averaged reference shielding for each isotope directly.
+No extra file is needed — just look up σ\ :sub:`ref` from your DFT output once
+and hardcode it. This is unambiguous when predicting multiple isotopes (1H and
+13C simultaneously).
 
 .. code-block:: yaml
 
-    # Diamagnetic schema (reference):
     diamagnetic_ref:
-      method: dft # DFT-derived diamagnetic reference shifts (e.g. solvent reference)
-              csv # User-supplied diamagnetic reference shifts in CSV format
-      file: dia_ref.csv # Reference file corresponding to the selected method
+      method: values
+      values:
+        1H: 31.74       # avg σ(H) in TMS at your DFT level
+        13C: 188.07     # avg σ(C) in TMS at your DFT level
+
+**Option 2 — single reference file (all isotopes)**
+
+A single DFT or CSV file is averaged per element and mapped to isotopes
+automatically (H → ``1H``, C → ``13C``, etc. via the default isotope table).
+Suitable when all predicted isotopes share the same reference compound and file.
+
+.. code-block:: yaml
+
+    diamagnetic_ref:
+      method: dft   # or csv
+      file: tms_shielding.log
+
+**Option 3 — per-isotope reference files**
+
+Supply a separate reference file for each isotope. Useful when different isotopes
+use different reference compounds or levels of theory.
+
+.. code-block:: yaml
+
+    diamagnetic_ref:
+      method: dft
+      file:
+        1H:  tms_1h.log
+        13C: tms_13c.log
 
 .. note::
 
-   The diamagnetic reference represents the solvent or reference environment used
-   to calibrate diamagnetic shifts.
+   The reference shielding and the diamagnetic shielding (``diamagnetic:file``)
+   must be computed at the same level of theory (functional and basis set).
 
-   When DFT-derived diamagnetic shifts are used, the reference must be computed at
-   the same level of theory (e.g. identical functional and basis set).
+   **Why per-isotope references matter:** a DFT NMR calculation on a diamagnetic
+   analogue produces shieldings for all atoms simultaneously (1H, 13C, etc.).
+   Each isotope requires its own reference shielding (e.g. TMS gives both
+   σ\ :sub:`ref`\ (1H) and σ\ :sub:`ref`\ (13C), which are numerically very
+   different). Using a single-file reference with ``method: dft`` maps these
+   correctly via element → isotope conversion. Use ``method: values`` when you
+   want to be explicit or when the automatic mapping is not sufficient.
 
 Relaxation Enhancement
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -298,11 +444,18 @@ Optional. Used in workflows that include relaxation-based shift broadening or we
       T1e: 0.2e-12 # Required parameter
       T2e: 0.2e-12 # Required parameter
       tR: 140e-12 # Required parameter
+      min_linewidth_hz: 5.0 # Optional minimum linewidth floor (Hz); added to the
+                            # calculated R2/π linewidth before converting to ppm
 
 .. note::
 
    Relaxation models modify the weighting or broadening of predicted shifts but do
    not alter the underlying susceptibility or hyperfine tensors.
+
+   ``min_linewidth_hz`` sets a floor on the predicted linewidth. The value (in Hz)
+   is added to the SBM/Curie-calculated R₂/π linewidth before conversion to ppm,
+   accounting for contributions such as field inhomogeneity or natural linewidth
+   that are not captured by the relaxation model. Defaults to 0.0 (no floor).
 
    When a relaxation model is specified, all required relaxation parameters must
    be provided. When relaxation is enabled, ``hyperfine:paramagnetic_centre``
@@ -331,14 +484,14 @@ Magnetic Susceptibility
 ^^^^^^^^^^^^^^^^^^^^^^^
 Defines the magnetic susceptibility tensor(s) used for pNMR prediction.
 
-**Applicability:**  
+**Applicability:**
 Used in workflows involving pNMR prediction.
 
 .. code-block:: yaml
 
     # susceptibility block schema (reference):
     susceptibility:
-        # Susceptibility tensor source file [Required]
+        # Susceptibility tensor source file [Required unless method: spin_only]
         file: chi/orca.out # file containing magnetic susceptibility data
 
         # File format identifier [Optional]
@@ -346,8 +499,12 @@ Used in workflows involving pNMR prediction.
                 orca_cas # CASSCF-derived susceptibility data from ORCA output
                 csv # User-supplied susceptibility tensor data in CSV format
 
-        # Temperature to extract (K) [Required]
-        temperature: [298.00]
+        # Temperature(s) to extract or compute (K) [Required]
+        temperatures: [298.00]
+
+        # Susceptibility source method [Optional]
+        method: spin_only # Compute isotropic χ from quantum numbers via the Curie law;
+                          # no susceptibility file is needed (see note below)
 
 .. note::
 
@@ -360,6 +517,65 @@ Used in workflows involving pNMR prediction.
    The ``format`` field is optional. If omitted, the susceptibility backend and
    (for ORCA outputs) the most advanced available method are selected
    automatically from the input file (e.g. NEVPT2 preferred over CASSCF).
+
+.. note::
+
+   **Spin-only susceptibility (``method: spin_only``)**
+
+   When ``method: spin_only`` is set, no susceptibility file is required. The
+   isotropic susceptibility χ\ :sub:`iso` is computed analytically at each
+   requested temperature via the Curie law:
+
+   .. math::
+
+      \chi_\text{iso} = \frac{\mu_0 \mu_B^2 g_\text{eff}^2 S_\text{eff}(S_\text{eff}+1)}{3 k_B T}
+
+   where the effective g-factor g\ :sub:`eff` is the Landé g-factor computed
+   from the quantum numbers S, L, and J provided in the ``hyperfine`` block,
+   and S\ :sub:`eff` = J for lanthanides (J defined) or S for transition metals
+   (L = 0). The resulting susceptibility tensor is isotropic (diagonal, all
+   components equal to χ\ :sub:`iso`).
+
+   Because the tensor is isotropic, only the Fermi contact shift contributes
+   (isotropic A\ :sub:`iso` × χ\ :sub:`iso`); the pseudocontact contribution
+   (which requires tensor anisotropy) is identically zero. This mode is therefore
+   only meaningful when a QC-derived hyperfine file with non-zero A\ :sub:`iso` is
+   provided (e.g. ``hyperfine:method: dft``). Using ``hyperfine:method: pdip``
+   with ``method: spin_only`` will produce zero paramagnetic shifts and a warning
+   is emitted.
+
+   The spin quantum number S must be supplied in the ``hyperfine`` block.
+   L and J are optional:
+
+   - If J is omitted (or ``null``), g = g\ :sub:`e` ≈ 2.0023 and S\ :sub:`eff` = S
+     (pure spin Curie law). Appropriate for transition metals with quenched orbital
+     angular momentum or organic radicals.
+   - If S, L, **and** J are all provided, the Landé g\ :sub:`J` factor is used and
+     S\ :sub:`eff` = J. Appropriate for lanthanides.
+
+   .. code-block:: yaml
+
+       # Transition metal (spin-only, L quenched):
+       hyperfine:
+           method: dft
+           file: hfc/molecule.out
+           spin: 2.5           # S — required
+
+       susceptibility:
+           method: spin_only
+           temperatures: [298.00]
+
+       # Lanthanide (Landé g_J, S_eff = J):
+       hyperfine:
+           method: dft
+           file: hfc/molecule.out
+           spin: 2.5           # S
+           orbit: 5            # L
+           total_momentum_J: 7.5  # J
+
+       susceptibility:
+           method: spin_only
+           temperatures: [298.00, 310.00]
 
 Fitting-only blocks
 ----------------------
@@ -391,7 +607,12 @@ Used in susceptibility fitting workflows that require assignment handling.
           mode: custom   # One of: fast | balanced | robust | custom
           n_attempts: 10      # Optional, mode: custom only
           max_iter: 100       # Optional, mode: custom only
-          r2_threshold: 0.99  # Optional, mode: custom only
+          rmse_threshold: 0.5   # Optional, mode: custom only (ppm)
+
+        # Cost-matrix weighting terms [Optional, Hungarian only]
+        area_weight: 0.0    # Weight for signal area vs. group-size consistency
+        width_weight: 0.0   # Weight for linewidth vs. 1/r^6 consistency
+        r1_weight: 0.0      # Weight for R1 vs. 1/r^6 consistency
 
 The three supported strategies are:
 
@@ -416,16 +637,42 @@ The three supported strategies are:
     Search behaviour is controlled by the ``search`` mapping:
 
     - ``mode: fast`` uses ``n_attempts=1``, ``max_iter=20``,
-      ``r2_threshold=0.95``.
+      ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: balanced`` uses ``n_attempts=10``, ``max_iter=100``,
-      ``r2_threshold=0.99``.
-    - ``mode: robust`` uses ``n_attempts=25``, ``max_iter=250``,
-      ``r2_threshold=0.995``.
+      ``rmse_threshold=0.0`` (early stopping disabled).
+    - ``mode: robust`` uses ``n_attempts=200``, ``max_iter=500``,
+      ``rmse_threshold=0.0`` (early stopping disabled).
     - ``mode: custom`` allows these three numeric controls to be provided
       explicitly under ``assignment:search``.
 
     If the ``search`` block is omitted, the policy layer resolves the default
     behaviour to the ``balanced`` mode.
+
+    The cost matrix used by the Hungarian algorithm can be augmented with
+    additional physically motivated terms via the following optional keys:
+
+    ``area_weight``
+        Adds a term based on the consistency between the normalised experimental
+        signal area and the normalised group size (number of equivalent nuclei
+        sharing the same chemical label). Both quantities are normalised to sum
+        to 1 across all signals/labels before comparison. This steers the
+        algorithm to match signals with large integrated areas to labels with
+        many equivalent nuclei. Default: ``0.0`` (disabled).
+
+    ``width_weight``
+        Adds a term based on the consistency between the normalised experimental
+        linewidth and the normalised mean ``1/r⁶`` for each label, where *r* is
+        the distance from each nucleus to the paramagnetic centre. Since
+        paramagnetic relaxation scales as ``1/r⁶``, signals with larger
+        linewidths are steered toward labels closer to the metal. Both
+        quantities are normalised to sum to 1. Requires
+        ``hyperfine.paramagnetic_centre`` to be set. Default: ``0.0``
+        (disabled).
+
+    ``r1_weight``
+        Analogous to ``width_weight`` but uses experimental ``R1`` values
+        instead of linewidths. Signals without R1 data are treated as zero.
+        Default: ``0.0`` (disabled).
 
     This method scales polynomially with the number of signals and is therefore
     preferred over ``permute`` for large or heavily degenerate assignment
@@ -440,11 +687,14 @@ The three supported strategies are:
    For ``permute``, the ``groups`` key must be explicitly defined.
 
    For ``hungarian``, the ``groups`` key is not supported. Hungarian assignment
-   is controlled only through the optional ``search`` mapping.
+   is controlled through the optional ``search`` mapping and the optional
+   cost-matrix weighting keys (``area_weight``, ``width_weight``,
+   ``r1_weight``).
 
    The canonical Hungarian forms are ``search: {mode: balanced}`` for preset
    behaviour and ``search: {mode: custom, n_attempts: ..., max_iter: ...,
-   r2_threshold: ...}`` for fully explicit search control.
+   rmse_threshold: ...}`` for fully explicit search control. All weighting
+   terms default to ``0.0`` and can be combined freely.
 
    Assignment handling assumes that experimental data and assignments are
    ordered consistently by the user.
@@ -463,7 +713,7 @@ Used in susceptibility fitting workflows.
     # susc_fit block schema (reference):
     susc_fit:
         # Susceptibility model type [Required]
-        type: isoaxrho # Isotropic + axial + rhombic susceptibility model
+        type: isoaxrh # Isotropic + axial + rhombic susceptibility model
               split # Split axial/rhombic susceptibility model
               full # Full anisotropic susceptibility tensor
               eigen # Eigenvalue-based susceptibility model
@@ -474,11 +724,11 @@ Used in susceptibility fitting workflows.
         # Supported: A3, cm3 mol-1, reduced
         input_units: reduced
 
-        # Fit variables definition [Required for type: isoaxrho]
+        # Fit variables definition [Required for type: isoaxrh]
         variables:
           iso: [fit, 0.2]
           ax:  [fit, 0.1]
-          rho_over_ax: [fix, 0.0]
+          rh_over_ax: [fix, 0.0]
 
         # Fit variables definition [Required for type: split]
         variables:
@@ -513,6 +763,36 @@ Used in susceptibility fitting workflows.
         average_shifts: 'all' # Average shifts over all chemical labels
                         ["Me1", "Me2"] # Average shifts over the specified chemical labels
 
+        # Output figure toggles [Optional]. Any omitted key defaults to true.
+        figures:
+          fitted_shifts: true
+          shift_components: true
+          spectra: true
+          r6_fit: true
+          tau_space: true
+          bubble_plots: false
+          chi_t: false
+
+        # Fitted-shifts / mean-components figure layout [Optional]
+        shifts_format: narrow      # size variant: standard | narrow | vertical | vertical_extended (default: standard)
+        shifts_width_scale: 1.3    # multiply the figure width only (default: 1.0)
+        shifts_labels: false       # draw per-point labels on the fitted-shifts scatter (default: true)
+
+        # Broken x-axis for the predicted/experimental spectrum figure [Optional].
+        spectra_break:
+          # Choose ONE way to place the break(s):
+          #  (a) break just after a named peak, or at an explicit ppm:
+          after_label: tBu4a       # or:  after_ppm: -7.5
+          #  (b) explicit per-panel ppm limits, high->low ppm (overrides after_*):
+          segments:
+            - [14, -3]
+            - [-13, -43]
+            - [-70, -76]
+          scales: [1, 4, 20]       # per-panel vertical magnification (shown as "xN" labels)
+          width_ratios: [2, 1, 0.5] # relative panel widths (overrides equal_width)
+          equal_width: true        # equal panel widths (used only when width_ratios is absent)
+          label_scale: 0.7         # scale factor for peak-label font size
+
 .. note::
 
    The required fit variables depend on the selected susceptibility model type.
@@ -523,8 +803,8 @@ Used in susceptibility fitting workflows.
 
    ``susc_fit:input_units: reduced`` uses the Curie-normalised convention already. Each susceptibility component is interpreted as
    ``chi_reduced = chi * T / Curie_prefactor(S)`` and is converted internally to
-    ``Å^3`` units for the actual fit. Dimensionless parameters such as
-   ``rho_over_ax`` are not rescaled.
+   ``Å^3`` units for the actual fit. Dimensionless parameters such as
+   ``rh_over_ax`` are not rescaled.
 
 Temperature Dependence of Magnetic Susceptibility Fitting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -564,7 +844,7 @@ Optional. Used in susceptibility fitting workflows that model temperature depend
             intercept: [fit, 0.0] # Required parameter
             slope: [fit, 0.0] # Required parameter
             tip: [fix, 0.0010] # Required when tip_type is set to fit
-          rho:
+          rh:
             intercept: [fit, 0.0] # Required parameter
             slope: [fit, 0.0] # Required parameter
             tip: [fix, 0.0] # Required when tip_type is set to fit
@@ -574,6 +854,191 @@ Optional. Used in susceptibility fitting workflows that model temperature depend
    Temperature-dependent fitting extends the base susceptibility fitting model.
    When TIP parameters are fixed from ab initio data, the corresponding file and
    format must be provided explicitly.
+
+.. _fit-relaxation-block:
+
+Relaxation Fit Options
+^^^^^^^^^^^^^^^^^^^^^^
+
+Controls the r\ :sup:`-6` distance-model fits for R1 and linewidth that are
+run automatically as part of the susceptibility fitting workflow.
+
+**Applicability:**
+Optional. Used in susceptibility fitting workflows when R1 or linewidth data
+are present in the experiment files.
+
+.. code-block:: yaml
+
+    # fit_relaxation block schema (reference):
+    fit_relaxation:
+        # Fixed τe for Fermi-contact subtraction; also the reference value used
+        # when selecting the derived τe root (see note below) [Optional]
+        tau_e: 5.0e-13  # s — T1e = T2e used to subtract contact contribution
+
+        # τe axis range for τ-space plots; also bounds the derived-τe search [Optional]
+        tau_e_range: [1.0e-14, 1.0e-11]  # [min, max] in s
+
+        # τR axis range for τ-space plots [Optional]
+        tau_r_range: [1.0e-10, 1.0e-7]   # [min, max] in s
+
+        # Known rotational correlation time to overlay on τ-space plots [Optional]
+        tau_r_fixed: 1.5e-9  # s
+
+        # Distance-weighting exponent for the r⁻⁶ fit [Optional]
+        # Each point is weighted by r_eff**distance_power (0 = equal weights).
+        distance_power: 0.0
+
+        # Automatic τR calculation from structure (Optional)
+        # Requires tau_r_method plus either tau_r_solvent or tau_r_eta.
+        tau_r_method: ellipsoid       # "ellipsoid" (default) or "beadshell"
+        tau_r_solvent: D2O            # solvent name for viscosity lookup
+        # tau_r_eta: 1.1e-3           # explicit viscosity (Pa·s); overrides tau_r_solvent
+        # tau_r_shell: 0.0            # solvation shell thickness added to vdW radii (Å)
+        # tau_r_sigma: 0.6            # minibead radius for bead-shell model (Å)
+
+.. note::
+
+   **Contact contribution subtraction**
+
+   Observed R1 and linewidth contain both the distance-dependent dipolar/Curie
+   contribution and a distance-independent Fermi-contact contribution.  Only
+   the dipolar/Curie part scales as ``r⁻⁶``; fitting without removing the
+   contact part biases the slope ``p1``.
+
+   When ``tau_e`` is provided, the SBM contact relaxation rate is computed for
+   each chem_label group using the isotropic hyperfine coupling ``A_iso`` from
+   the loaded hyperfine tensors and subtracted before the ``r⁻⁶`` fit.  For
+   linewidth the contact R2 (s\ :sup:`-1`\) is converted to ppm via
+   ``R2 / (π |γI| B0)``.
+
+   The contact-subtracted observable, the raw observable, and the per-signal
+   contact contribution are all written to the output CSV.
+
+   If ``tau_e`` is omitted (default) no subtraction is performed and the fit
+   is identical to the previous behaviour.  The ``p2`` intercept term then
+   absorbs both diamagnetic and contact baseline contributions.
+
+.. note::
+
+   **Fitting algorithm**
+
+   The r\ :sup:`−6` model :math:`p_1 r^{-6} + p_2` is fitted using **Huber
+   regression** (``epsilon = 1.35``).  Residuals smaller than 1.35 σ are
+   treated as inliers with an ordinary least-squares (L2) penalty; larger
+   residuals are down-weighted with an L1 penalty.  This makes the fit
+   resistant to outliers — for example a mis-assigned nucleus or an unusually
+   flexible side-chain close to the metal — while leaving well-behaved points
+   unaffected.
+
+.. note::
+
+   **R1 / R2 decomposition**
+
+   When a rotational correlation time ``τR`` is available (from ``tau_r_method``
+   or ``tau_r_fixed``) together with at least one r\ :sup:`−6` relaxation fit,
+   an electronic correlation time ``τe`` is derived by inverting the fitted
+   ``p1``.  A single molecular ``τe`` is used: when several r\ :sup:`−6` fits
+   are available (linewidth and/or R1, across isotopes) the most trustworthy
+   one is chosen automatically from the number of data points and the relative
+   uncertainty of ``p1``.  Because the SBM ``p1`` is non-monotonic in ``τc``
+   the inversion can have two roots; the root closest to ``tau_e`` (default
+   1 ps) within ``tau_e_range`` is selected.
+
+   The resulting ``(τR, τe)`` are then used to compute the full R\ :sub:`1` and
+   R\ :sub:`2` decomposition (SBM dipolar/contact + Curie) for every nucleus,
+   written to ``peak_data_<TEMPERATURE>_K_<FIELD>_T.csv`` and recorded in that
+   file's header.  In this case the spectrum linewidths are taken from this
+   relaxation model rather than the raw r\ :sup:`−6` linewidth fit.
+
+   Parameter uncertainties are estimated by bootstrap (1000 resamples with
+   replacement) and reported as ``p1_err`` / ``p2_err`` in the output CSV
+   and annotation boxes.
+
+.. note::
+
+   **Overlaying a known τ\ :sub:`R` on τ-space plots**
+
+   When ``tau_r_fixed`` is provided, each τ-space heatmap plot receives an
+   additional overlay:
+
+   - A dashed horizontal line drawn at the specified τ\ :sub:`R` value.
+   - A dotted vertical line and a cross marker at every intersection of that
+     horizontal with the central contour (p\ :sub:`1`\ :sup:`calc` =
+     p\ :sub:`1`\ :sup:`fit`), indicating the τ\ :sub:`e` value consistent
+     with the fitted slope at the given τ\ :sub:`R`.
+   - A bottom-left annotation reporting both τ\ :sub:`R` and the derived
+     τ\ :sub:`e`.
+
+   The grid is automatically extended to include ``tau_r_fixed`` even if it
+   falls outside the ``tau_r_range`` window, so the heatmap colours are
+   always shown across the full displayed region.
+
+   This is useful when τ\ :sub:`R` has been determined independently (e.g.
+   from NMR diffusion measurements or molecular dynamics) and you want to
+   read off the implied τ\ :sub:`e` directly from the plot.
+
+.. note::
+
+   **Automatic τ\ :sub:`R` calculation from molecular structure**
+
+   Setting ``tau_r_method`` enables automatic per-temperature τ\ :sub:`R`
+   computation from the molecular coordinates that are already loaded by the
+   pipeline (the same structure used for the hyperfine tensor calculation).
+   The result is used as ``tau_r_fixed`` for each individual τ-space plot —
+   overriding any manually specified ``tau_r_fixed`` value.
+
+   ``tau_r_method`` must be accompanied by either ``tau_r_solvent`` (for
+   automatic Arrhenius-corrected viscosity) or ``tau_r_eta`` (for a fixed
+   user-supplied viscosity):
+
+   .. code-block:: yaml
+
+       fit_relaxation:
+           tau_r_method: ellipsoid
+           tau_r_solvent: D2O         # viscosity corrected per temperature
+
+   Alternatively, supply the viscosity explicitly (useful for non-standard
+   solvents or when the Arrhenius correction is not desired):
+
+   .. code-block:: yaml
+
+       fit_relaxation:
+           tau_r_method: ellipsoid
+           tau_r_eta: 1.1e-3          # Pa·s, applied at every temperature
+
+   **Models**
+
+   *ellipsoid*
+      The molecule is approximated by a triaxial ellipsoid; the Perrin
+      analytical rotational diffusion tensor is computed from the three
+      principal semi-axes.  Fast and appropriate for compact molecules.
+
+   *beadshell*
+      The molecular surface is covered with minibeads (radius ``tau_r_sigma``,
+      default 0.6 Å) and the rotational diffusion tensor is obtained from the
+      Rotne–Prager–Yamakawa hydrodynamic interaction matrix.  More accurate
+      for non-ellipsoidal or highly elongated structures.
+
+   **Solvation shell**
+
+   Both models can include a solvation shell of thickness ``tau_r_shell``
+   (Å, default 0.0) added uniformly to all van der Waals radii before
+   computing the molecular shape.
+
+   **Standalone tool**
+
+   τ\ :sub:`R` values can also be calculated independently, outside a
+   ``fit_susc`` run, using the ``simpnmr calc_tau_c`` command
+   (see :doc:`standalone_cli`).
+
+.. note::
+
+   **τ-space heatmap axis ranges**
+
+   ``tau_e_range`` and ``tau_r_range`` set the axis limits of the 2D τ-space
+   heatmap that maps which (τe, τR) pairs are consistent with the fitted ``p1``
+   within the 95 % confidence interval.  If omitted, default ranges are used.
+   Values must be positive and ordered ``[min, max]``.
 
 .. rubric:: Notes on optional command-line controls
 

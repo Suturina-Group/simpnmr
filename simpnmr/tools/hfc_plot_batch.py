@@ -63,7 +63,7 @@ def load_hyperfine_data(
             converter=None,
         )
 
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(chem_labels)
         molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         all_molecules[source_name] = molecule
@@ -310,7 +310,7 @@ def main():
         for name, molecule in molecules.items()
     }
 
-    all_rho = {
+    all_rh = {
         name: {
             nuc.chem_math_label: -nuc.A.sd[0, 0] - nuc.A.sd[1, 1]
             for nuc in molecule.nuclei
@@ -326,8 +326,8 @@ def main():
     )
 
     plot_component(
-        all_rho,
-        r"$A_\mathregular{rho} \mathregular{(MHz)}$",
+        all_rh,
+        r"$A_\mathregular{rh} \mathregular{(MHz)}$",
         figure_title=uargs.window_append,
         savename="rhombic.pdf",
     )

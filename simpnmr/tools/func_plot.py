@@ -47,7 +47,7 @@ def load_hyperfine_data(sources: dict[str, str], chem_labels: str) -> dict[str, 
             converter="MHz_to_Ang-3",
         )
 
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(chem_labels)
         molecule.apply_chem_labels(al_to_cl, al_to_cml)
 
         all_molecules[source_name] = molecule
@@ -258,7 +258,7 @@ def main() -> None:
         for name, molecule in molecules.items()
     }
 
-    all_rho = {
+    all_rh = {
         name: {
             nuc.chem_math_label: -nuc.A.sd[0, 0] - nuc.A.sd[1, 1]
             for nuc in molecule.nuclei
@@ -268,4 +268,4 @@ def main() -> None:
 
     plot_component(all_ax, r"$A_\mathregular{ax}$", figure_title=uargs.window_append)
 
-    plot_component(all_rho, r"$A_\mathregular{rho}$", figure_title=uargs.window_append)
+    plot_component(all_rh, r"$A_\mathregular{rh}$", figure_title=uargs.window_append)

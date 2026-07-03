@@ -88,22 +88,30 @@ def format_compact_uncertainty(
         uncertainty,
         sig_digits=sig_digits,
     )
-    rounded_uncertainty = _quantize_decimal(
-        uncertainty,
-        decimal_places=decimal_places,
-    )
+
+    # Coarsen until the parenthesised digit is ≤ 5.
+    while True:
+        rounded_uncertainty = _quantize_decimal(
+            uncertainty,
+            decimal_places=decimal_places,
+        )
+        scaled_uncertainty = int(
+            rounded_uncertainty.scaleb(decimal_places).to_integral_value(
+                rounding=ROUND_HALF_UP
+            )
+        )
+        if scaled_uncertainty <= 5:
+            break
+        decimal_places -= 1
+
     rounded_value = _quantize_decimal(
         value,
         decimal_places=decimal_places,
     )
 
-    value_str = f"{rounded_value:.{decimal_places}f}"
-    scaled_uncertainty = int(
-        rounded_uncertainty.scaleb(decimal_places).to_integral_value(
-            rounding=ROUND_HALF_UP
-        )
-    )
+    if decimal_places >= 0:
+        value_str = f"{rounded_value:.{decimal_places}f}"
+    else:
+        value_str = str(int(rounded_value))
 
-    uncertainty_digits = f"{scaled_uncertainty:0{sig_digits}d}"
-
-    return f"{value_str}({uncertainty_digits})"
+    return f"{value_str}({scaled_uncertainty})"

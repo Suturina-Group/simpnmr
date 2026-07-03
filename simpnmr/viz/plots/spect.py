@@ -7,25 +7,26 @@ Provides utilities to build 1D spectra from per-nucleus shifts and to compare
 predicted spectra with deconvoluted and raw experimental spectra.
 """
 
-import copy
 import logging
 import os
 from collections.abc import Mapping
+from pathlib import Path
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 from numpy.typing import ArrayLike
 
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.spectrum.kernels import gaussian, lorentzian
 from simpnmr.core.util.arrays import find_index_of_nearest
-from simpnmr.core.util.strings import remove_numbers
+
 from simpnmr.io.csv.spec import write_spectrum
-from simpnmr.viz.layout.canvas import create_canvas, create_stacked_canvas
 from simpnmr.viz.layout.export import render_figure
+from simpnmr.viz.layout.figure import get_figsize
 from simpnmr.viz.style.theme import PlotSpec
 from simpnmr.viz.utils.fmt import isotope_format
 
@@ -34,7 +35,9 @@ logger = logging.getLogger(__name__)
 
 def _get_plot_linewidth(nucleus, linewidths_by_label):
     if linewidths_by_label is not None and nucleus.label in linewidths_by_label:
-        return linewidths_by_label[nucleus.label]
+        lw = linewidths_by_label[nucleus.label]
+        if lw is not None:
+            return lw
     if nucleus.shift.lw is None:
         raise ValueError("Spectrum plotting requires linewidth values")
     return nucleus.shift.lw
@@ -100,29 +103,48 @@ def plot_pred_spectrum(
     glyphs = spec.glyphs
     palette = spec.palette
 
-    # Make plot
-    fig, ax = create_canvas(
-        spec.profile,
-        variant="standard",
-        window_title=window_title,
-        layout="constrained",
-    )
-    spec.skin_axes(ax)
-
-    # Spectrum trace
-    ax.plot(x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75)
-
-    # Labels
-    avg_shifts = {
+    # Labels — math labels for PDF rendering, plain labels for CSV metadata
+    avg_shifts_math = {
         nucleus.chem_math_label: nucleus.shift.avg
+        for nucleus in molecule.nuclei
+        if nucleus.isotope == isotope
+    }
+    # plain chem_label keyed separately so CSV lookup matches peak_data_*.csv
+    math_to_plain = {
+        nucleus.chem_math_label: nucleus.chem_label
         for nucleus in molecule.nuclei
         if nucleus.isotope == isotope
     }
 
     # Ensure labels match shifts in sorted order
-    sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
-    sorted_labels = [label for label, _ in sorted_shifts_labels]
+    sorted_shifts_labels = sorted(avg_shifts_math.items(), key=lambda x: x[1])
+    sorted_labels = [label for label, _ in sorted_shifts_labels]   # math
     sorted_shifts = [shift for _, shift in sorted_shifts_labels]
+    sorted_plain_labels = [math_to_plain[lbl] for lbl in sorted_labels]
+
+    # Scale figure width and label density with number of peaks
+    n_peaks = len(sorted_labels)
+    base_width = 3.54  # inches (standard)
+    fig_width = max(base_width, base_width * n_peaks / 8)
+    base_height = 2.40
+    label_mindist = max(0.005, 0.03 / max(1, n_peaks / 8))
+    label_fontsize = max(
+        4, round(spec.typography.label * min(1.0, 8 / max(1, n_peaks)))
+    )
+
+    # Make plot
+    fig, ax = plt.subplots(
+        1, 1,
+        figsize=(fig_width, base_height),
+        num=window_title,
+        layout="constrained",
+    )
+    spec.skin_axes(ax)
+
+    # Spectrum trace
+    ax.plot(
+        x_grid, y_intensity, color=palette.primary, lw=glyphs.line_lw * 0.75
+    )
 
     _annotate_peaks_with_barrier(
         ax,
@@ -136,7 +158,9 @@ def plot_pred_spectrum(
         glyphs=glyphs,
         reverse_axis=True,
         connector_alpha=0.6,
-        label_fontsize=str(spec.typography.label),
+        label_fontsize=str(label_fontsize),
+        label_mindist_scale=label_mindist,
+        line_scale=0.4,
     )
 
     ax.set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)))
@@ -161,13 +185,19 @@ def plot_pred_spectrum(
     if save and verbose:
         logger.info("Predicted spectrum saved to %s", f"{save_name}.pdf")
 
-    # Write spectrum (ppm and normalized intensity) to CSV for external visualization
-    csv_path = os.path.join(
-        os.path.dirname(save_name),
-        f"shift_vs_intensity_{molecule.susc.temperature:.2f}_K.csv",
+    # Write spectrum CSV with full metadata so the GUI can reconstruct
+    # annotations without needing a Molecule object.
+    # Derive name from save_name so multi-isotope runs don't overwrite each
+    # other (save_name already carries the isotope suffix, e.g. _1H).
+    _stem = Path(save_name).name.replace("pred_spectrum", "shift_vs_intensity")
+    csv_path = os.path.join(os.path.dirname(save_name), f"{_stem}.csv")
+    write_spectrum(
+        csv_path, x_grid, y_intensity,
+        isotope=isotope,
+        temperature=molecule.susc.temperature,
+        peak_labels=sorted_plain_labels,
+        peak_shifts=sorted_shifts,
     )
-
-    write_spectrum(csv_path, x_grid, y_intensity)
 
     return fig, ax
 
@@ -184,6 +214,8 @@ def plot_raw_deconv_pred(
     save_name: str = "pred_and_exp_spectrum.pdf",
     window_title: str = "Raw, Deconvoluted, and Predicted Spectra",
     verbose: bool = True,
+    label_colors: dict | None = None,
+    axis_break: dict | None = None,
 ) -> tuple[plt.Figure, np.ndarray]:
     """Plots raw, deconvoluted, and predicted spectra.
 
@@ -193,7 +225,8 @@ def plot_raw_deconv_pred(
         shift_range: Two-element sequence specifying the initial min/max ppm.
             The final plotting window is expanded to include the experimental
             peak range with additional padding.
-        experiment: Experiment containing the raw spectrum and deconvolution results.
+        experiment: Experiment containing the raw spectrum and
+            deconvolution results.
         spec: Plot styling contract.
         effective_linewidths_by_label: Optional per-nucleus linewidths in ppm
             resolved by the application pipeline.
@@ -207,17 +240,47 @@ def plot_raw_deconv_pred(
         A tuple ``(fig, ax)``.
     """
 
-    # Always use two subplots: Simulation (top) and Experiment (bottom)
-    n_subplots = 2
+    # Two rows: Simulation (top) and Experiment (bottom)
 
-    # Use the union of simulation and experimental peak ranges to avoid clipping.
-    exp_min = min(s.shift for s in experiment.signals)
-    exp_max = max(s.shift for s in experiment.signals)
-    range_min = min(shift_range[0], exp_min)
-    range_max = max(shift_range[1], exp_max)
+    # Chem-labels that belong to the requested isotope (for signal filtering)
+    _iso_chem_labels = {
+        nuc.chem_label
+        for nuc in molecule.nuclei
+        if nuc.isotope == isotope
+    }
+    # All isotopes present in the molecule
+    _all_isotopes = {nuc.isotope for nuc in molecule.nuclei}
+    _single_isotope = len(_all_isotopes) == 1
 
-    # Add extra 10% padding for better visibility
-    pad = 0.1 * max(abs(exp_min), abs(exp_max))
+    # Signals for the deconvoluted spectrum.
+    # Priority: use signal.isotope field when present; fall back to
+    # assignment-based lookup or single-isotope shortcut.
+    def _signal_belongs(s) -> bool:
+        """True if signal s belongs to the rendered isotope."""
+        if s.isotope is not None:
+            return s.isotope == isotope
+        if _single_isotope:
+            return True
+        return s.assignment in _iso_chem_labels
+
+    _iso_signals = [s for s in experiment.signals if _signal_belongs(s)]
+
+    # Connector arrows only for signals assigned to this isotope
+    _connector_signals = [
+        s for s in experiment.signals
+        if s.assignment in _iso_chem_labels and _signal_belongs(s)
+    ]
+
+    # Use union of simulation and experimental ranges to avoid clipping.
+    if _iso_signals:
+        exp_min = min(s.shift for s in _iso_signals)
+        exp_max = max(s.shift for s in _iso_signals)
+        range_min = min(shift_range[0], exp_min)
+        range_max = max(shift_range[1], exp_max)
+        pad = 0.1 * max(abs(exp_min), abs(exp_max))
+    else:
+        range_min, range_max = shift_range[0], shift_range[1]
+        pad = 0.1 * max(abs(range_min), abs(range_max))
     shift_range = [range_min - pad, range_max + pad]
 
     # Construct common ppm axis for all spectra (x-axis)
@@ -241,7 +304,7 @@ def plot_raw_deconv_pred(
         if nucleus.isotope == isotope
     }
 
-    # Ensure nucleus text-label match simulated (predicted) shifts in sorted order
+    # Ensure nucleus text-label match simulated (predicted) shifts in order
     sorted_shifts_labels = sorted(avg_shifts.items(), key=lambda x: x[1])
     labels = [label for label, _ in sorted_shifts_labels]
     shifts = [shift for _, shift in sorted_shifts_labels]
@@ -251,221 +314,883 @@ def plot_raw_deconv_pred(
         y_sim_intensity[find_index_of_nearest(x_grid, sh)] for sh in shifts
     ]
 
-    # Construct deconvoluted (processed experimental) spectrum intensities (y-axis)
-    y_deconv_intensity = np.zeros_like(x_grid)
+    # Construct deconvoluted (processed experimental) spectrum intensities
+    y_deconv_intensity = _build_deconv_spectrum(experiment, isotope, x_grid)
 
-    # Accumulate deconvoluted spectrum intensities
-    for signal in experiment.signals:
-        # Convert experimental linewidth from Hz to ppm
-        exp_width_ppm = signal.width / (
-            NUCLEAR_GAMMAS[remove_numbers(isotope)] * experiment.magnetic_field
-        )
-        # Add Lorentzian contribution
-        y_deconv_intensity += signal.l_to_g * lorentzian(
-            x_grid, exp_width_ppm, signal.shift, signal.area
-        )
-        # Add Gaussian contribution
-        y_deconv_intensity += (1 - signal.l_to_g) * gaussian(
-            x_grid, exp_width_ppm, signal.shift, signal.area
-        )
+    # Normalise both spectra to max = 1 so barriers land at the same
+    # data coordinate (1.1) and height_ratios can be computed exactly.
+    _sim_max = float(np.max(y_sim_intensity)) or 1.0
+    y_sim_intensity = y_sim_intensity / _sim_max
+    sim_peak_heights = [h / _sim_max for h in sim_peak_heights]
+
+    _deconv_max = float(np.max(y_deconv_intensity)) or 1.0
+    y_deconv_intensity = y_deconv_intensity / _deconv_max
 
     glyphs = spec.glyphs
     palette = spec.palette
 
-    # Define plot space
-    fig, ax = create_stacked_canvas(
-        spec.profile,
-        nrows=n_subplots,
-        variant="standard",
-        window_title=window_title,
-        layout="constrained",
-        sharex=True,
-    )
-    for axis in ax:
-        spec.skin_axes(axis)
+    # After normalisation max=1, so:
+    #   top panel y-top  = 1.1 * 1.05 * 1.5 = 1.733
+    #   bottom panel y-top = barrier(1.1)
+    # height_ratios must equal these y-ranges so that the 0→1.1 spectrum
+    # region occupies the same physical height on both panels.
+    _y_top_sim = 1.1 * 1.05 * 1.5    # 1.7325
+    _y_top_exp = 1.1  # = _label_barrier_exp after normalisation
 
-    # SUBPLOT NUMBER 1 - Simulated spectrum with peak markers and nucleus text-labels
-    ax[0].set_xlim(np.max(shift_range), np.min(shift_range))
-    ax[0].plot(x_grid, y_sim_intensity, lw=glyphs.line_lw, color=palette.primary)
-    ax[0].plot(
-        shifts,
-        sim_peak_heights,
-        lw=0,
-        color=palette.primary,
-        markersize=glyphs.ms,
-    )
-    _annotate_peaks_with_barrier(
-        ax[0],
-        x_grid=x_grid,
-        y_intensity=y_sim_intensity,
-        peak_x=shifts,
-        labels=labels,
-        shift_range=shift_range,
-        spec=spec,
-        palette=palette,
-        glyphs=glyphs,
-        reverse_axis=True,
-        label_fontsize=spec.typography.label - 2,
-    )
+    # Pre-compute barriers (spectra normalised to max=1)
+    _sim_barrier = 1.1
+    _label_barrier_exp = 1.1
 
-    # Vertical left-side label
-    ax[0].text(
-        -0.0,
-        0.5,
-        "Simulation",
-        transform=ax[0].transAxes,
-        rotation=90,
-        va="center",
-        ha="right",
-        fontsize=str(spec.typography.annotation - 1),
-        clip_on=False,
-    )
-
-    # SUBPLOT NUMBER 2 - Deconvoluted (processed experimental) spectrum
-    ax[1].plot(
-        x_grid,
-        y_deconv_intensity,
-        lw=glyphs.line_lw,
-        color=palette.primary,
-        alpha=0.7,
-    )
-    # Overlay raw experimental spectrum if available.
-    # If `experiment.exp_reference` is provided (ppm), normalize the raw spectrum
-    # so it overlays the deconvoluted spectrum using the strongest deconv peak
-    # within ±1 ppm of the reference.
-    if experiment.spectrum is not None:
-        x_raw = np.asarray(experiment.spectrum[:, 0], dtype=float)
-        y_raw = np.asarray(experiment.spectrum[:, 1], dtype=float)
-
-        exp_ref = getattr(experiment, "exp_reference", None)
-
-        if exp_ref is not None:
-            exp_ref = float(exp_ref)
-
-            tol_ppm = 1.0
-
-            # Reference height from deconvoluted spectrum: max within [ref - 1, ref + 1]
-            m_deconv = (x_grid >= exp_ref - tol_ppm) & (x_grid <= exp_ref + tol_ppm)
-            if np.any(m_deconv):
-                ref_y_deconv = float(np.max(y_deconv_intensity[m_deconv]))
-            else:
-                ref_y_deconv = float(np.max(y_deconv_intensity))
-
-            # Reference height from raw spectrum: max within [ref - 1, ref + 1]
-            m_raw = (x_raw >= exp_ref - tol_ppm) & (x_raw <= exp_ref + tol_ppm)
-            if np.any(m_raw):
-                ref_y_raw = float(np.max(y_raw[m_raw]))
-            else:
-                ref_y_raw = float(np.max(y_raw))
-
-            # Scale raw to match deconvoluted reference height (guard against zeros)
-            if ref_y_raw > 0.0:
-                scale = ref_y_deconv / ref_y_raw
-            else:
-                scale = 1.0
-
-            y_raw = y_raw * scale
-
-            # Clip extreme solvent peaks: after normalization, cap raw intensity
-            # to the global maximum of the deconvoluted spectrum.
-            deconv_max = float(np.max(y_deconv_intensity))
-            y_raw = np.clip(y_raw, a_min=None, a_max=deconv_max)
-
-        ax[1].plot(
-            x_raw,
-            y_raw,
-            lw=glyphs.line_lw,
-            color=palette.highlight,
-            alpha=0.35,
-        )
-
-    # Try to match exp. to the same LaTeX labels used for the simulated spectrum
+    # label lookups
     latex_label_map: dict[str, str] = {}
     for nucleus in molecule.nuclei:
         if nucleus.isotope != isotope:
             continue
-
-        # Prefer the plain chemical label if available.
         plain = getattr(nucleus, "chem_label", None)
         latex = getattr(nucleus, "chem_math_label", None)
         if plain and latex:
             latex_label_map[str(plain)] = str(latex)
 
     def _map_assignment_to_latex(assignment: str) -> str:
-        """Map an experimental assignment string to LaTeX labels if possible.
-
-        Supports comma-separated assignments (e.g. "H1,H2"). If no mapping is
-        found, the original token is preserved.
-        """
-
         if assignment is None:
             return ""
-
         tokens = [t.strip() for t in str(assignment).split(",")]
-        mapped: list[str] = []
-        for tok in tokens:
-            mapped.append(latex_label_map.get(tok, tok))
-        return ",".join(mapped)
+        return ",".join(latex_label_map.get(tok, tok) for tok in tokens)
 
-    pm_sorted = sorted(
-        [
-            (signal.shift, _map_assignment_to_latex(signal.assignment))
-            for signal in experiment.signals
-        ],
-        key=lambda x: x[0],
-        reverse=True,
+    _label_to_pred = dict(zip(labels, shifts))
+
+    _matched_pred_labels = {
+        _map_assignment_to_latex(s.assignment)
+        for s in _connector_signals
+        if _label_to_pred.get(
+            _map_assignment_to_latex(s.assignment)
+        ) is not None
+    }
+    # Build chem_label → group color and math_label → group color lookups.
+    _chem_to_color: dict[str, str] = {}
+    if label_colors:
+        for nuc in molecule.nuclei:
+            if nuc.isotope == isotope and nuc.chem_label in label_colors:
+                _chem_to_color[nuc.chem_label] = label_colors[nuc.chem_label]
+    _math_to_color: dict[str, str] = {
+        nuc.chem_math_label: _chem_to_color.get(
+            nuc.chem_label, palette.primary)
+        for nuc in molecule.nuclei
+        if nuc.isotope == isotope
+    }
+
+    _sim_label_colors = {
+        lab: (
+            "red" if lab not in _matched_pred_labels
+            else _math_to_color.get(lab, palette.primary)
+        )
+        for lab in labels
+    }
+
+    # Per-group Lorentzian contributions (summed over equivalent nuclei).
+    _group_y: dict[str, np.ndarray] = {}
+    if _chem_to_color:
+        for nuc in molecule.nuclei:
+            if nuc.isotope != isotope:
+                continue
+            _lw = _get_plot_linewidth(nuc, effective_linewidths_by_label)
+            contrib = lorentzian(
+                x_grid, _lw, nuc.shift.avg, 1
+            )
+            if nuc.chem_label in _group_y:
+                _group_y[nuc.chem_label] += contrib
+            else:
+                _group_y[nuc.chem_label] = contrib.copy()
+
+    # ------------------------------------------------------------------
+    # Axis-break: find spectral segments and build the figure grid.
+    # A user-supplied ``axis_break`` forces the break position(s), per-segment
+    # vertical scale, and (optionally) equal panel widths; otherwise segments
+    # are detected automatically from gaps and drawn ppm-proportional.
+    # ------------------------------------------------------------------
+    _all_peaks = shifts + [s.shift for s in _iso_signals]
+    _segments = None
+    _seg_scales = None
+    _equal_width = False
+    if axis_break:
+        if axis_break.get("segments"):
+            # Explicit per-panel ppm limits (already high→low ordered).
+            _segments = [tuple(s) for s in axis_break["segments"]]
+            _seg_scales = list(
+                axis_break.get("scales") or [1.0] * len(_segments)
+            )
+        else:
+            _peak_label_to_ppm = {
+                s.assignment: s.shift for s in _iso_signals if s.assignment
+            }
+            _segments, _seg_scales = _manual_spectral_segments(
+                axis_break, _peak_label_to_ppm, _all_peaks, shift_range
+            )
+        _equal_width = bool(axis_break.get("equal_width"))
+    if not _segments:
+        _segments = _find_spectral_segments(_all_peaks, shift_range)
+        _seg_scales = None
+    _n = len(_segments)
+    if _seg_scales is None or len(_seg_scales) != _n:
+        _seg_scales = [1.0] * _n
+    _seg_widths = [abs(s[1] - s[0]) for s in _segments]
+
+    # Resolve panel widths: explicit width_ratios > equal_width > ppm-proportional.
+    _label_scale = float(axis_break.get("label_scale", 1.0)) if axis_break else 1.0
+    _cfg_wr = axis_break.get("width_ratios") if axis_break else None
+    if _cfg_wr is not None and len(_cfg_wr) == _n:
+        _width_ratios = [float(w) for w in _cfg_wr]
+    elif _equal_width:
+        _width_ratios = [1.0] * _n
+    else:
+        _width_ratios = list(_seg_widths)
+
+    # Minimum label separation, per panel. With unequal panel widths/spans a
+    # fixed ppm threshold is physically tiny in a compressed panel, so labels
+    # there still collide. Convert a constant on-screen spacing (≈ the vertical
+    # label's width) into ppm for each panel using its displayed width. The
+    # single-panel default keeps the historical ppm-fraction behaviour.
+    if _n > 1:
+        _plot_w_pt = get_figsize(spec.profile, "vertical")[0] * 72.0 * 0.93
+        _min_center_pt = (spec.typography.label * _label_scale) * 1.3
+        _wr_sum = sum(_width_ratios) or 1.0
+        _per_seg_mindist = [
+            _min_center_pt * _seg_widths[i]
+            / (_plot_w_pt * _width_ratios[i] / _wr_sum)
+            if _width_ratios[i] > 0 else 0.0
+            for i in range(_n)
+        ]
+    else:
+        _per_seg_mindist = [
+            0.015 * abs(shift_range[1] - shift_range[0])
+        ] * _n
+
+    fig = plt.figure(
+        figsize=get_figsize(spec.profile, "vertical"),
+        num=window_title,
+        layout="constrained",
     )
-    pm_shifts = [sh for sh, _ in pm_sorted]
-    pm_labels = [lab for _, lab in pm_sorted]
-
-    _annotate_peaks_with_barrier(
-        ax[1],
-        x_grid=x_grid,
-        y_intensity=y_deconv_intensity,
-        peak_x=pm_shifts,
-        labels=pm_labels,
-        shift_range=shift_range,
-        spec=spec,
-        palette=palette,
-        glyphs=glyphs,
-        reverse_axis=True,
-        label_fontsize=spec.typography.label - 2,
+    fig.get_layout_engine().set(w_pad=0, wspace=0.001)
+    _gs = fig.add_gridspec(
+        2, _n,
+        width_ratios=_width_ratios,
+        height_ratios=[_y_top_sim, _y_top_exp],
+        hspace=0.02,
     )
+    _ax_top = [fig.add_subplot(_gs[0, i]) for i in range(_n)]
+    _ax_bot = [
+        fig.add_subplot(_gs[1, i], sharex=_ax_top[i])
+        for i in range(_n)
+    ]
+    # Share y within each row so ylim propagates
+    for i in range(1, _n):
+        _ax_top[i].sharey(_ax_top[0])
+        _ax_bot[i].sharey(_ax_bot[0])
 
-    # Vertical left-side label (instead of a top title)
-    ax[1].text(
-        0.0,
-        0.5,
-        "Experiment",
-        transform=ax[1].transAxes,
-        rotation=90,
-        va="center",
-        ha="right",
-        fontsize=str(spec.typography.annotation - 1),
-        clip_on=False,
+    # Set inverted xlim per segment (high ppm on left)
+    for i, (slo, shi) in enumerate(_segments):
+        _ax_top[i].set_xlim(shi, slo)
+
+    for _ax in _ax_top + _ax_bot:
+        spec.skin_axes(_ax)
+        _ax.set_yticks([])
+        _ax.set_yticklabels([])
+        _ax.spines[["right", "top", "left"]].set_visible(False)
+    for _at in _ax_top:
+        _at.tick_params(labelbottom=False)
+
+    # Hide interior spines at break points
+    if _n > 1:
+        for i in range(_n):
+            for _ax in [_ax_top[i], _ax_bot[i]]:
+                if i > 0:
+                    _ax.spines["left"].set_visible(False)
+                if i < _n - 1:
+                    _ax.spines["right"].set_visible(False)
+        for i in range(_n - 1):
+            _draw_break_markers(_ax_top[i], _ax_top[i + 1])
+            _draw_break_markers(_ax_bot[i], _ax_bot[i + 1])
+
+    def _seg_ax(x: float, row: list) -> plt.Axes:
+        """Return the axis whose segment contains x (fallback: nearest)."""
+        for k, (slo, shi) in enumerate(_segments):
+            if min(slo, shi) <= x <= max(slo, shi):
+                return row[k]
+        dists = [abs(x - (s[0] + s[1]) / 2) for s in _segments]
+        return row[int(np.argmin(dists))]
+
+    def _scale_at(x: float) -> float:
+        """Return the vertical scale of the segment containing x (else 1.0)."""
+        for k, (slo, shi) in enumerate(_segments):
+            if min(slo, shi) <= x <= max(slo, shi):
+                return _seg_scales[k]
+        return 1.0
+
+    # ------------------------------------------------------------------
+    # Top panel — simulated spectrum
+    # ------------------------------------------------------------------
+    _lw_line = 0.5 * glyphs.line_lw
+    _lw_conn = max(0.2, 0.16 * glyphs.line_lw)
+    _lw_barrier = max(0.2, 0.4 * glyphs.line_lw)
+
+    for _i_seg, _at in enumerate(_ax_top):
+        sc = _seg_scales[_i_seg]
+        # Individual per-group Lorentzians (drawn first, behind composite)
+        for chem_lbl, y_grp in _group_y.items():
+            col = _chem_to_color.get(chem_lbl, palette.primary)
+            y_grp_norm = y_grp / _sim_max * sc
+            _at.fill_between(
+                x_grid, y_grp_norm,
+                alpha=0.18, color=col, linewidth=0,
+            )
+            _at.plot(
+                x_grid, y_grp_norm,
+                lw=_lw_line * 0.65, color=col, alpha=0.75,
+            )
+        # Composite trace on top
+        _at.plot(
+            x_grid, y_sim_intensity * sc,
+            lw=_lw_line, color=palette.primary,
+        )
+        _at.plot(
+            shifts, [h * sc for h in sim_peak_heights],
+            lw=0, color=palette.primary, markersize=glyphs.ms,
+        )
+        _annotate_peaks_with_barrier(
+            _at,
+            x_grid=x_grid,
+            y_intensity=y_sim_intensity * sc,
+            peak_x=shifts,
+            labels=labels,
+            shift_range=shift_range,
+            spec=spec,
+            palette=palette,
+            glyphs=glyphs,
+            reverse_axis=True,
+            label_fontsize=spec.typography.label * _label_scale,
+            line_scale=0.8,
+            label_colors=_sim_label_colors,
+            label_mindist_abs=_per_seg_mindist[_i_seg],
+            barrier_y=_sim_barrier,
+        )
+    _ax_top[0].set_ylim(0, _y_top_sim)
+
+
+    # ------------------------------------------------------------------
+    # Bottom panel — deconvoluted + raw experimental spectrum
+    # ------------------------------------------------------------------
+
+    # Raw experimental spectrum drawn first (bottom layer)
+    if experiment.spectrum is not None:
+        x_raw = np.asarray(experiment.spectrum[:, 0], dtype=float)
+        y_raw = np.asarray(experiment.spectrum[:, 1], dtype=float)
+
+        exp_ref = getattr(experiment, "exp_reference", None)
+        if exp_ref is not None:
+            exp_ref = float(exp_ref)
+            tol_ppm = 1.0
+            m_deconv = (
+                (x_grid >= exp_ref - tol_ppm)
+                & (x_grid <= exp_ref + tol_ppm)
+            )
+            ref_y_deconv = float(
+                np.max(y_deconv_intensity[m_deconv])
+                if np.any(m_deconv)
+                else np.max(y_deconv_intensity)
+            )
+            m_raw = (
+                (x_raw >= exp_ref - tol_ppm)
+                & (x_raw <= exp_ref + tol_ppm)
+            )
+            ref_y_raw = float(
+                np.max(y_raw[m_raw]) if np.any(m_raw) else np.max(y_raw)
+            )
+            scale = ref_y_deconv / ref_y_raw if ref_y_raw > 0.0 else 1.0
+            y_raw = np.clip(
+                y_raw * scale,
+                a_min=None,
+                a_max=float(np.max(y_deconv_intensity)),
+            )
+
+        for _i_seg, _ab in enumerate(_ax_bot):
+            _ab.plot(
+                x_raw, y_raw * _seg_scales[_i_seg],
+                lw=_lw_line, color=palette.highlight,
+            )
+
+    # Individual Lorentzian/Gaussian components (thin dashed, behind sum)
+    _lw_comp = max(0.3, _lw_line * 0.7)
+    for signal in _iso_signals:
+        exp_width_ppm = signal.width / (
+            get_nuclear_gamma(isotope) * experiment.magnetic_field
+        )
+        y_comp = (
+            signal.l_to_g
+            * lorentzian(x_grid, exp_width_ppm, signal.shift, signal.area)
+            + (1 - signal.l_to_g)
+            * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
+        )
+        y_comp_norm = y_comp / _deconv_max
+        for _i_seg, _ab in enumerate(_ax_bot):
+            _ab.plot(
+                x_grid, y_comp_norm * _seg_scales[_i_seg],
+                lw=_lw_comp, color=palette.primary,
+                alpha=0.35, linestyle="--",
+            )
+
+    for _i_seg, _ab in enumerate(_ax_bot):
+        _ab.plot(
+            x_grid, y_deconv_intensity * _seg_scales[_i_seg],
+            lw=_lw_line, color=palette.primary, alpha=0.7,
+        )
+
+    # Barrier line and ylim on bottom panel
+    for _ab in _ax_bot:
+        _ab.hlines(
+            _label_barrier_exp,
+            np.min(shift_range), np.max(shift_range),
+            linestyle="-", color=palette.primary,
+            linewidth=_lw_barrier, alpha=0.7,
+        )
+    _ax_bot[0].set_ylim(0, _label_barrier_exp)
+
+    # ------------------------------------------------------------------
+    # Connectors: exp peak → barrier → pred position in top panel
+    # ------------------------------------------------------------------
+    for signal in _connector_signals:
+        latex_lab = _map_assignment_to_latex(signal.assignment)
+        pred_x = _label_to_pred.get(latex_lab)
+        if pred_x is None:
+            continue
+        exp_x = signal.shift
+        peak_y = (
+            y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+            * _scale_at(exp_x)
+        )
+        _ab = _seg_ax(exp_x, _ax_bot)
+        _at = _seg_ax(pred_x, _ax_top)
+
+        _ab.plot(
+            [exp_x, exp_x], [peak_y, _label_barrier_exp],
+            linestyle="--", color=palette.primary,
+            linewidth=_lw_conn, alpha=0.4, clip_on=False,
+        )
+        con = mpatches.ConnectionPatch(
+            xyA=(exp_x, _label_barrier_exp), xyB=(pred_x, 0),
+            coordsA="data", coordsB="data",
+            axesA=_ab, axesB=_at,
+            linestyle="--", color=palette.primary,
+            linewidth=_lw_conn, alpha=0.4,
+        )
+        fig.add_artist(con)
+        _at.plot(
+            [pred_x, pred_x], [0, _sim_barrier],
+            linestyle="--", color=palette.primary,
+            linewidth=_lw_conn, alpha=0.4, clip_on=False,
+        )
+
+    # Unmatched experimental signals
+    _matched_assignments = {
+        _map_assignment_to_latex(s.assignment)
+        for s in _connector_signals
+        if _label_to_pred.get(
+            _map_assignment_to_latex(s.assignment)
+        ) is not None
+    }
+    for signal in _iso_signals:
+        if _map_assignment_to_latex(signal.assignment) in _matched_assignments:
+            continue
+        exp_x = signal.shift
+        peak_y = (
+            y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+            * _scale_at(exp_x)
+        )
+        _ab = _seg_ax(exp_x, _ax_bot)
+        _ab.plot(
+            exp_x, peak_y, marker="o", color="red",
+            markersize=0.4 * glyphs.line_lw + 0.5, lw=0, zorder=5,
+        )
+        _ab.text(
+            exp_x, peak_y, f" {signal.assignment}",
+            fontsize=str(round(spec.typography.label * 0.7 * _label_scale)),
+            color="red", va="bottom", ha="left", clip_on=True,
+        )
+
+    # Per-segment vertical-scale multiplier labels (e.g. "×4", "×10"). Drawn in
+    # the top-right corner of each magnified panel; segments at scale 1 are
+    # left unlabelled.
+    for _i_seg, _ab in enumerate(_ax_bot):
+        _sc = _seg_scales[_i_seg]
+        if abs(_sc - 1.0) > 1e-9:
+            _ab.text(
+                0.95, 0.95, f"×{_sc:g}",
+                transform=_ab.transAxes, ha="right", va="top",
+                fontsize=spec.typography.label * _label_scale,
+                color=palette.primary,
+            )
+
+    # Centred x-label spanning the full figure width (works with axis breaks)
+    fig.supxlabel(
+        r"{} $\delta$ (ppm)".format(isotope_format(isotope)),
+        fontsize=spec.typography.axis_label,
     )
+    # Per-segment tick density scaled by displayed width fraction, but every
+    # panel is guaranteed at least two major ticks. Instead of a blanket
+    # prune='both' (which can strip a narrow panel to a single tick), only
+    # ticks hugging an *interior* break edge are dropped; if that would leave
+    # fewer than two, an evenly-spaced pair is used as a fallback.
+    _total_width = sum(_width_ratios)
+    for i, (slo, shi) in enumerate(_segments):
+        _ab = _ax_bot[i]
+        _at = _ax_top[i]
+        _lo_d, _hi_d = min(slo, shi), max(slo, shi)
+        _span_i = _hi_d - _lo_d
+        _frac = _width_ratios[i] / _total_width if _total_width > 0 else 1.0
+        _nbins = max(2, min(4, round(_frac * 4)))
+        if _n == 1:
+            _at.xaxis.set_major_locator(
+                ticker.MaxNLocator(nbins=_nbins, integer=False)
+            )
+            _ab.xaxis.set_major_locator(
+                ticker.MaxNLocator(nbins=_nbins, integer=False)
+            )
+            _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+            continue
+        _cand = [
+            t for t in ticker.MaxNLocator(
+                nbins=_nbins, integer=False
+            ).tick_values(_lo_d, _hi_d)
+            if _lo_d <= t <= _hi_d
+        ]
+        _edge_tol = 0.06 * _span_i
+        _ticks_i = [
+            t for t in _cand
+            if not (i > 0 and abs(t - _hi_d) < _edge_tol)          # high-ppm break
+            and not (i < _n - 1 and abs(t - _lo_d) < _edge_tol)    # low-ppm break
+        ]
+        if len(_ticks_i) < 2:
+            _ticks_i = [_lo_d + 0.25 * _span_i, _lo_d + 0.75 * _span_i]
+        _at.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
+        _ab.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
+        _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-    # Set x-axis at the bottom of the plot
-    ax[-1].xaxis.set_minor_locator(ticker.AutoMinorLocator())
-    ax[-1].set_xlabel(r"{} $\delta$ (ppm)".format(isotope_format(isotope)))
-
-    # Remove y-axis ticks, labels, and spines for a cleaner stacked-spectra layout
-    for axis in ax:
-        axis.set_yticks([])
-        axis.set_yticklabels([])
-        axis.spines[["right", "top", "left"]].set_visible(False)
-
-    render_figure(
-        fig,
-        save=save,
-        show=show,
-        save_name=save_name,
-    )
+    render_figure(fig, save=save, show=show, save_name=save_name)
 
     if save and verbose:
         logger.info("Spectra saved to %s", f"{save_name}.pdf")
 
-    return fig, ax
+    return fig, np.array(_ax_top + _ax_bot)
+
+
+def _adaptive_grid(
+    experiments: list,
+    isotope: str,
+    x_lo: float,
+    x_hi: float,
+    pts_per_peak: int = 2000,
+    gap_pts: int = 2000,
+    half_widths: float = 6.0,
+) -> np.ndarray:
+    """Build a ppm grid dense around every peak and coarse in the gaps.
+
+    For each signal a local grid spanning ±``half_widths`` linewidths is
+    created with ``pts_per_peak`` points. The remainder of the axis is
+    covered by a coarse uniform grid with ``gap_pts`` points total. The
+    result is sorted and deduplicated.
+
+    Args:
+        experiments: All experiments (used to collect peak positions/widths).
+        isotope: Isotope to build the grid for.
+        x_lo: Left edge of the full axis (low ppm, after padding).
+        x_hi: Right edge of the full axis (high ppm, after padding).
+        pts_per_peak: Points in the dense window around each peak.
+        gap_pts: Total points in the coarse background grid.
+        half_widths: Half-width of the dense window in units of linewidth.
+    """
+    pieces = [np.linspace(x_lo, x_hi, gap_pts)]
+    for exp in experiments:
+        for signal in exp.signals:
+            if signal.isotope is not None and signal.isotope != isotope:
+                continue
+            lw_ppm = signal.width / (
+                get_nuclear_gamma(isotope) * exp.magnetic_field
+            )
+            lo = max(x_lo, signal.shift - half_widths * lw_ppm)
+            hi = min(x_hi, signal.shift + half_widths * lw_ppm)
+            if lo < hi:
+                pieces.append(np.linspace(lo, hi, pts_per_peak))
+    grid = np.unique(np.concatenate(pieces))
+    return grid
+
+
+def _build_deconv_spectrum(
+    experiment: Experiment,
+    isotope: str,
+    x_grid: np.ndarray,
+) -> np.ndarray:
+    """Return deconvoluted spectrum intensity on ``x_grid`` for ``isotope``."""
+    y = np.zeros_like(x_grid)
+    for signal in experiment.signals:
+        if signal.isotope is not None and signal.isotope != isotope:
+            continue
+        exp_width_ppm = signal.width / (
+            get_nuclear_gamma(isotope) * experiment.magnetic_field
+        )
+        y += signal.l_to_g * lorentzian(
+            x_grid, exp_width_ppm, signal.shift, signal.area)
+        y += (1 - signal.l_to_g) * gaussian(
+            x_grid, exp_width_ppm, signal.shift, signal.area)
+    return y
+
+
+def plot_vt_spectra(
+    experiments: list[Experiment],
+    isotope: str,
+    spec: PlotSpec,
+    save: bool = True,
+    show: bool = True,
+    save_name: str = "vt_spectra",
+    window_title: str = "VT Spectra",
+    verbose: bool = True,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot all experimental 1D spectra stacked by temperature.
+
+    Uses raw spectrum data when available; otherwise reconstructs from
+    deconvoluted signals. Spectra are offset vertically in proportion to
+    their temperature relative to the coldest measurement, and coloured
+    on a cold-to-hot (blue→red) scale.
+
+    Args:
+        experiments: Experiments to include.
+        isotope: Isotope to plot (e.g. ``"1H"``).
+        spec: Plot style specification.
+        save: If True, save the figure to ``save_name``.
+        show: If True, display the figure interactively.
+        save_name: Output file base name.
+        window_title: Figure window title.
+        verbose: If True, log the saved path.
+
+    Returns:
+        A tuple ``(fig, ax)``, or ``(None, None)`` if no data are available.
+    """
+    exps = sorted(
+        [e for e in experiments if e.spectrum is not None or e.signals],
+        key=lambda e: e.temperature,
+    )
+    if not exps:
+        logger.warning("plot_vt_spectra: no experimental data available.")
+        return None, None
+
+    temps = [e.temperature for e in exps]
+    T_min, T_max = temps[0], temps[-1]
+    T_span = T_max - T_min if T_max > T_min else 1.0
+    n = len(exps)
+
+    cmap = plt.cm.turbo
+    norm_t = plt.Normalize(vmin=T_min, vmax=T_max)
+
+    # Determine ppm range from all available data
+    _lo, _hi = float("inf"), float("-inf")
+    for e in exps:
+        if e.spectrum is not None:
+            x = np.asarray(e.spectrum[:, 0], dtype=float)
+            _lo = min(_lo, float(x.min()))
+            _hi = max(_hi, float(x.max()))
+        for s in e.signals:
+            if s.isotope is None or s.isotope == isotope:
+                _lo = min(_lo, s.shift)
+                _hi = max(_hi, s.shift)
+    if _lo == float("inf"):
+        logger.warning(
+            "plot_vt_spectra: no shift data for isotope %s.", isotope
+        )
+        return None, None
+
+    ppm_lo, ppm_hi = _lo, _hi
+    all_shifts = [s.shift for e in exps for s in e.signals
+                  if s.isotope is None or s.isotope == isotope]
+    pad = max(5.0, 0.1 * abs(ppm_hi - ppm_lo))
+    x_grid = _adaptive_grid(exps, isotope, ppm_lo - pad, ppm_hi + pad)
+
+    # Build (x, y) pairs for each experiment
+    traces: list[tuple[np.ndarray, np.ndarray]] = []
+    for exp in exps:
+        if exp.spectrum is not None:
+            x = np.asarray(exp.spectrum[:, 0], dtype=float)
+            y = np.asarray(exp.spectrum[:, 1], dtype=float)
+        else:
+            x = x_grid
+            y = _build_deconv_spectrum(exp, isotope, x_grid)
+        traces.append((x, y))
+
+    global_max = float(max(np.max(np.abs(y)) for _, y in traces)) or 1.0
+    # Offset step: 0.15× the global peak — traces overlap intentionally.
+    offset_step = 0.15 * global_max
+
+    _segments = _find_spectral_segments(
+        all_shifts,
+        (float(x_grid[0]), float(x_grid[-1])),
+        padding=pad,
+    )
+    _n_seg = len(_segments)
+    _seg_widths = [abs(s[1] - s[0]) for s in _segments]
+
+    fig_w, fig_h_base = get_figsize(spec.profile, "standard")
+    fig_h = fig_h_base + 0.5 * (n - 1)
+
+    fig = plt.figure(
+        figsize=(fig_w, fig_h), num=window_title, layout="constrained"
+    )
+    fig.get_layout_engine().set(w_pad=0, wspace=0.001)
+    _gs = fig.add_gridspec(1, _n_seg, width_ratios=_seg_widths)
+    axes = [fig.add_subplot(_gs[0, i]) for i in range(_n_seg)]
+
+    # Share y so ylim is consistent across segments
+    for i in range(1, _n_seg):
+        axes[i].sharey(axes[0])
+
+    for i, (slo, shi) in enumerate(_segments):
+        axes[i].set_xlim(shi, slo)
+
+    glyphs = spec.glyphs
+
+    for ax in axes:
+        spec.skin_axes(ax)
+        ax.set_yticks([])
+        ax.spines[["right", "top", "left"]].set_visible(False)
+
+    # Hide interior spines and draw break markers
+    if _n_seg > 1:
+        for i in range(_n_seg):
+            if i > 0:
+                axes[i].spines["left"].set_visible(False)
+            if i < _n_seg - 1:
+                axes[i].spines["right"].set_visible(False)
+        for i in range(_n_seg - 1):
+            _draw_break_markers(axes[i], axes[i + 1])
+
+    for exp, (x, y) in zip(exps, traces):
+        y_offset = (exp.temperature - T_min) / T_span * offset_step * (n - 1)
+        color = cmap(norm_t(exp.temperature))
+        for i, (slo, shi) in enumerate(_segments):
+            mask = (x >= min(slo, shi)) & (x <= max(slo, shi))
+            if np.any(mask):
+                axes[i].plot(
+                    x[mask], y[mask] + y_offset,
+                    lw=glyphs.line_lw * 0.6, color=color,
+                )
+        axes[0].text(
+            0.01, y_offset,
+            f"{exp.temperature:.0f} K",
+            transform=axes[0].get_yaxis_transform(),
+            va="bottom", ha="left",
+            fontsize=spec.typography.tick_label,
+            color=color,
+        )
+
+    fig.supxlabel(
+        r"{} $\delta$ (ppm)".format(isotope_format(isotope)),
+        fontsize=spec.typography.axis_label,
+    )
+    for i, (slo, shi) in enumerate(_segments):
+        _nbins = max(2, min(3, int(abs(shi - slo) / 5)))
+        axes[i].xaxis.set_major_locator(
+            ticker.MaxNLocator(nbins=_nbins, integer=False)
+        )
+        axes[i].xaxis.set_minor_locator(ticker.AutoMinorLocator())
+
+    render_figure(fig, save=save, show=show, save_name=save_name, fmt="png")
+
+    if save and verbose:
+        logger.info("VT spectra saved to %s", f"{save_name}.png")
+
+    return fig, axes[0]
+
+
+def _manual_spectral_segments(
+    axis_break: dict,
+    peak_label_to_ppm: dict[str, float],
+    all_peaks: list[float],
+    x_range: tuple[float, float],
+) -> tuple[list[tuple[float, float]] | None, list[float] | None]:
+    """Build user-specified axis-break segments and per-segment vertical scales.
+
+    Break points come from ``axis_break['after_ppms']`` (explicit ppm) and
+    ``axis_break['after_labels']`` (placed midway between the named peak and the
+    next lower peak, i.e. just "after" it on the descending NMR axis). Segments
+    are returned high-ppm first (left→right), matching the inverted axis, paired
+    with ``axis_break['scales']`` in the same order.
+
+    Returns ``(None, None)`` when no valid break is resolved, so the caller can
+    fall back to automatic gap detection.
+    """
+    xlo, xhi = min(x_range), max(x_range)
+    breaks: list[float] = [float(p) for p in axis_break.get("after_ppms", [])]
+    for lab in axis_break.get("after_labels", []):
+        ppm = peak_label_to_ppm.get(lab)
+        if ppm is None:
+            logger.warning(
+                "spectra_break: peak label '%s' not found in this isotope's "
+                "signals — break skipped.", lab,
+            )
+            continue
+        lower = [p for p in all_peaks if p < ppm - 1e-9]
+        if lower:
+            breaks.append(0.5 * (ppm + max(lower)))
+        else:
+            breaks.append(ppm - 0.02 * abs(xhi - xlo))
+
+    breaks = sorted({b for b in breaks if xlo < b < xhi}, reverse=True)
+    if not breaks:
+        return None, None
+
+    # Boundaries high→low: [xhi, b0, b1, ..., xlo]; segment i spans (lo, hi).
+    bounds = [xhi] + breaks + [xlo]
+    segments = [
+        (bounds[i + 1], bounds[i]) for i in range(len(bounds) - 1)
+    ]
+
+    scales = [float(s) for s in axis_break.get("scales", [])]
+    if len(scales) != len(segments):
+        scales = [1.0] * len(segments)
+    return segments, scales
+
+
+def _find_spectral_segments(
+    peak_positions: list[float],
+    x_range: tuple[float, float],
+    min_gap: float | None = None,
+    padding: float | None = None,
+) -> list[tuple[float, float]]:
+    """Return x-axis segments that contain peaks, for axis-break layout.
+
+    Gaps between segments larger than ``min_gap`` become axis breaks.
+    Each segment is padded by ``padding`` on both sides and clipped to
+    ``x_range``.  Segments are returned in descending order (high ppm
+    first, matching the inverted NMR x-axis).
+    """
+    span = abs(x_range[1] - x_range[0])
+    if min_gap is None:
+        min_gap = max(20.0, 0.15 * span)
+    if padding is None:
+        padding = max(5.0, 0.03 * span)
+
+    if not peak_positions:
+        return [(max(x_range), min(x_range))]
+
+    sorted_peaks = sorted(set(peak_positions))
+    xlo, xhi = min(x_range), max(x_range)
+
+    # Group into clusters separated by gaps >= min_gap
+    clusters: list[list[float]] = [[sorted_peaks[0]]]
+    for p in sorted_peaks[1:]:
+        if p - clusters[-1][-1] < min_gap:
+            clusters[-1].append(p)
+        else:
+            clusters.append([p])
+
+    # Padded segments clipped to x_range
+    segs: list[tuple[float, float]] = []
+    for cl in clusters:
+        lo = max(xlo, min(cl) - padding)
+        hi = min(xhi, max(cl) + padding)
+        if lo < hi:
+            segs.append((lo, hi))
+
+    # Merge any overlapping segments (can arise from padding)
+    segs.sort()
+    merged: list[list[float]] = [list(segs[0])]
+    for lo, hi in segs[1:]:
+        if lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+
+    # Return descending (high ppm first = left side of NMR axis)
+    return sorted(
+        [(s[0], s[1]) for s in merged],
+        key=lambda s: s[0],
+        reverse=True,
+    )
+
+
+def _draw_break_markers(
+    ax_l: plt.Axes,
+    ax_r: plt.Axes,
+    dy: float = 0.015,
+    lw: float = 0.6,
+) -> None:
+    """Draw diagonal break markers with a consistent angle at every break.
+
+    ``dy`` is a fraction of axis height (same physical size for all axes
+    since they share a common height).  ``dx`` is derived so that its
+    physical size equals ``dy``'s physical size, giving a 45° line
+    regardless of how wide or narrow each segment axis is.
+    """
+    fig = ax_l.figure
+    fw, fh = fig.get_size_inches()
+    kw = dict(clip_on=False, color="k", lw=lw, zorder=10)
+    for ax, x_anchor in [(ax_l, 1.0), (ax_r, 0.0)]:
+        pos = ax.get_position()
+        # Physical height of dy in inches; derive equal physical dx.
+        dy_in = dy * pos.height * fh
+        dx = dy_in / (pos.width * fw)
+        ax.plot(
+            [x_anchor - dx, x_anchor + dx],
+            [-dy, dy],
+            transform=ax.transAxes, **kw,
+        )
+
+
+def _spread_labels_within_bounds(
+    positions: list[float],
+    min_gap: float,
+    lo: float,
+    hi: float,
+) -> list[float]:
+    """Spread 1-D label positions to honour ``min_gap``, kept within ``[lo, hi]``.
+
+    Neighbouring labels are nudged apart to at least ``min_gap`` while every
+    position stays inside ``[lo, hi]``. When the labels cannot all fit at
+    ``min_gap`` the gap is shrunk so they distribute evenly across the interval
+    — so labels never spill past the bounds (e.g. across an axis-break border).
+    Returns positions in the original input order.
+    """
+    n = len(positions)
+    if n == 0:
+        return []
+    if hi < lo:
+        lo, hi = hi, lo
+
+    order = list(np.argsort(positions))
+    p = [float(positions[i]) for i in order]
+
+    span = hi - lo
+    gap = min_gap
+    if n > 1:
+        gap = min(gap, span / (n - 1)) if span > 0 else 0.0
+
+    # Forward pass: enforce the minimum gap left→right.
+    for i in range(1, n):
+        if p[i] < p[i - 1] + gap:
+            p[i] = p[i - 1] + gap
+    # Clamp the right edge and propagate the constraint back.
+    if p[-1] > hi:
+        p[-1] = hi
+        for i in range(n - 2, -1, -1):
+            if p[i] > p[i + 1] - gap:
+                p[i] = p[i + 1] - gap
+    # Clamp the left edge and propagate forward.
+    if p[0] < lo:
+        p[0] = lo
+        for i in range(1, n):
+            if p[i] < p[i - 1] + gap:
+                p[i] = p[i - 1] + gap
+
+    out = [0.0] * n
+    for idx, original_i in enumerate(order):
+        out[original_i] = p[idx]
+    return out
 
 
 def _annotate_peaks_with_barrier(
@@ -483,11 +1208,15 @@ def _annotate_peaks_with_barrier(
     barrier_scale: float = 1.1,
     labels_above_barrier_scale: float = 1.05,
     label_mindist_scale: float = 0.03,
+    label_mindist_abs: float | None = None,
     connector_alpha: float = 0.4,
     barrier_alpha: float = 0.7,
     label_fontsize: str | None = None,
+    line_scale: float = 1.0,
+    label_colors: dict[str, str] | None = None,
+    barrier_y: float | None = None,
 ) -> None:
-    """Annotate a spectrum with a horizontal barrier, vertical labels, and connectors.
+    """Annotate a spectrum with barrier, vertical labels, and connectors.
 
     The function also resolves label overlaps by shifting label x-positions and
     enforces a monotonic label ordering to prevent connector crossings.
@@ -530,64 +1259,76 @@ def _annotate_peaks_with_barrier(
         y_intensity[find_index_of_nearest(x_grid, sh)] for sh in peak_x_sorted
     ]
 
-    # Horizontal barrier line
-    label_barrier = barrier_scale * float(np.max(y_intensity))
+    # Horizontal barrier and label positions in data coordinates. An explicit
+    # ``barrier_y`` pins the barrier to a fixed reference (used when the panel's
+    # intensity is vertically scaled, so the barrier must not track the scaled
+    # peak max).
+    label_barrier = (
+        barrier_y if barrier_y is not None
+        else barrier_scale * float(np.max(y_intensity))
+    )
+    labels_position_y = labels_above_barrier_scale * label_barrier
+    _y_top = labels_position_y * 1.5
+    _lw_connector = max(0.2, 0.2 * line_scale * glyphs.line_lw)
+    _lw_barrier = max(0.2, 0.5 * line_scale * glyphs.line_lw)
+    _fs = label_fontsize or str(spec.typography.label)
+
+    # Draw the static barrier line
     ax.hlines(
         label_barrier,
         np.min(shift_range),
         np.max(shift_range),
         linestyle="-",
         color=palette.primary,
-        linewidth=max(0.8, 0.5 * glyphs.line_lw),
+        linewidth=_lw_barrier,
         alpha=barrier_alpha,
     )
+    ax.set_ylim(bottom=None, top=_y_top)
 
-    # Vertical position for peak text-labels
-    labels_position_y = labels_above_barrier_scale * label_barrier
+    # Filter to peaks visible in this axis's x range
+    xmin, xmax = ax.get_xlim()
+    visible = [
+        (px, py, lab)
+        for px, py, lab in zip(peak_x_sorted, peak_y_sorted, labels_sorted)
+        if min(xmin, xmax) <= px <= max(xmin, xmax)
+    ]
+    if not visible:
+        return
 
-    # Minimum acceptable distance between labels
-    label_mindist = label_mindist_scale * (np.max(shift_range) - np.min(shift_range))
+    vis_px, vis_py, vis_labs = zip(*visible)
+    vis_px = list(vis_px)
 
-    # Initial distance matrix
-    adj_label_xvals = copy.copy(peak_x_sorted)
-    distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
-    np.fill_diagonal(distance, np.inf)
+    # Resolve label overlaps while keeping every label inside this axis's
+    # x-limits, so labels never spill across an axis-break border into the gap
+    # or a neighbouring panel. A small inset keeps the anchor off the spine.
+    xrange = abs(xmax - xmin)
+    mindist = (
+        label_mindist_abs
+        if label_mindist_abs is not None
+        else label_mindist_scale * xrange
+    )
+    _lo_b, _hi_b = min(xmin, xmax), max(xmin, xmax)
+    _margin = 0.02 * xrange
+    adj = _spread_labels_within_bounds(
+        list(vis_px), mindist, _lo_b + _margin, _hi_b - _margin
+    )
+    adj = sorted(adj, reverse=reverse_axis)
 
-    # Resolve label overlaps
-    while len(np.where(abs(distance) < label_mindist)[0]):
-        [xlocs, ylocs] = np.where(abs(distance) < label_mindist)
-        for x, y in zip(xlocs, ylocs):
-            if y > x:
-                adj_label_xvals[x] -= label_mindist / 2
-                adj_label_xvals[y] += label_mindist / 2
-
-        distance = np.subtract.outer(adj_label_xvals, adj_label_xvals)
-        np.fill_diagonal(distance, np.inf)
-
-    # Enforce monotonic label-x ordering relative to the peak ordering.
-    # This prevents connector lines from crossing when overlap resolution pushes
-    # labels past each other.
-    adj_label_xvals = sorted(adj_label_xvals, reverse=reverse_axis)
-
-    # Add labels and connector lines
-    for px, py, lx, lab in zip(
-        peak_x_sorted, peak_y_sorted, adj_label_xvals, labels_sorted
-    ):
-        ax.text(
-            lx,
-            labels_position_y,
-            lab,
-            fontsize=label_fontsize or str(spec.typography.label),
-            rotation="vertical",
-            va="bottom",
-            ha="center",
+    for px, py, lx, lab in zip(vis_px, vis_py, adj, vis_labs):
+        _col = (
+            label_colors.get(lab, palette.primary)
+            if label_colors else palette.primary
         )
-
+        ax.text(
+            lx, labels_position_y, lab,
+            fontsize=_fs, rotation="vertical",
+            va="bottom", ha="center",
+            color=_col, clip_on=False,
+        )
         ax.plot(
             [px, px, lx],
             [py, label_barrier, labels_position_y],
-            linestyle="--",
-            color=palette.primary,
-            linewidth=0.5 * glyphs.line_lw,
-            alpha=connector_alpha,
+            linestyle="--", color=_col,
+            linewidth=_lw_connector,
+            alpha=connector_alpha, clip_on=False,
         )

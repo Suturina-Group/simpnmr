@@ -85,7 +85,7 @@ class Nucleus:
 
         # If isotope is provided then set, else set as default
         if isotope is None:
-            self.isotope = isotopes.DEFAULT_ISOTOPES[self.label_nn]
+            self.isotope = isotopes.DEFAULT_ISOTOPES.get(self.label_nn)
 
         return
 
@@ -168,8 +168,10 @@ class Nucleus:
         return self._isotope
 
     @isotope.setter
-    def isotope(self, value: str):
-        if re.sub("[0-9]", "", value) != self.label_nn:
+    def isotope(self, value: str | None):
+        if value is None:
+            self._isotope = None
+        elif re.sub("[0-9]", "", value) != self.label_nn:
             raise ValueError("Isotope label does not match atomic label")
         elif value not in isotopes.SUPPORTED_ISOTOPES:
             raise ValueError(f"Unsupported isotope {value}")
@@ -538,6 +540,7 @@ class Molecule:
         labels: ArrayLike,
         coords: ArrayLike,
         elements: list[str] | str = "all",
+        exclude: list[str] | None = None,
     ) -> "Molecule":
         """Create a `Molecule` from labels and coordinates.
 
@@ -545,6 +548,7 @@ class Molecule:
             labels: Atomic labels.
             coords: Atomic coordinates as an ``(n_atoms, 3)`` array-like in Å.
             elements: Elements/labels to include. Use ``"all"`` to include all.
+            exclude: Explicit atom labels to remove after the include filter.
 
         Returns:
             A `Molecule` instance.
@@ -573,12 +577,14 @@ class Molecule:
             else:
                 elements_to_include.append(ele)
 
+        exclude_set: set[str] = set(exclude) if exclude else set()
+
         # Generate list of Nuclei, one for each atom
         # selecting only those elements requested by user
         nuclei = [
             Nucleus(label, coord, Hyperfine())
             for label, coord in zip(labels_list, coords)
-            if label in elements_to_include
+            if label in elements_to_include and label not in exclude_set
         ]
 
         # Generate Molecule using ALL labels and coords
@@ -864,19 +870,23 @@ class Molecule:
 
     def apply_diamagnetic_shifts(
         self,
-        dia_by_key: dict[str, float],
+        dia_by_key: dict,
         key_kind: str,
-        ref_avg_by_label_nn: dict[str, float] | None = None,
+        ref_avg_by_isotope: dict[str, float] | None = None,
     ) -> None:
         """Apply diamagnetic shifts to nuclei.
 
         Args:
-            dia_by_key: Mapping from label key -> dia shift.
-            key_kind: 'atom_label' (uses nuc.label) or 'chem_label'
-            (uses nuc.chem_label).
-            ref_avg_by_label_nn: Optional mapping nuc.label_nn -> averaged
-            reference shift.
-                If provided, applies: dia := ref - dia.
+            dia_by_key: Mapping from label key -> diamagnetic shielding (or
+                shift for pre-referenced CSV inputs).  Keys are either plain
+                strings (label only) or ``(label, isotope)`` tuples when the
+                dia CSV includes an ``isotope`` column.
+            key_kind: ``'atom_label'`` (uses ``nuc.label``) or
+                ``'chem_label'`` (uses ``nuc.chem_label``).
+            ref_avg_by_isotope: Optional mapping isotope -> averaged reference
+                shielding (e.g. ``{"1H": 31.74, "13C": 188.07}``).
+                When provided, applies: dia = ref - dia, converting absolute
+                DFT shieldings into chemical shifts relative to the reference.
 
         Raises:
             KeyError: If a required key is missing in the provided mapping(s).
@@ -885,25 +895,37 @@ class Molecule:
         if key_kind not in ("atom_label", "chem_label"):
             raise ValueError("key_kind must be 'atom_label' or 'chem_label'")
 
+        missing: list[str] = []
         for nuc in self.nuclei:
             key = nuc.label if key_kind == "atom_label" else nuc.chem_label
-            try:
+            iso_key = (key, nuc.isotope) if nuc.isotope is not None else None
+            if iso_key is not None and iso_key in dia_by_key:
+                nuc.shift.dia = float(dia_by_key[iso_key])
+            elif key in dia_by_key:
                 nuc.shift.dia = float(dia_by_key[key])
-            except KeyError as exc:
-                raise KeyError(
-                    f"Cannot find {key} in diamagnetic shift mapping"
-                ) from exc
+            else:
+                missing.append(key)
+        if missing:
+            raise KeyError(
+                f"Diamagnetic shift missing for {len(missing)} nucleus/"
+                f"nuclei: {', '.join(missing)}.\n"
+                "These atoms are in your molecule but not covered by the "
+                "diamagnetic file. Check your nuclei:isotope / "
+                "nuclei:include_groups / nuclei:exclude_groups settings."
+            )
 
-        if ref_avg_by_label_nn is not None:
+        if ref_avg_by_isotope is not None:
             for nuc in self.nuclei:
                 try:
                     nuc.shift.dia = (
-                        float(ref_avg_by_label_nn[nuc.label_nn]) - nuc.shift.dia
+                        float(ref_avg_by_isotope[nuc.isotope]) - nuc.shift.dia
                     )
                 except KeyError as exc:
                     raise KeyError(
-                        f"Cannot find {nuc.label_nn} in reference diamagnetic "
-                        "shift mapping"
+                        f"Cannot find isotope {nuc.isotope!r} in reference "
+                        "diamagnetic shift mapping. "
+                        "Add it to diamagnetic_ref:values or provide a "
+                        "per-isotope reference file."
                     ) from exc
 
         return
@@ -912,6 +934,7 @@ class Molecule:
         self,
         al_to_cl: dict[str, str],
         al_to_cml: dict[str, str] | None = None,
+        al_to_isotope: dict[str, str] | None = None,
     ) -> None:
         """Apply chemical label mappings to nuclei.
 
@@ -921,6 +944,10 @@ class Molecule:
         Args:
             al_to_cl: Mapping atom_label -> chem_label.
             al_to_cml: Optional mapping atom_label -> chem_math_label.
+            al_to_isotope: Optional mapping atom_label -> isotope string
+                (e.g. ``"1H"``).  When provided, overrides the nucleus
+                default isotope.  Invalid or unsupported entries are logged
+                and skipped.
 
         Returns:
             None.
@@ -943,5 +970,20 @@ class Molecule:
             for nuc in self.nuclei:
                 if not len(nuc.chem_math_label):
                     nuc.chem_math_label = nuc.chem_label
+
+        # Apply per-nucleus isotopes (if provided)
+        if al_to_isotope is not None:
+            for nuc in self.nuclei:
+                iso = al_to_isotope.get(nuc.label)
+                if iso is not None:
+                    try:
+                        nuc.isotope = iso
+                    except ValueError as exc:
+                        logger.warning(
+                            "Cannot set isotope '%s' for nucleus '%s': %s",
+                            iso,
+                            nuc.label,
+                            exc,
+                        )
 
         return

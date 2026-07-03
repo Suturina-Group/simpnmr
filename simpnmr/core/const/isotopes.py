@@ -11,11 +11,13 @@ DEFAULT_ISOTOPES = {
     "C": "13C",
     "P": "31P",
     "N": "15N",
+    "O": "17O",
     "Si": "29Si",
     "B": "10B",
     "Li": "6Li",
+    "F": "19F",
 }
 
-OTHER_ISOTOPES = ["2H"]
+OTHER_ISOTOPES = ["2H", "14N"]
 
 SUPPORTED_ISOTOPES = list(DEFAULT_ISOTOPES.values()) + OTHER_ISOTOPES

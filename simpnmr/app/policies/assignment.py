@@ -22,13 +22,15 @@ class AssignmentSearchSettings:
         mode: Resolved search mode.
         n_attempts: Maximum number of restart attempts.
         max_iter: Maximum number of alternating-fit iterations per attempt.
-        r2_threshold: Early-stop threshold for adjusted R^2.
+        rmse_threshold: Early-stop threshold for RMSE (ppm). The search stops
+            early if a converged attempt achieves RMSE below this value.
+            Set to 0.0 to disable early stopping and always run all attempts.
     """
 
     mode: str
     n_attempts: int
     max_iter: int
-    r2_threshold: float
+    rmse_threshold: float
 
 
 ASSIGNMENT_SEARCH_PRESETS: dict[str, AssignmentSearchSettings] = {
@@ -36,19 +38,19 @@ ASSIGNMENT_SEARCH_PRESETS: dict[str, AssignmentSearchSettings] = {
         mode="fast",
         n_attempts=1,
         max_iter=20,
-        r2_threshold=0.95,
+        rmse_threshold=0.0,
     ),
     "balanced": AssignmentSearchSettings(
         mode="balanced",
         n_attempts=10,
         max_iter=100,
-        r2_threshold=0.99,
+        rmse_threshold=0.0,
     ),
     "robust": AssignmentSearchSettings(
         mode="robust",
-        n_attempts=25,
-        max_iter=250,
-        r2_threshold=0.995,
+        n_attempts=200,
+        max_iter=500,
+        rmse_threshold=0.0,
     ),
 }
 
@@ -66,7 +68,7 @@ def resolve_assignment_search_settings(
     mode: str | None,
     n_attempts: int | None,
     max_iter: int | None,
-    r2_threshold: float | None,
+    rmse_threshold: float | None,
 ) -> AssignmentSearchSettings:
     """Resolve assignment search settings from raw policy inputs.
 
@@ -78,7 +80,7 @@ def resolve_assignment_search_settings(
         mode: Requested search mode.
         n_attempts: Optional explicit restart budget.
         max_iter: Optional explicit iteration budget per attempt.
-        r2_threshold: Optional explicit early-stop threshold.
+        rmse_threshold: Optional explicit early-stop RMSE threshold (ppm).
 
     Returns:
         AssignmentSearchSettings: Resolved numeric search settings.
@@ -105,5 +107,9 @@ def resolve_assignment_search_settings(
         mode="custom",
         n_attempts=balanced.n_attempts if n_attempts is None else n_attempts,
         max_iter=balanced.max_iter if max_iter is None else max_iter,
-        r2_threshold=(balanced.r2_threshold if r2_threshold is None else r2_threshold),
+        rmse_threshold=(
+            balanced.rmse_threshold
+            if rmse_threshold is None
+            else rmse_threshold
+        ),
     )

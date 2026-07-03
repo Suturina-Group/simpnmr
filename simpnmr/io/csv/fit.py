@@ -12,7 +12,11 @@ import logging
 import numpy as np
 import pandas as pd
 
-from simpnmr.io.csv.csv_util import read_csv_safe, write_csv_safe
+from simpnmr.io.csv.csv_util import (
+    format_full_precision,
+    read_csv_safe,
+    write_csv_safe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +24,17 @@ logger = logging.getLogger(__name__)
 def save_slope_intercept(
     fits,
     spin: float | None = None,
-    file_name: str = "isoaxrho_fit.csv",
+    file_name: str = "isoaxrh_fit.csv",
     verbose: bool = True,
 ) -> None:
     """Writes slope/intercept results for chiT fits to a CSV file.
 
     Args:
-        fits: Fit results for each component. Each entry is expected to be a mapping
-            containing values such as ``slope``, ``intercept``, and associated errors.
-        spin: Spin value from the domain model to serialize in the CSV comments.
+        fits: Fit results for each component. Each entry is expected to be a
+            mapping containing values such as ``slope``, ``intercept``, and
+            associated errors.
+        spin: Spin value from the domain model to serialize in the CSV
+            comments.
         file_name: Output CSV file path.
         verbose: If ``True``, prints the output file path.
 
@@ -40,7 +46,7 @@ def save_slope_intercept(
         component type.
     """
 
-    labels = ["iso", "ax", "rho"]
+    labels = ["iso", "ax", "rh"]
 
     types = []
     intercepts = []
@@ -84,18 +90,87 @@ def save_slope_intercept(
     return
 
 
-def read_chiT_regression_csv(filename: str) -> dict[str, float]:
-    """
-    Read a Curie-normalised chiT regression CSV file and return fit parameters.
-
-    The CSV is expected to contain columns: `type`, `intercept`, and `slope`. Each row
-    is flattened into keys of the form `{type}_intercept` and `{type}_slope`.
+def save_r6_fit(
+    result: dict,
+    observable: str,
+    temperature: float,
+    magnetic_field: float,
+    isotope: str,
+    file_name: str = "r6_fit.csv",
+    verbose: bool = True,
+    tau_e: float | None = None,
+) -> None:
+    """Write r^-6 fit parameters (p1, p2) and per-label data to CSV.
 
     Args:
-        filename (str): Path to the regression CSV file.
+        result: Dict returned by
+            :func:`~simpnmr.core.fitting.r6_fit.fit_r6`.
+        observable: ``"r1"`` or ``"width"``.
+        temperature: Experiment temperature in Kelvin.
+        magnetic_field: Spectrometer magnetic field in Tesla.
+        isotope: Isotope label (e.g. ``"1H"``).
+        file_name: Output CSV path.
+        verbose: Log path when ``True``.
+        tau_e: Electronic correlation time used for contact subtraction (s),
+            or ``None`` if no subtraction was performed.
+    """
+    obs_unit = "s^-1" if observable == "r1" else "ppm"
+    p1_unit = f"{obs_unit}.Ang^6"
+    contact_note = (
+        f"contact_subtracted=yes  tau_e={tau_e:.3g} s"
+        if tau_e is not None
+        else "contact_subtracted=no"
+    )
+    comment = [
+        f"r^-6 fit: observable={observable}",
+        f"isotope={isotope}",
+        f"temperature={temperature:.2f} K",
+        f"magnetic_field={magnetic_field:.4f} T",
+        contact_note,
+        f"p1={result['p1']:.6g}  p1_err={result['p1_err']:.6g}"
+        f"  units={p1_unit}",
+        f"p2={result['p2']:.6g}  p2_err={result['p2_err']:.6g}"
+        f"  units={obs_unit}",
+        f"rmse={result['rmse']:.6g}  units={obs_unit}",
+    ]
+
+    r6_inv = result["r_eff"] ** (-6)
+    df = pd.DataFrame(
+        {
+            "label": result["labels"],
+            "r_eff_ang": result["r_eff"],
+            "mean_r6_inv": r6_inv,
+            "observed_raw": result["obs_raw"],
+            "contact": result["contact"],
+            "observed": result["obs"],
+            "predicted": result["pred"],
+        }
+    )
+
+    # r⁻⁶ values span many orders of magnitude — keep full precision so they
+    # don't round to 0 / lose digits under the table-wide float_format.
+    df["mean_r6_inv"] = format_full_precision(df["mean_r6_inv"])
+
+    write_csv_safe(df, file_name, comment)
+
+    if verbose:
+        logger.info("r^-6 fit results written to %s", file_name)
+
+
+def read_chiT_regression_csv(filename: str) -> dict[str, float]:
+    """Read a Curie-normalised chiT regression CSV file.
+
+    Returns fit parameters as a flat dict.
+
+    The CSV is expected to contain columns: ``type``, ``intercept``, and
+    ``slope``. Each row is flattened into keys of the form
+    ``{type}_intercept`` and ``{type}_slope``.
+
+    Args:
+        filename: Path to the regression CSV file.
 
     Returns:
-        dict[str, float]: Flattened fit parameters keyed by `{type}_{intercept|slope}`.
+        Flattened fit parameters keyed by ``{type}_{intercept|slope}``.
 
     Raises:
         ValueError: If required columns are missing from the CSV.
@@ -105,7 +180,9 @@ def read_chiT_regression_csv(filename: str) -> dict[str, float]:
     df = read_csv_safe(filename)
 
     # Sanity check
-    required_cols = {"type", "intercept", "slope", "intercept_err", "slope_err"}
+    required_cols = {
+        "type", "intercept", "slope", "intercept_err", "slope_err"
+    }
     if not required_cols.issubset(df.columns):
         raise ValueError(f"CSV must contain {required_cols}")
 

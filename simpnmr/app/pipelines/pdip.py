@@ -57,7 +57,7 @@ def run_calc_pdip(
     molecule.calc_pdip(centres)
 
     if chem_labels is not None:
-        al_to_cl, al_to_cml = load_chem_labels_from_csv(chem_labels)
+        al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(chem_labels)
         if has_missing_selected_chem_labels(molecule, al_to_cl):
             logger.warning(
                 "Chemical labels file does not define labels for all selected nuclei; "

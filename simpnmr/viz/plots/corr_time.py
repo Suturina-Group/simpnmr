@@ -75,7 +75,7 @@ def plot_corr_time_scatter(
     ax.set_facecolor("white")
     scale = spec.skin_axes(ax)
     ax.minorticks_on()
-    ax.grid(True, which="major", color=palette.grid, linewidth=0.7, alpha=0.8)
+    ax.grid(True, which="major", color=palette.grid, linewidth=0.3, alpha=0.8)
     ax.set_axisbelow(True)
     marker_size = glyphs.ms
     annotation_size = scale.annotation
@@ -170,9 +170,10 @@ def plot_corr_time_contrib(
     theory_r1_dipolar: np.ndarray | None = None,
     theory_r1_contact: np.ndarray | None = None,
     theory_r1_curie: np.ndarray | None = None,
-    exp_r1: np.ndarray,
+    exp_r1: np.ndarray | None = None,
     chem_labels: list[str],
     spec: PlotSpec,
+    ylabel: str = r"$R_1$ (s$^{-1}$)",
     save: bool = True,
     show: bool = True,
     save_name: str = "r1_fit_contributions.pdf",
@@ -208,10 +209,10 @@ def plot_corr_time_contrib(
 
     xvals = np.arange(len(chem_labels), dtype=float)
 
-    order_idx = np.argsort(exp_r1)[::-1]
+    order_idx = np.argsort(exp_r1 if exp_r1 is not None else theory_r1)[::-1]
     chem_labels_ordered = [chem_labels[idx] for idx in order_idx]
     theory_r1_ordered = theory_r1[order_idx]
-    exp_r1_ordered = exp_r1[order_idx]
+    exp_r1_ordered = exp_r1[order_idx] if exp_r1 is not None else None
 
     component_series: list[tuple[str, np.ndarray, str]] = []
 
@@ -261,7 +262,9 @@ def plot_corr_time_contrib(
         )
         widthscaler += 1
 
-    y_arrays = [theory_r1_ordered, exp_r1_ordered]
+    y_arrays = [theory_r1_ordered]
+    if exp_r1_ordered is not None:
+        y_arrays.append(exp_r1_ordered)
     y_arrays.extend(values for _, values, _ in component_series)
     y_concat = np.concatenate(y_arrays)
     y_min = float(np.min(y_concat))
@@ -269,17 +272,18 @@ def plot_corr_time_contrib(
     y_span = y_max - y_min
     y_pad = 0.1 * y_span if y_span > 0 else 0.1 * max(abs(y_max), 1.0)
 
-    ax.plot(
-        (xvals + 0.5),
-        exp_r1_ordered,
-        label="Exp.",
-        color=palette.primary,
-        lw=0,
-        marker="o",
-        fillstyle="none",
-        markersize=(glyphs.ms if glyphs is not None else 7),
-        zorder=5,
-    )
+    if exp_r1_ordered is not None:
+        ax.plot(
+            (xvals + 0.5),
+            exp_r1_ordered,
+            label="Exp.",
+            color=palette.primary,
+            lw=0,
+            marker="o",
+            fillstyle="none",
+            markersize=(glyphs.ms if glyphs is not None else 7),
+            zorder=5,
+        )
 
     ax.hlines(
         0.0,
@@ -291,12 +295,12 @@ def plot_corr_time_contrib(
     ax.grid(axis="x", ls="--", which="minor", color=palette.grid)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
-    ax.set_ylabel(r"$R_1$ (s$^{-1}$)")
+    ax.set_ylabel(ylabel)
     ax.set_ylim(y_min - y_pad, y_max + y_pad)
     ax.set_xlim([-0.5, xvals[-1] + 1.5])
 
     ax.set_xticks(xvals + 0.5)
-    ax.set_xticklabels(chem_labels_ordered, rotation=45)
+    ax.set_xticklabels(chem_labels_ordered, rotation=90)
     ax.tick_params(axis="x", labelsize=scale.axis_label)
 
     ax.yaxis.set_major_locator(ticker.AutoLocator())

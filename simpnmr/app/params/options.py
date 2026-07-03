@@ -58,7 +58,7 @@ class FitSuscRunOptions:
     shift_plots: PlotMode = "on"
     spread_plots: PlotMode = "on"
     contrib_plots: PlotMode = "on"
-    isoaxrho_plots: PlotMode = "on"
+    isoaxrh_plots: PlotMode = "on"
     pcs_isosurface: bool = False
 
     @classmethod
@@ -70,7 +70,7 @@ class FitSuscRunOptions:
             shift_plots=ns.shift_plots,
             spread_plots=ns.spread_plots,
             contrib_plots=ns.contrib_plots,
-            isoaxrho_plots=ns.isoaxrho_plots,
+            isoaxrh_plots=ns.isoaxrh_plots,
             pcs_isosurface=ns.pcs_isosurface,
         )
 

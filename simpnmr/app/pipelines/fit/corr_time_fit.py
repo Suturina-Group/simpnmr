@@ -28,13 +28,10 @@ from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.relax import average_relaxation_rates_by_chem_label
 
 # Core / domain
-from simpnmr.core.const.gammas import NUCLEAR_GAMMAS
+from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.relaxation.eval import evaluate_relaxation_rates
-
-# Tools
-from simpnmr.core.util.strings import remove_numbers
 
 # IO layer
 from simpnmr.io.csv.corr_time import save_corr_time_fit_data
@@ -433,7 +430,9 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
 
         # Add chemical labels if provided
         if len(config.chem_labels_file):
-            al_to_cl, al_to_cml = load_chem_labels_from_csv(config.chem_labels_file)
+            al_to_cl, al_to_cml, _ = load_chem_labels_from_csv(
+                config.chem_labels_file
+            )
             if has_missing_selected_chem_labels(base_molecule, al_to_cl):
                 logger.warning(
                     "Chemical labels file does not define labels for all selected "
@@ -458,7 +457,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             nuc.label: float(
                 angstrom_to_mhz(
                     np.trace(nuc.A.fc) / 3.0,
-                    NUCLEAR_GAMMAS[remove_numbers(nuc.label)],
+                    get_nuclear_gamma(nuc.isotope),
                 )
             )
             * 1e6
@@ -466,7 +465,7 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
             if nuc.A is not None
         }
         gamma_I_dict = {
-            label: NUCLEAR_GAMMAS[remove_numbers(label)] * 2 * np.pi * 1e6
+            label: get_nuclear_gamma(label) * 2 * np.pi * 1e6
             for label in nuclei_coords
         }
 

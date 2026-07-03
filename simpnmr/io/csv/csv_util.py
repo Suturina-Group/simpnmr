@@ -9,12 +9,41 @@ basic validation, and normalization suitable for cross-platform use
 """
 
 import datetime
+import math
 import os
 
 import pandas as pd
 
 from simpnmr.__version__ import __version__
 from simpnmr.io.csv.csv_valid import validate_csv_delimiters
+
+
+def format_full_precision(series: "pd.Series") -> "pd.Series":
+    """Format a numeric column with full precision *and* tidy output.
+
+    Each value is written as the **shortest** decimal string that still
+    round-trips to the exact same float64 (Python's ``repr``). This keeps full
+    precision — unlike a fixed ``%.Ng`` width, which either adds noise digits
+    (``0.00089300000000000002``) or silently loses precision — while staying
+    readable (``0.000893``, ``2e-07``).
+
+    Use this on individual columns whose magnitude spans many orders (e.g.
+    r⁻⁶ values) so they are unaffected by the table-wide ``float_format``
+    passed to :func:`write_csv_safe`. Non-finite values and ``None`` become
+    empty fields (matching pandas' default NaN handling).
+    """
+    def _fmt(v):
+        if v is None:
+            return ""
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            return v
+        if not math.isfinite(fv):
+            return ""
+        return repr(fv)
+
+    return series.map(_fmt)
 
 
 def read_csv_safe(
@@ -73,7 +102,10 @@ def write_csv_safe(
     comment: str | list[str] | None = None,
     *,
     sep: str = ",",
-    float_format: str = "%.6f",
+    # %.10g keeps full precision and prints readable decimals for normal-scale
+    # columns (x/y/z, A_sd_*, shifts), switching to exponential only for very
+    # small/large magnitudes (e.g. r⁻⁶ values) that %.6f would round to 0.
+    float_format: str = "%.10g",
     index: bool = False,
     encoding: str = "utf-8-sig",
     newline: str = "",

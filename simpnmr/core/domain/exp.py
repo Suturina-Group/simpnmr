@@ -40,6 +40,7 @@ class Signal:
         assignment: str = "UNK",
         l_to_g: float = 1.0,
         r1: Optional[float] = None,
+        isotope: Optional[str] = None,
     ) -> None:
         try:
             self.shift = float(shift)
@@ -61,12 +62,13 @@ class Signal:
         if self.area < 0.0:
             raise ValueError("area must be non-negative")
 
+        if assignment is None or (
+            isinstance(assignment, str) and not assignment.strip()
+        ):
+            raise ValueError("assignment must be a non-empty string")
         if not isinstance(assignment, str):
             raise TypeError("assignment must be str")
-        assignment = assignment.strip()
-        if not assignment:
-            raise ValueError("assignment must be non-empty")
-        self.assignment = assignment
+        self.assignment = assignment.strip()
 
         try:
             self.l_to_g = float(l_to_g)
@@ -85,6 +87,13 @@ class Signal:
             if self.r1 < 0.0:
                 raise ValueError("r1 must be non-negative")
 
+        if isotope is None:
+            self.isotope = None
+        else:
+            if not isinstance(isotope, str):
+                raise TypeError("isotope must be str or None")
+            self.isotope = isotope.strip() or None
+
         return
 
 
@@ -94,10 +103,9 @@ class Experiment:
     Args:
         temperature: Experiment temperature in Kelvin.
         magnetic_field: Spectrometer magnetic field in Tesla.
-        isotope: Isotope label (e.g., ``"13C"``).
         signals: List of assigned signals.
-        spectrum: Optional experimental spectrum as an ``(N, 2)`` array where the
-            first column is ppm and the second column is intensity.
+        spectrum: Optional experimental spectrum as an ``(N, 2)`` array where
+            the first column is ppm and the second column is intensity.
         exp_reference: Optional experimental reference position in ppm used for
             spectrum normalization/overlay.
 
@@ -105,7 +113,6 @@ class Experiment:
         temperature: Experiment temperature in Kelvin.
         signals: List of assigned signals.
         magnetic_field: Spectrometer magnetic field in Tesla.
-        isotope: Isotope label.
         spectrum: Experimental spectrum as an ``(N, 2)`` array or ``None``.
         exp_reference: Experimental reference position in ppm or ``None``.
     """
@@ -114,15 +121,14 @@ class Experiment:
         self,
         temperature: float,
         magnetic_field: float,
-        isotope: str,
         signals: list[Signal],
         spectrum: ArrayLike = None,
         exp_reference: Optional[float] = None,
     ) -> None:
+
         self._signals = signals
         self.temperature = temperature
         self.magnetic_field = magnetic_field
-        self.isotope = isotope.title()
         self.exp_reference = exp_reference
 
         if spectrum is not None:
@@ -141,8 +147,34 @@ class Experiment:
         """
         return [signal.assignment for signal in self.signals]
 
+    def __contains__(self, item):
+        if isinstance(item, tuple):
+            label, isotope = item
+            # Exact match first.
+            if any(s.assignment == label and s.isotope == isotope for s in self.signals):
+                return True
+            # Fall back to untagged only when the experiment has no isotope
+            # column at all (all signals untagged).
+            exp_has_isotopes = any(s.isotope is not None for s in self.signals)
+            if not exp_has_isotopes:
+                return any(s.assignment == label for s in self.signals)
+            return False
+        return any(signal.assignment == item for signal in self.signals)
+
     def __getitem__(self, item):
-        # This is probably slow
+        if isinstance(item, tuple):
+            label, isotope = item
+            # Exact isotope match.
+            for signal in self.signals:
+                if signal.assignment == label and signal.isotope == isotope:
+                    return signal
+            # Fall back to untagged only when the experiment has no isotope column.
+            exp_has_isotopes = any(s.isotope is not None for s in self.signals)
+            if not exp_has_isotopes:
+                for signal in self.signals:
+                    if signal.assignment == label:
+                        return signal
+            raise KeyError(item)
         lookup = {signal.assignment: signal for signal in self.signals}
         return lookup[item]
 
@@ -225,6 +257,7 @@ class Experiment:
         width = max([len(signal.assignment) for signal in self.signals])
         for signal in self.signals:
             out += "{}, {: 10.4f}, {:7.4f}, {:5.2f}\n".format(
-                signal.assignment.ljust(width), signal.shift, signal.width, signal.area
+                signal.assignment.ljust(width),
+                signal.shift, signal.width, signal.area,
             )
         return out

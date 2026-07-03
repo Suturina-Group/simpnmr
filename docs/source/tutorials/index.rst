@@ -10,10 +10,18 @@ for hands-on use alongside the paper and the main documentation.
    :maxdepth: 1
    :hidden:
 
+   getting_started
    using_examples
 
 .. grid:: 2
    :gutter: 2
+
+   .. grid-item-card:: Getting started
+      :link: getting_started
+      :link-type: doc
+
+      Step-by-step first run: install ``simpnmr``, run a shift prediction on
+      an example system, and inspect the outputs.
 
    .. grid-item-card:: Download examples
 
