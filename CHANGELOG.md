@@ -2,6 +2,147 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-07-03)
+
+### Bug Fixes
+
+- **config**: Add include_groups to PredictConfig nuclei KEYWORDS
+  ([`2207d78`](https://gitlab.com/suturina-group/simpnmr/-/commit/2207d78446a7033b597338bad7c7cd3a0b4dd3ad))
+
+- **dia**: Per-isotope reference shieldings for DFT diamagnetic correction
+  ([`46f251d`](https://gitlab.com/suturina-group/simpnmr/-/commit/46f251d07fb062bbdc4accd842d8195be225aba2))
+
+- **gui**: Bundle 3Dmol.js to fix blank viewer in QWebEngine
+  ([`a4c9ef7`](https://gitlab.com/suturina-group/simpnmr/-/commit/a4c9ef79318ec312a3b7465799a9c581c4b8bfbe))
+
+- **viz**: Use predicted shifts in bubble plot connectors, fix shift_spread KeyError, show reduced
+  chi in fitted shifts
+  ([`99f9c74`](https://gitlab.com/suturina-group/simpnmr/-/commit/99f9c74d5ae4ec0048d2775e5aea85008aa6c6dd))
+
+- **vt**: Correct NameError in VT ab-initio plot and refresh stale test fixtures
+  ([`f2085d4`](https://gitlab.com/suturina-group/simpnmr/-/commit/f2085d4e2640935d5a37ae8b6e9c11342dffa61f))
+
+- **vt**: Restore example test configs and fix latent isoaxrh/Bleaney bugs
+  ([`8cda847`](https://gitlab.com/suturina-group/simpnmr/-/commit/8cda847790ec821d532f158a79117f1c6cc9c059))
+
+### Documentation
+
+- Add getting-started tutorial and fix CLI reference/underlines
+  ([`d02a24e`](https://gitlab.com/suturina-group/simpnmr/-/commit/d02a24e3e61d5635db037e33f4393f3a4ce7f604))
+
+### Features
+
+- Broken-axis spectra, R1/R2 relaxation decomposition, peak-data files, correlation-driven
+  permutations
+  ([`13fdb1a`](https://gitlab.com/suturina-group/simpnmr/-/commit/13fdb1afbbed78b9bbca7010e0454d5ba9f28e2e))
+
+- Calc_tau_c CLI, ellipsoid τR auto-computation, combined τ-space overlay
+  ([`2fc166b`](https://gitlab.com/suturina-group/simpnmr/-/commit/2fc166b55710cec3923e49d55acd654e25155fe9))
+
+- Conformer averaging, g_iso Evans, VT TIP fix, 17O, susc plot polish
+  ([`f934d00`](https://gitlab.com/suturina-group/simpnmr/-/commit/f934d00878fb3b681a1903ad6a1eec5d2431f451))
+
+- Dynamic spectrum labels, min_linewidth_hz, __contains__ fix, and spectrum scaling
+  ([`cca8f2a`](https://gitlab.com/suturina-group/simpnmr/-/commit/cca8f2ae8fc5113255888d41cefd1d097bb5ba0c))
+
+- Isotope-aware assignment, wide CSV format, multi-exp Hungarian
+  ([`c2b7d5b`](https://gitlab.com/suturina-group/simpnmr/-/commit/c2b7d5bd81da4502f50435bfdc1710b61aa8d127))
+
+- Multi-isotope pipeline fixes, conformer averaging, GUI assignment, docs
+  ([`2021a26`](https://gitlab.com/suturina-group/simpnmr/-/commit/2021a2622f1f229fa8c1e8fc9f1e97435014103c))
+
+- Per-isotope plots, tBu label fixes, bubble plot area scaling
+  ([`58c29af`](https://gitlab.com/suturina-group/simpnmr/-/commit/58c29afdaf1b389496e54301cf2e743c50113f6e))
+
+- R^-6 relaxation fit, area-weighted Hungarian assignment, and spectrum improvements
+  ([`51ed7e5`](https://gitlab.com/suturina-group/simpnmr/-/commit/51ed7e56ee85cfd3637a62a4c077c72344469f9a))
+
+- **assignment**: Add width and R1 cost terms to Hungarian assignment
+  ([`d1727c6`](https://gitlab.com/suturina-group/simpnmr/-/commit/d1727c6df68bcb53ff4a98323588457a81a406db))
+
+- **assignment**: HMBC/HSQC correlation constraints for permutation search
+  ([`8e02158`](https://gitlab.com/suturina-group/simpnmr/-/commit/8e02158b47c74a5d5d5797a05d7b5783695d6ff6))
+
+- **assignment**: Shared permutation assignment across temperatures
+  ([`c8f8549`](https://gitlab.com/suturina-group/simpnmr/-/commit/c8f8549b01f15ec7ea93d5db4045d43d9b3aaea5))
+
+- **gui**: Add diamagnetic method and per-isotope reference controls
+  ([`5c56f59`](https://gitlab.com/suturina-group/simpnmr/-/commit/5c56f593da896c22170a523ae93f3fd0bfbaa60a))
+
+- **gui**: Embed 3D molecule viewer using 3Dmol.js / PyQt6-WebEngine
+  ([`0448a7b`](https://gitlab.com/suturina-group/simpnmr/-/commit/0448a7bdb898440f35e9c87e665b6ba709da4d93))
+
+- **gui**: Shared iso/temp selector, per-isotope shift plots, GUI fixes
+  ([`b4174a3`](https://gitlab.com/suturina-group/simpnmr/-/commit/b4174a3746e83b59c1ea688e268dafea5f79b8a1))
+
+- **gui**: Split fitter, per-group Lorentzians, 3D label/color polish
+  ([`94cd1bf`](https://gitlab.com/suturina-group/simpnmr/-/commit/94cd1bf2c1324b92db3284bb5a0469a940f8df9a))
+
+- **isotopes**: Per-nucleus isotope from chem_labels CSV, remove exp.isotope, add 14N/15N/19F
+  ([`b66f6d5`](https://gitlab.com/suturina-group/simpnmr/-/commit/b66f6d51c92fcb3c15b73fb498f3a59d7db45016))
+
+- **predict**: Add R1 and linewidth decomposition plots; fix label rotation
+  ([`a14e91b`](https://gitlab.com/suturina-group/simpnmr/-/commit/a14e91ba343dc4451536a04ff438f58c24e2ae5d))
+
+- **predict**: Add sh and reduced_chi susceptibility methods; fix PCS centering
+  ([`752a765`](https://gitlab.com/suturina-group/simpnmr/-/commit/752a765f4437d12f491b4e992efabc8ef34e07a9))
+
+- **predict**: Auto τ_r linewidth, atom-label centres, Bleaney susc, J-multiplet χ(T)
+  ([`6d01233`](https://gitlab.com/suturina-group/simpnmr/-/commit/6d01233903923b9536c35eb91758675bb47a7276))
+
+- **predict**: Spin-only susceptibility mode, VT spectra plot, PNG export
+  ([`4af419c`](https://gitlab.com/suturina-group/simpnmr/-/commit/4af419c6bcc0e1cda0143a9e6078e98beba90084))
+
+- **relaxation**: Τ-space plots and r^-6 fit CSV output
+  ([`a4b7986`](https://gitlab.com/suturina-group/simpnmr/-/commit/a4b79865be7a13d6cb5c8d4471574056464f5c39))
+
+- **tools**: Add label_groups CLI for methyl/tBu group labelling
+  ([`e69df3b`](https://gitlab.com/suturina-group/simpnmr/-/commit/e69df3bd328a3a20026da7b0af11d1397920cca7))
+
+- **viz**: 1σ bands, CSV export, robust x-axis for g_iso solution plot
+  ([`63b94bc`](https://gitlab.com/suturina-group/simpnmr/-/commit/63b94bc38c3ddc70a114378468d999851e9853d6))
+
+- **viz**: Axis breaks, panel height matching, and spectrum polish
+  ([`0be51fc`](https://gitlab.com/suturina-group/simpnmr/-/commit/0be51fc652ed59f988dba6b56cdf5e0efe766727))
+
+- **viz**: Euler angle CIs, compact uncertainty, figure polish
+  ([`f76fba4`](https://gitlab.com/suturina-group/simpnmr/-/commit/f76fba4622471624562eb9899e7ae105263d06b3))
+
+- **viz**: G_iso solution-line plot with ζ panel and error propagation
+  ([`8e39af2`](https://gitlab.com/suturina-group/simpnmr/-/commit/8e39af2ab6e41cfca69997f059d6bcb411c81075))
+
+- **viz**: Per-isotope r^-6 fits and spectrum plots, fix contour clipping
+  ([`f92cf49`](https://gitlab.com/suturina-group/simpnmr/-/commit/f92cf4964626d2dd5e617743d8b51ab845afd353))
+
+- **viz**: Spectra figure polish, tau-ps units, GUI tau range controls
+  ([`2775b48`](https://gitlab.com/suturina-group/simpnmr/-/commit/2775b4873f675c0375266789f21b5367bc865ae5))
+
+### Performance Improvements
+
+- **assignment**: Constrained permutation generation via backtracking
+  ([`ac7bdac`](https://gitlab.com/suturina-group/simpnmr/-/commit/ac7bdac27f8a90f200fcaee5ea38a55f333b23de))
+
+### Refactoring
+
+- Rename rho → rh throughout (variables, keys, filenames, labels)
+  ([`e912c95`](https://gitlab.com/suturina-group/simpnmr/-/commit/e912c951ac17d3766cd964f1b941066c9c88277b))
+
+- **gui**: Unified predict/fit_susc GUI, rename to simpnmr.gui.app
+  ([`1f790a2`](https://gitlab.com/suturina-group/simpnmr/-/commit/1f790a29ef296a3b9cf792f018143fb1ac9348da))
+
+### Testing
+
+- **spinham**: Fix stale rho -> rh type in get_sh fixture CSV
+  ([`5fa9c74`](https://gitlab.com/suturina-group/simpnmr/-/commit/5fa9c74d250387971b037185451f80ecbed1eaf8))
+
+### Breaking Changes
+
+- Peak-data filenames now embed the magnetic field (peak_data_<T>_K_<B>_T.csv); the R2_total peak
+  column is replaced by its components (R2_sbm_dipolar/contact and R2_curie); the default CSV float
+  format changed from %.6f to %.10g; and fit_susc spectrum linewidths are taken from the relaxation
+  model when tau_R and an r^-6 fit are available.
+
+
 ## v1.9.1 (2026-05-05)
 
 ### Bug Fixes
