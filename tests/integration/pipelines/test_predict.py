@@ -22,6 +22,11 @@ def test_predict_with_qc_hfc_and_qc_susceptibility():
     relaxation-enabled prediction workflow.
     """
     cwd = Path("examples/P3FeCl/SIMULATIONS/Prediction")
+    if not (cwd / "P3FeCl_Prediction.yml").exists():
+        pytest.skip(
+            "example config not available (examples/**/SIMULATIONS/ is "
+            f"gitignored): {cwd / 'P3FeCl_Prediction.yml'}"
+        )
     cmd = ["simpnmr", "--hide", "predict", "P3FeCl_Prediction.yml"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
 
@@ -46,6 +51,11 @@ def test_predict_with_pdip_hfc_and_csv_susceptibility():
     including the relaxation-enabled prediction workflow.
     """
     cwd = Path("examples/DyL1/SIMULATIONS/Prediction")
+    if not (cwd / "DyL1_1H_Prediction.yml").exists():
+        pytest.skip(
+            "example config not available (examples/**/SIMULATIONS/ is "
+            f"gitignored): {cwd / 'DyL1_1H_Prediction.yml'}"
+        )
     cmd = ["simpnmr", "--hide", "predict", "DyL1_1H_Prediction.yml"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
 

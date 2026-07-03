@@ -844,7 +844,7 @@ Optional. Used in susceptibility fitting workflows that model temperature depend
             intercept: [fit, 0.0] # Required parameter
             slope: [fit, 0.0] # Required parameter
             tip: [fix, 0.0010] # Required when tip_type is set to fit
-          rho:
+          rh:
             intercept: [fit, 0.0] # Required parameter
             slope: [fit, 0.0] # Required parameter
             tip: [fix, 0.0] # Required when tip_type is set to fit

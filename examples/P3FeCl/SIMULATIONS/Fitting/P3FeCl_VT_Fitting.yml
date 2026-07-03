@@ -27,7 +27,7 @@ assignment:
     mode: custom
     n_attempts: 10
     max_iter: 100
-    r2_threshold: 0.99
+    rmse_threshold: 0.0
   
 susc_vt:
     method: vt_2nd_order
@@ -41,7 +41,7 @@ susc_vt:
       ax:
         intercept: [fit, 0.0]
         slope: [fit, 0.0]
-      rho:
+      rh:
         intercept: [fix, 0.0]
         slope: [fix, 0.0]
         

@@ -351,7 +351,7 @@ def fit_vt(
         with spec.context():
             plot_exp_vs_ab_initio(
                 params=chiT_fit_params,
-                g_sq=g_components_sq,
+                g_sq=g_sq,
                 inv_t=inv_temps_fit,
                 ab_series=ab_series,
                 analytic_chi_vt=analytic_chi_vt,

@@ -22,6 +22,11 @@ def test_fit_corr_time():
     produces the expected diagnostics CSV artifact.
     """
     cwd = Path("examples/FeH/SIMULATIONS/Fit_Correlation_Time")
+    if not (cwd / "FeH_fit_corr_time.yml").exists():
+        pytest.skip(
+            "example config not available (examples/**/SIMULATIONS/ is "
+            f"gitignored): {cwd / 'FeH_fit_corr_time.yml'}"
+        )
     cmd = ["simpnmr", "--hide", "fit_corr_time", "FeH_fit_corr_time.yml"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
 
