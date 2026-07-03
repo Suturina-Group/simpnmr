@@ -298,14 +298,14 @@ def plot_tau_space(
 
     fig, ax = create_canvas(
         spec.profile,
-        variant="standard",
+        variant="narrow",
         window_title=window_title,
         layout="constrained",
+        width_scale=1.3,
+        height_scale=0.8,
     )
     palette = spec.palette
     spec.skin_axes(ax)
-    fig.patch.set_facecolor(palette.annotation_bg)
-    ax.set_facecolor(palette.annotation_bg)
 
     # log-ratio: log10(p1_theoretical / p1_fit)
     # zero = exact match, ±log10(1 ± z*p1_err/p1_fit) = CI boundary
@@ -332,23 +332,9 @@ def plot_tau_space(
     ax.set_xlim(TAU_E_2D.min(), TAU_E_2D.max())
     ax.set_ylim(TAU_R_2D.min(), TAU_R_2D.max())
 
-    # Heatmap
-    import matplotlib.colors as mcolors
-    cmap = plt.get_cmap("RdYlGn_r")
-    norm = mcolors.TwoSlopeNorm(vmin=-2, vcenter=0, vmax=2)
-    pcm = ax.pcolormesh(
-        TAU_E_2D, TAU_R_2D, log_ratio_plot,
-        cmap=cmap, norm=norm,
-        shading="auto",
-    )
-    fig.colorbar(
-        pcm, ax=ax,
-        label=r"$\log_{10}(p_1^\mathrm{calc}/p_1^\mathrm{fit})$",
-    )
-
-    # CI boundary contours
+    # Contour lines only — no heatmap/colorbar — matching
+    # plot_tau_space_combined's style for a single observable.
     z = _norm.ppf(0.5 + confidence / 2.0)
-    ci_pct = int(round(confidence * 100))
     if p1_err is not None and p1_fit != 0:
         rel_err = z * abs(p1_err / p1_fit)
         log_lo = np.log10(max(1.0 - rel_err, 1e-6))
@@ -357,106 +343,84 @@ def plot_tau_space(
         rel_err = None
         log_lo, log_hi = -0.1, 0.1
 
-    logger.debug(
-        "tau_space CI contours: log_lo=%.4f  log_hi=%.4f  "
-        "p1_err/p1_fit=%s",
-        log_lo, log_hi,
-        f"{abs(p1_err / p1_fit):.4f}"
-        if (p1_err is not None and p1_fit != 0) else "n/a",
-    )
-    logger.info(
-        "p1 relative uncertainty (%.0f%% CI): %s",
-        confidence * 100,
-        f"±{rel_err * 100:.1f}%" if rel_err is not None else "n/a",
-    )
-
-    # Ensure contour levels are within the clipped log_ratio range
-    actual_min = float(log_ratio_plot.min())
-    actual_max = float(log_ratio_plot.max())
-    levels_central = [0.0] if actual_min <= 0.0 <= actual_max else []
-    levels_lo = [log_lo] if actual_min <= log_lo <= actual_max else []
-    levels_hi = [log_hi] if actual_min <= log_hi <= actual_max else []
-
-    if levels_central:
-        ax.contour(
-            TAU_E_2D, TAU_R_2D, log_ratio_plot,
-            levels=levels_central,
-            colors=["black"],
-            linewidths=[1.6],
-            linestyles=["-"],
+    if rel_err is not None:
+        logger.info(
+            "p1 relative uncertainty (%.0f%% CI): ±%.1f%%",
+            confidence * 100, rel_err * 100,
         )
-    if levels_lo or levels_hi:
-        ci_levels = levels_lo + levels_hi
+
+    _obs_color = (
+        palette.highlight if observable == "width" else palette.primary
+    )
+    _obs_label = {"r1": r"$R_1$", "width": r"$\Delta\nu$"}.get(
+        observable, _OBS_LABELS.get(observable, observable)
+    )
+
+    _lo_data = float(log_ratio_plot.min())
+    _hi_data = float(log_ratio_plot.max())
+
+    legend_handles: list = []
+    legend_labels_list: list = []
+
+    # CI boundary dashed lines
+    ci_levels = [lv for lv in [log_lo, log_hi] if _lo_data <= lv <= _hi_data]
+    if ci_levels:
         ax.contour(
             TAU_E_2D, TAU_R_2D, log_ratio_plot,
             levels=sorted(ci_levels),
-            colors=["white"] * len(ci_levels),
-            linewidths=[1.2] * len(ci_levels),
+            colors=[_obs_color] * len(ci_levels),
+            linewidths=[0.6] * len(ci_levels),
             linestyles=["--"] * len(ci_levels),
         )
-    if not levels_central:
+
+    # Central solid line (p1_calc = p1_fit)
+    if _lo_data <= 0.0 <= _hi_data:
+        ax.contour(
+            TAU_E_2D, TAU_R_2D, log_ratio_plot,
+            levels=[0.0],
+            colors=[_obs_color],
+            linewidths=[1.0],
+        )
+        legend_handles.append(Line2D([0], [0], color=_obs_color, lw=1.0))
+        legend_labels_list.append(_obs_label)
+    else:
         logger.warning(
-            "Central contour (p1_calc = p1_fit) not visible: "
-            "p1_fit=%.4g is outside the computed grid range "
-            "[%.4g, %.4g]. Adjust tau_e/tau_R grid limits.",
-            p1_fit,
-            float(np.min(p1_grid)),
-            float(np.max(p1_grid)),
+            "Central contour (p1_calc = p1_fit) not visible for '%s'.",
+            _obs_label,
         )
 
-    # Clip all contour/mesh collections in one pass after drawing is done
+    # Clip all contour collections in one pass after drawing is complete
     for coll in ax.collections:
         coll.set_clip_on(True)
         coll.set_clip_box(ax.bbox)
 
-    obs_label = _OBS_LABELS.get(observable, observable)
+    if legend_handles:
+        ax.legend(
+            legend_handles, legend_labels_list,
+            fontsize=spec.typography.legend, framealpha=0.8,
+            loc="upper right",
+        )
     ax.set_xlabel(rf"$\tau_e$ ({_tau_e_unit})")
     ax.set_ylabel(rf"$\tau_R$ ({_tau_r_unit})")
-    ax.set_title(
-        f"{obs_label}  —  {ci_pct}% CI  |  "
-        r"black line: $p_1^\mathrm{calc}=p_1^\mathrm{fit}$",
-        fontsize=spec.typography.title,
-    )
-
-    p1_unit = _P1_UNITS.get(observable, "")
-    ann = (
-        f"$p_1$ = {_fmt_sci(p1_fit, p1_err)} {p1_unit}\n"
-        f"model: {relaxation_model}\n"
-        f"T = {temperature:.0f} K"
-    )
-    ax.text(
-        0.97, 0.97, ann,
-        transform=ax.transAxes,
-        ha="right", va="top",
-        fontsize=spec.typography.annotation,
-        color=palette.primary,
-        bbox=dict(
-            boxstyle="round,pad=0.3",
-            facecolor=palette.annotation_bg,
-            edgecolor=palette.grid,
-            alpha=0.8,
-        ),
-    )
 
     if tau_R_fixed is not None:
         tau_R_plot = tau_R_fixed * _tau_r_scale
-        ax.axhline(
-            tau_R_plot,
-            color=palette.highlight,
-            lw=1.5,
-            linestyle="--",
-            zorder=10,
+        _x_left = TAU_E_2D.min()
+        _y_bottom = TAU_R_2D.min()
+        _arrow_kw = dict(
+            xycoords="data", textcoords="data",
+            annotation_clip=False, zorder=8,
         )
 
-        # Find τ_e at the intersection with the central contour (log_ratio=0)
-        # by interpolating log_ratio along the row closest to tau_R_fixed.
         r_idx = int(np.argmin(np.abs(tau_R - tau_R_fixed)))
-        lr_row = log_ratio[:, r_idx]  # shape (N_e,), varies with tau_e
-        # Find sign changes → zero crossings
+        ann_lines: list[tuple[str, str]] = [
+            (f"$\\tau_R$ = {_fmt_ps(tau_R_fixed)}", "royalblue"),
+        ]
+
+        lr_row = log_ratio_plot[r_idx, :]  # fixes tau_R, varies with tau_e
         sign_changes = np.where(np.diff(np.sign(lr_row)))[0]
         tau_e_intersections: list[float] = []
         for sc in sign_changes:
-            # Linear interpolation between sc and sc+1
             lr0, lr1 = lr_row[sc], lr_row[sc + 1]
             te0, te1 = tau_e[sc], tau_e[sc + 1]
             frac = -lr0 / (lr1 - lr0)
@@ -464,45 +428,38 @@ def plot_tau_space(
 
         for tau_e_cross in tau_e_intersections:
             tau_e_cross_plot = tau_e_cross * _tau_e_scale
-            ax.axvline(
-                tau_e_cross_plot,
-                color=palette.highlight,
-                lw=0.8,
-                linestyle=":",
-                zorder=5,
+            # Horizontal arrow: y-axis → cross
+            ax.annotate(
+                "",
+                xy=(tau_e_cross_plot, tau_R_plot),
+                xytext=(_x_left, tau_R_plot),
+                arrowprops=dict(
+                    arrowstyle="-|>", color="royalblue",
+                    lw=0.7, mutation_scale=5,
+                ),
+                **_arrow_kw,
+            )
+            # Vertical arrow: cross → x-axis
+            ax.annotate(
+                "",
+                xy=(tau_e_cross_plot, _y_bottom),
+                xytext=(tau_e_cross_plot, tau_R_plot),
+                arrowprops=dict(
+                    arrowstyle="-|>", color=_obs_color,
+                    lw=0.7, mutation_scale=5,
+                ),
+                **_arrow_kw,
             )
             ax.plot(
-                tau_e_cross_plot,
-                tau_R_plot,
-                marker="x",
-                color=palette.highlight,
-                markersize=8,
-                markeredgewidth=1.5,
-                zorder=6,
+                tau_e_cross_plot, tau_R_plot,
+                marker="o", color=_obs_color,
+                markersize=3, markeredgewidth=0, zorder=9,
             )
 
         if tau_e_intersections:
-            # Format τ_e values for annotation
-            _fmt_tau = _fmt_ps
-            _fmt_tau_r = _fmt_ps
-
-            te_strs = ", ".join(_fmt_tau(t) for t in tau_e_intersections)
-            ann_tau = (
-                f"$\\tau_R$ = {_fmt_tau_r(tau_R_fixed)}\n"
-                f"$\\tau_e$ = {te_strs}"
-            )
-            ax.text(
-                0.03, 0.03, ann_tau,
-                transform=ax.transAxes,
-                ha="left", va="bottom",
-                fontsize=spec.typography.annotation,
-                color=palette.highlight,
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=palette.annotation_bg,
-                    edgecolor=palette.highlight,
-                    alpha=0.8,
-                ),
+            te_strs = ", ".join(_fmt_ps(t) for t in tau_e_intersections)
+            ann_lines.append(
+                (f"$\\tau_e$({_obs_label}) = {te_strs}", _obs_color)
             )
         else:
             logger.warning(
@@ -510,6 +467,25 @@ def plot_tau_space(
                 "found. Adjust tau_e_range or tau_r_range.",
                 tau_R_fixed,
             )
+
+        if ann_lines:
+            _fs = spec.typography.tick_label
+            _lh = _fs * 1.6 / (fig.get_figheight() * 72)
+            n = len(ann_lines)
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (0.03, 0.03), 0.55, n * _lh,
+                boxstyle="square,pad=0.0",
+                facecolor="white", edgecolor="none",
+                alpha=0.7, transform=ax.transAxes, zorder=4,
+            ))
+            for i, (txt, col) in enumerate(reversed(ann_lines)):
+                ax.text(
+                    0.03, 0.03 + i * _lh, txt,
+                    transform=ax.transAxes,
+                    ha="left", va="bottom",
+                    fontsize=_fs, color=col,
+                    zorder=5,
+                )
 
     render_figure(fig, save=save, show=show, save_name=save_name)
 
@@ -626,6 +602,8 @@ def plot_tau_space_combined(
         variant="narrow",
         window_title=window_title,
         layout="constrained",
+        width_scale=1.3,
+        height_scale=0.8,
     )
     palette = spec.palette
     spec.skin_axes(ax)

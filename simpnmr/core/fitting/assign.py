@@ -9,6 +9,7 @@ constraints for downstream fitting workflows.
 
 import copy
 import logging
+from collections import Counter, defaultdict
 from itertools import chain, permutations, product
 
 import numpy as np
@@ -61,11 +62,142 @@ def _constrained_group_perms(
     return results
 
 
+def _build_induced_maps(
+    driver_groups: list[list[str]],
+    correlations: list[dict],
+    exp_labels: list[str],
+) -> dict[str, tuple[str, dict[str, str]]]:
+    """Build induced dependent-signal maps from HSQC/HMBC correlations.
+
+    When only the *driver* groups (e.g. the protons) are permuted, every
+    correlated heteronucleus signal can be reassigned deterministically so that
+    the HSQC/HMBC relationships are preserved exactly.
+
+    For each driver group, correlations whose ``h`` belongs to that group are
+    bucketed into *families* — one bijection ``{h_label: c_label}`` per
+    dependent group. Correlations are keyed by ``(type, occurrence-index of h
+    within that type)`` so a proton correlating to two carbons of the same type
+    (e.g. HMBC to a quaternary and a carboxyl carbon) splits into two families
+    in YAML listing order.
+
+    Args:
+        driver_groups: Groups of (proton) labels actually permuted.
+        correlations: List of ``{h, c, type}`` correlation dicts.
+        exp_labels: All experimental signal labels (to skip dependents with no
+            experimental signal, e.g. excluded nuclei).
+
+    Returns:
+        Dict ``{dependent_origin_label: (driver_origin_label, family_map)}``
+        where ``family_map`` is the ``{h_label: c_label}`` bijection, so that
+        ``new_label(dependent) = family_map[new_label(driver)]``.
+    """
+    exp_set = set(exp_labels)
+    driver_labels: set[str] = set()
+    for group in driver_groups:
+        driver_labels.update(group)
+
+    induced: dict[str, tuple[str, dict[str, str]]] = {}
+    for group in driver_groups:
+        gset = set(group)
+        gcorrs = [c for c in correlations if c["h"] in gset]
+        if not gcorrs:
+            continue
+
+        # Bucket correlations into families keyed by (type, occurrence index of
+        # h within that type), preserving YAML order.
+        seen: Counter = Counter()
+        families: dict[tuple, dict[str, str]] = defaultdict(dict)
+        for corr in gcorrs:
+            ctype = corr.get("type", "hsqc")
+            occ = seen[(corr["h"], ctype)]
+            seen[(corr["h"], ctype)] += 1
+            families[(ctype, occ)][corr["h"]] = corr["c"]
+
+        for fam_key, fam in families.items():
+            # Inducing is well-defined only when the family is a bijection
+            # covering the whole driver group; otherwise leave those signals
+            # fixed rather than guess.
+            if set(fam) != gset:
+                logger.warning(
+                    "Correlation family %s does not cover every label in the "
+                    "permuted group %s — those dependent signals are left "
+                    "fixed.", fam_key, sorted(gset),
+                )
+                continue
+            cvals = list(fam.values())
+            if len(set(cvals)) != len(cvals):
+                logger.warning(
+                    "Correlation family %s maps two protons to the same "
+                    "heteronucleus — skipping (cannot induce a bijection).",
+                    fam_key,
+                )
+                continue
+            for h_origin, c_origin in fam.items():
+                if c_origin in driver_labels:
+                    continue  # explicitly permuted in its own group, not driven
+                if c_origin not in exp_set:
+                    continue  # no experimental signal (e.g. excluded nucleus)
+                if c_origin in induced:
+                    logger.warning(
+                        "Dependent signal %s is driven by more than one "
+                        "correlation family — keeping the first.", c_origin,
+                    )
+                    continue
+                induced[c_origin] = (h_origin, dict(fam))
+    return induced
+
+
+def _generate_driven(
+    exp_labels: list[str],
+    driver_groups: list[list[str]],
+    induced: dict[str, tuple[str, dict[str, str]]],
+) -> list[list[str]]:
+    """Permute driver groups and induce dependent signals from correlations.
+
+    Each generated permutation already satisfies every correlation exactly, so
+    no post-hoc filtering is required. The search space is the product of the
+    driver-group factorials rather than the (vastly larger) independent product
+    over every group.
+
+    Args:
+        exp_labels: All experimental signal labels, in signal order.
+        driver_groups: Groups of labels permuted freely.
+        induced: ``{dependent_label: (driver_label, family_map)}`` from
+            :func:`_build_induced_maps`.
+
+    Returns:
+        List of permuted assignment label lists, ordered to match ``exp_labels``.
+    """
+    driver_labels: set[str] = set()
+    for group in driver_groups:
+        driver_labels.update(group)
+    dependent_labels = set(induced)
+    fixed_labels = [
+        lab for lab in exp_labels
+        if lab not in driver_labels and lab not in dependent_labels
+    ]
+
+    per_group = [list(permutations(group)) for group in driver_groups]
+
+    results: list[list[str]] = []
+    for combo in product(*per_group, repeat=1):
+        assign: dict[str, str] = {}
+        for group, perm in zip(driver_groups, combo):
+            for origin, new in zip(group, perm):
+                assign[origin] = new
+        for dep_origin, (h_origin, fam) in induced.items():
+            assign[dep_origin] = fam[assign[h_origin]]
+        for lab in fixed_labels:
+            assign[lab] = lab
+        results.append([assign[lab] for lab in exp_labels])
+    return results
+
 
 def generate_assignment_permutations(
     experiment: Experiment,
     groups: list[list[str]] | None = None,
     signal_allowed: dict[str, set[str]] | None = None,
+    correlations: list[dict] | None = None,
 ) -> list[list[str]]:
     """Generate assignment permutations consistent with grouping constraints.
 
@@ -74,6 +206,15 @@ def generate_assignment_permutations(
         groups: Groups of assignment labels that may be permuted within each
             group. Labels not present in any group are treated as fixed
             (singletons).
+        signal_allowed: Optional ``{signal_label: allowed_chem_labels}`` map
+            used to prune the per-group permutation tree. Ignored in the
+            correlation-driven path (see ``correlations``).
+        correlations: Optional list of ``{h, c, type}`` HSQC/HMBC correlations.
+            When provided and they reference heteronucleus signals not in any
+            permuted group, only the driver (proton) groups are permuted and
+            each correlated heteronucleus is reassigned deterministically to
+            preserve the correlation — collapsing the search space to the
+            product of the driver-group factorials.
 
     Returns:
         List of permuted assignment label lists, each ordered to match the
@@ -112,6 +253,22 @@ def generate_assignment_permutations(
         grouped_labels = [
             lab for lab in grouped_labels if lab not in missing
         ]
+
+    # Correlation-driven path: when correlations reference heteronucleus
+    # signals that are not themselves in a permuted group, permute only the
+    # driver (proton) groups and induce the dependents — every generated
+    # permutation then satisfies the correlations exactly.
+    induced = (
+        _build_induced_maps(group_list, correlations, exp_labels)
+        if correlations else {}
+    )
+    if induced:
+        logger.info(
+            "Correlation-driven permutation: %d driver group(s), "
+            "%d induced dependent signal(s).",
+            len(group_list), len(induced),
+        )
+        return _generate_driven(exp_labels, group_list, induced)
 
     # Add fixed assignments as singleton groups.
     fixed = [[lab] for lab in exp_labels if lab not in grouped_labels]

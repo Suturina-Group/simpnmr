@@ -42,7 +42,6 @@ def _build_element_legend_handles(
             markersize=glyphs.ms,
             markerfacecolor=(0, 0, 0, 0.55),
             markeredgecolor=palette.primary,
-            markeredgewidth=0.8,
             label=element,
         )
         for element, marker in markers.items()
@@ -66,6 +65,8 @@ def plot_fitted_shifts(
     orbit: float | None = None,
     total_J: float | None = None,
     label_colors: dict[str, str] | None = None,
+    variant: str = "standard",
+    width_scale: float = 1.0,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot theoretical vs experimental shifts for a fitted susc model.
 
@@ -190,9 +191,10 @@ def plot_fitted_shifts(
 
     fig, ax = create_canvas(
         spec.profile,
-        variant="standard",
+        variant=variant,
         window_title=window_title,
         layout="constrained",
+        width_scale=width_scale,
     )
 
     glyphs = spec.glyphs
@@ -380,7 +382,6 @@ def plot_fitted_shifts(
             markersize=glyphs.ms,
             markerfacecolor=_colors[label],
             markeredgecolor=palette.primary,
-            markeredgewidth=0.8,
         )
 
     x_lim = ax.get_xlim()

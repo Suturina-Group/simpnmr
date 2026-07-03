@@ -12,7 +12,11 @@ import logging
 import numpy as np
 import pandas as pd
 
-from simpnmr.io.csv.csv_util import read_csv_safe, write_csv_safe
+from simpnmr.io.csv.csv_util import (
+    format_full_precision,
+    read_csv_safe,
+    write_csv_safe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +146,10 @@ def save_r6_fit(
             "predicted": result["pred"],
         }
     )
+
+    # r⁻⁶ values span many orders of magnitude — keep full precision so they
+    # don't round to 0 / lose digits under the table-wide float_format.
+    df["mean_r6_inv"] = format_full_precision(df["mean_r6_inv"])
 
     write_csv_safe(df, file_name, comment)
 

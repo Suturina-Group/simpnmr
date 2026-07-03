@@ -794,27 +794,37 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
     )
 
     # Write shift and peak data to file
-    for molecule, linewidth_output in zip(molecules, linewidth_outputs):
+    for molecule, linewidth_output, experiment in zip(
+        molecules, linewidth_outputs, experiments
+    ):
+        _T = molecule.susc.temperature
         save_molecule_to_csv(
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
-                f"hyperfines_and_shifts_{molecule.susc.temperature:.2f}_K.csv",
+                f"hyperfines_and_shifts_{_T:.2f}_K.csv",
             ),
             delimiter=options.runtime.csv_delimiter,
-            comment=f"T = {molecule.susc.temperature:.2f} K",
+            comment=f"T = {_T:.2f} K",
             verbose=True,
         )
 
+        # Encode the magnetic field in the peak-data name — the linewidths
+        # (relaxation) are field-dependent.
+        _, _b0 = resolve_relaxation_conditions(config, experiment)
+        _field_tag = f"_{_b0:.2f}_T" if _b0 is not None else ""
+        _peak_comment = f"T = {_T:.2f} K"
+        if _b0 is not None:
+            _peak_comment += f", B0 = {_b0:.2f} T"
         save_peak_data_to_csv(
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
-                f"peak_data_{molecule.susc.temperature:.2f}_K.csv",
+                f"peak_data_{_T:.2f}_K{_field_tag}.csv",
             ),
             linewidth_by_label=linewidth_output.values_by_label,
             linewidth_column_name=linewidth_output.column_name,
-            comment=f"T = {molecule.susc.temperature:.2f} K",
+            comment=_peak_comment,
             verbose=True,
         )
 
@@ -954,8 +964,9 @@ def _apply_relaxation_linewidths(
         A_iso_dict = {label: val_mhz * 1e6 for label, val_mhz in A_iso_dict_MHz.items()}
 
     gamma_I_dict = {
-        label: get_nuclear_gamma(label) * 2 * np.pi * 1e6
-        for label in nuclei_coords
+        nuc.label: get_nuclear_gamma(nuc.isotope) * 2 * np.pi * 1e6
+        for nuc in base_molecule.nuclei
+        if nuc.label in nuclei_coords
     }
     omega_I_dict = {label: gamma_I_dict[label] * B0 for label in nuclei_coords}
     omega_S = EGAMMA * B0 * 2 * np.pi * 1e6
@@ -987,6 +998,9 @@ def _apply_relaxation_linewidths(
     )
 
     # Persist the computed relaxation evaluation on the molecule domain object.
+    relaxation_eval.tau_R = tau_R
+    relaxation_eval.tau_e1 = tau_e1
+    relaxation_eval.tau_e2 = tau_e2
     base_molecule.relaxation = relaxation_eval
 
     rates_r1 = base_molecule.relaxation.r1.total

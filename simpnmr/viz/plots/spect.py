@@ -215,6 +215,7 @@ def plot_raw_deconv_pred(
     window_title: str = "Raw, Deconvoluted, and Predicted Spectra",
     verbose: bool = True,
     label_colors: dict | None = None,
+    axis_break: dict | None = None,
 ) -> tuple[plt.Figure, np.ndarray]:
     """Plots raw, deconvoluted, and predicted spectra.
 
@@ -402,12 +403,67 @@ def plot_raw_deconv_pred(
                 _group_y[nuc.chem_label] = contrib.copy()
 
     # ------------------------------------------------------------------
-    # Axis-break: find spectral segments and build the figure grid
+    # Axis-break: find spectral segments and build the figure grid.
+    # A user-supplied ``axis_break`` forces the break position(s), per-segment
+    # vertical scale, and (optionally) equal panel widths; otherwise segments
+    # are detected automatically from gaps and drawn ppm-proportional.
     # ------------------------------------------------------------------
     _all_peaks = shifts + [s.shift for s in _iso_signals]
-    _segments = _find_spectral_segments(_all_peaks, shift_range)
+    _segments = None
+    _seg_scales = None
+    _equal_width = False
+    if axis_break:
+        if axis_break.get("segments"):
+            # Explicit per-panel ppm limits (already high→low ordered).
+            _segments = [tuple(s) for s in axis_break["segments"]]
+            _seg_scales = list(
+                axis_break.get("scales") or [1.0] * len(_segments)
+            )
+        else:
+            _peak_label_to_ppm = {
+                s.assignment: s.shift for s in _iso_signals if s.assignment
+            }
+            _segments, _seg_scales = _manual_spectral_segments(
+                axis_break, _peak_label_to_ppm, _all_peaks, shift_range
+            )
+        _equal_width = bool(axis_break.get("equal_width"))
+    if not _segments:
+        _segments = _find_spectral_segments(_all_peaks, shift_range)
+        _seg_scales = None
     _n = len(_segments)
+    if _seg_scales is None or len(_seg_scales) != _n:
+        _seg_scales = [1.0] * _n
     _seg_widths = [abs(s[1] - s[0]) for s in _segments]
+
+    # Resolve panel widths: explicit width_ratios > equal_width > ppm-proportional.
+    _label_scale = float(axis_break.get("label_scale", 1.0)) if axis_break else 1.0
+    _cfg_wr = axis_break.get("width_ratios") if axis_break else None
+    if _cfg_wr is not None and len(_cfg_wr) == _n:
+        _width_ratios = [float(w) for w in _cfg_wr]
+    elif _equal_width:
+        _width_ratios = [1.0] * _n
+    else:
+        _width_ratios = list(_seg_widths)
+
+    # Minimum label separation, per panel. With unequal panel widths/spans a
+    # fixed ppm threshold is physically tiny in a compressed panel, so labels
+    # there still collide. Convert a constant on-screen spacing (≈ the vertical
+    # label's width) into ppm for each panel using its displayed width. The
+    # single-panel default keeps the historical ppm-fraction behaviour.
+    if _n > 1:
+        _plot_w_pt = get_figsize(spec.profile, "vertical")[0] * 72.0 * 0.93
+        _min_center_pt = (spec.typography.label * _label_scale) * 1.3
+        _wr_sum = sum(_width_ratios) or 1.0
+        _per_seg_mindist = [
+            _min_center_pt * _seg_widths[i]
+            / (_plot_w_pt * _width_ratios[i] / _wr_sum)
+            if _width_ratios[i] > 0 else 0.0
+            for i in range(_n)
+        ]
+    else:
+        _per_seg_mindist = [
+            0.015 * abs(shift_range[1] - shift_range[0])
+        ] * _n
 
     fig = plt.figure(
         figsize=get_figsize(spec.profile, "vertical"),
@@ -417,7 +473,7 @@ def plot_raw_deconv_pred(
     fig.get_layout_engine().set(w_pad=0, wspace=0.001)
     _gs = fig.add_gridspec(
         2, _n,
-        width_ratios=_seg_widths,
+        width_ratios=_width_ratios,
         height_ratios=[_y_top_sim, _y_top_exp],
         hspace=0.02,
     )
@@ -463,6 +519,13 @@ def plot_raw_deconv_pred(
         dists = [abs(x - (s[0] + s[1]) / 2) for s in _segments]
         return row[int(np.argmin(dists))]
 
+    def _scale_at(x: float) -> float:
+        """Return the vertical scale of the segment containing x (else 1.0)."""
+        for k, (slo, shi) in enumerate(_segments):
+            if min(slo, shi) <= x <= max(slo, shi):
+                return _seg_scales[k]
+        return 1.0
+
     # ------------------------------------------------------------------
     # Top panel — simulated spectrum
     # ------------------------------------------------------------------
@@ -470,11 +533,12 @@ def plot_raw_deconv_pred(
     _lw_conn = max(0.2, 0.16 * glyphs.line_lw)
     _lw_barrier = max(0.2, 0.4 * glyphs.line_lw)
 
-    for _at in _ax_top:
+    for _i_seg, _at in enumerate(_ax_top):
+        sc = _seg_scales[_i_seg]
         # Individual per-group Lorentzians (drawn first, behind composite)
         for chem_lbl, y_grp in _group_y.items():
             col = _chem_to_color.get(chem_lbl, palette.primary)
-            y_grp_norm = y_grp / _sim_max
+            y_grp_norm = y_grp / _sim_max * sc
             _at.fill_between(
                 x_grid, y_grp_norm,
                 alpha=0.18, color=col, linewidth=0,
@@ -485,17 +549,17 @@ def plot_raw_deconv_pred(
             )
         # Composite trace on top
         _at.plot(
-            x_grid, y_sim_intensity,
+            x_grid, y_sim_intensity * sc,
             lw=_lw_line, color=palette.primary,
         )
         _at.plot(
-            shifts, sim_peak_heights,
+            shifts, [h * sc for h in sim_peak_heights],
             lw=0, color=palette.primary, markersize=glyphs.ms,
         )
         _annotate_peaks_with_barrier(
             _at,
             x_grid=x_grid,
-            y_intensity=y_sim_intensity,
+            y_intensity=y_sim_intensity * sc,
             peak_x=shifts,
             labels=labels,
             shift_range=shift_range,
@@ -503,12 +567,11 @@ def plot_raw_deconv_pred(
             palette=palette,
             glyphs=glyphs,
             reverse_axis=True,
-            label_fontsize=spec.typography.label,
+            label_fontsize=spec.typography.label * _label_scale,
             line_scale=0.8,
             label_colors=_sim_label_colors,
-            label_mindist_abs=0.015 * abs(
-                shift_range[1] - shift_range[0]
-            ),
+            label_mindist_abs=_per_seg_mindist[_i_seg],
+            barrier_y=_sim_barrier,
         )
     _ax_top[0].set_ylim(0, _y_top_sim)
 
@@ -549,9 +612,9 @@ def plot_raw_deconv_pred(
                 a_max=float(np.max(y_deconv_intensity)),
             )
 
-        for _ab in _ax_bot:
+        for _i_seg, _ab in enumerate(_ax_bot):
             _ab.plot(
-                x_raw, y_raw,
+                x_raw, y_raw * _seg_scales[_i_seg],
                 lw=_lw_line, color=palette.highlight,
             )
 
@@ -568,16 +631,16 @@ def plot_raw_deconv_pred(
             * gaussian(x_grid, exp_width_ppm, signal.shift, signal.area)
         )
         y_comp_norm = y_comp / _deconv_max
-        for _ab in _ax_bot:
+        for _i_seg, _ab in enumerate(_ax_bot):
             _ab.plot(
-                x_grid, y_comp_norm,
+                x_grid, y_comp_norm * _seg_scales[_i_seg],
                 lw=_lw_comp, color=palette.primary,
                 alpha=0.35, linestyle="--",
             )
 
-    for _ab in _ax_bot:
+    for _i_seg, _ab in enumerate(_ax_bot):
         _ab.plot(
-            x_grid, y_deconv_intensity,
+            x_grid, y_deconv_intensity * _seg_scales[_i_seg],
             lw=_lw_line, color=palette.primary, alpha=0.7,
         )
 
@@ -600,7 +663,10 @@ def plot_raw_deconv_pred(
         if pred_x is None:
             continue
         exp_x = signal.shift
-        peak_y = y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+        peak_y = (
+            y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+            * _scale_at(exp_x)
+        )
         _ab = _seg_ax(exp_x, _ax_bot)
         _at = _seg_ax(pred_x, _ax_top)
 
@@ -635,7 +701,10 @@ def plot_raw_deconv_pred(
         if _map_assignment_to_latex(signal.assignment) in _matched_assignments:
             continue
         exp_x = signal.shift
-        peak_y = y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+        peak_y = (
+            y_deconv_intensity[find_index_of_nearest(x_grid, exp_x)]
+            * _scale_at(exp_x)
+        )
         _ab = _seg_ax(exp_x, _ax_bot)
         _ab.plot(
             exp_x, peak_y, marker="o", color="red",
@@ -643,32 +712,67 @@ def plot_raw_deconv_pred(
         )
         _ab.text(
             exp_x, peak_y, f" {signal.assignment}",
-            fontsize=str(round(spec.typography.label * 0.7)),
+            fontsize=str(round(spec.typography.label * 0.7 * _label_scale)),
             color="red", va="bottom", ha="left", clip_on=True,
         )
 
+    # Per-segment vertical-scale multiplier labels (e.g. "×4", "×10"). Drawn in
+    # the top-right corner of each magnified panel; segments at scale 1 are
+    # left unlabelled.
+    for _i_seg, _ab in enumerate(_ax_bot):
+        _sc = _seg_scales[_i_seg]
+        if abs(_sc - 1.0) > 1e-9:
+            _ab.text(
+                0.95, 0.95, f"×{_sc:g}",
+                transform=_ab.transAxes, ha="right", va="top",
+                fontsize=spec.typography.label * _label_scale,
+                color=palette.primary,
+            )
 
     # Centred x-label spanning the full figure width (works with axis breaks)
     fig.supxlabel(
         r"{} $\delta$ (ppm)".format(isotope_format(isotope)),
         fontsize=spec.typography.axis_label,
     )
-    # Per-segment tick density scaled by fraction of total figure width.
-    # A segment occupying fraction f of the axis gets round(f * 4) ticks,
-    # clamped to [1, 4]. prune='both' removes edge ticks at break points.
-    _total_width = sum(_seg_widths)
-    _prune = "both" if _n > 1 else None
+    # Per-segment tick density scaled by displayed width fraction, but every
+    # panel is guaranteed at least two major ticks. Instead of a blanket
+    # prune='both' (which can strip a narrow panel to a single tick), only
+    # ticks hugging an *interior* break edge are dropped; if that would leave
+    # fewer than two, an evenly-spaced pair is used as a fallback.
+    _total_width = sum(_width_ratios)
     for i, (slo, shi) in enumerate(_segments):
         _ab = _ax_bot[i]
         _at = _ax_top[i]
-        _frac = _seg_widths[i] / _total_width if _total_width > 0 else 1.0
-        _nbins = max(1, min(4, round(_frac * 4)))
-        _loc = ticker.MaxNLocator(nbins=_nbins, prune=_prune, integer=False)
-        _ab.xaxis.set_major_locator(_loc)
+        _lo_d, _hi_d = min(slo, shi), max(slo, shi)
+        _span_i = _hi_d - _lo_d
+        _frac = _width_ratios[i] / _total_width if _total_width > 0 else 1.0
+        _nbins = max(2, min(4, round(_frac * 4)))
+        if _n == 1:
+            _at.xaxis.set_major_locator(
+                ticker.MaxNLocator(nbins=_nbins, integer=False)
+            )
+            _ab.xaxis.set_major_locator(
+                ticker.MaxNLocator(nbins=_nbins, integer=False)
+            )
+            _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+            continue
+        _cand = [
+            t for t in ticker.MaxNLocator(
+                nbins=_nbins, integer=False
+            ).tick_values(_lo_d, _hi_d)
+            if _lo_d <= t <= _hi_d
+        ]
+        _edge_tol = 0.06 * _span_i
+        _ticks_i = [
+            t for t in _cand
+            if not (i > 0 and abs(t - _hi_d) < _edge_tol)          # high-ppm break
+            and not (i < _n - 1 and abs(t - _lo_d) < _edge_tol)    # low-ppm break
+        ]
+        if len(_ticks_i) < 2:
+            _ticks_i = [_lo_d + 0.25 * _span_i, _lo_d + 0.75 * _span_i]
+        _at.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
+        _ab.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
         _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
-        _at.xaxis.set_major_locator(ticker.MaxNLocator(
-            nbins=_nbins, prune=_prune, integer=False
-        ))
 
     render_figure(fig, save=save, show=show, save_name=save_name)
 
@@ -903,6 +1007,55 @@ def plot_vt_spectra(
     return fig, axes[0]
 
 
+def _manual_spectral_segments(
+    axis_break: dict,
+    peak_label_to_ppm: dict[str, float],
+    all_peaks: list[float],
+    x_range: tuple[float, float],
+) -> tuple[list[tuple[float, float]] | None, list[float] | None]:
+    """Build user-specified axis-break segments and per-segment vertical scales.
+
+    Break points come from ``axis_break['after_ppms']`` (explicit ppm) and
+    ``axis_break['after_labels']`` (placed midway between the named peak and the
+    next lower peak, i.e. just "after" it on the descending NMR axis). Segments
+    are returned high-ppm first (left→right), matching the inverted axis, paired
+    with ``axis_break['scales']`` in the same order.
+
+    Returns ``(None, None)`` when no valid break is resolved, so the caller can
+    fall back to automatic gap detection.
+    """
+    xlo, xhi = min(x_range), max(x_range)
+    breaks: list[float] = [float(p) for p in axis_break.get("after_ppms", [])]
+    for lab in axis_break.get("after_labels", []):
+        ppm = peak_label_to_ppm.get(lab)
+        if ppm is None:
+            logger.warning(
+                "spectra_break: peak label '%s' not found in this isotope's "
+                "signals — break skipped.", lab,
+            )
+            continue
+        lower = [p for p in all_peaks if p < ppm - 1e-9]
+        if lower:
+            breaks.append(0.5 * (ppm + max(lower)))
+        else:
+            breaks.append(ppm - 0.02 * abs(xhi - xlo))
+
+    breaks = sorted({b for b in breaks if xlo < b < xhi}, reverse=True)
+    if not breaks:
+        return None, None
+
+    # Boundaries high→low: [xhi, b0, b1, ..., xlo]; segment i spans (lo, hi).
+    bounds = [xhi] + breaks + [xlo]
+    segments = [
+        (bounds[i + 1], bounds[i]) for i in range(len(bounds) - 1)
+    ]
+
+    scales = [float(s) for s in axis_break.get("scales", [])]
+    if len(scales) != len(segments):
+        scales = [1.0] * len(segments)
+    return segments, scales
+
+
 def _find_spectral_segments(
     peak_positions: list[float],
     x_range: tuple[float, float],
@@ -989,6 +1142,57 @@ def _draw_break_markers(
         )
 
 
+def _spread_labels_within_bounds(
+    positions: list[float],
+    min_gap: float,
+    lo: float,
+    hi: float,
+) -> list[float]:
+    """Spread 1-D label positions to honour ``min_gap``, kept within ``[lo, hi]``.
+
+    Neighbouring labels are nudged apart to at least ``min_gap`` while every
+    position stays inside ``[lo, hi]``. When the labels cannot all fit at
+    ``min_gap`` the gap is shrunk so they distribute evenly across the interval
+    — so labels never spill past the bounds (e.g. across an axis-break border).
+    Returns positions in the original input order.
+    """
+    n = len(positions)
+    if n == 0:
+        return []
+    if hi < lo:
+        lo, hi = hi, lo
+
+    order = list(np.argsort(positions))
+    p = [float(positions[i]) for i in order]
+
+    span = hi - lo
+    gap = min_gap
+    if n > 1:
+        gap = min(gap, span / (n - 1)) if span > 0 else 0.0
+
+    # Forward pass: enforce the minimum gap left→right.
+    for i in range(1, n):
+        if p[i] < p[i - 1] + gap:
+            p[i] = p[i - 1] + gap
+    # Clamp the right edge and propagate the constraint back.
+    if p[-1] > hi:
+        p[-1] = hi
+        for i in range(n - 2, -1, -1):
+            if p[i] > p[i + 1] - gap:
+                p[i] = p[i + 1] - gap
+    # Clamp the left edge and propagate forward.
+    if p[0] < lo:
+        p[0] = lo
+        for i in range(1, n):
+            if p[i] < p[i - 1] + gap:
+                p[i] = p[i - 1] + gap
+
+    out = [0.0] * n
+    for idx, original_i in enumerate(order):
+        out[original_i] = p[idx]
+    return out
+
+
 def _annotate_peaks_with_barrier(
     ax: plt.Axes,
     *,
@@ -1010,6 +1214,7 @@ def _annotate_peaks_with_barrier(
     label_fontsize: str | None = None,
     line_scale: float = 1.0,
     label_colors: dict[str, str] | None = None,
+    barrier_y: float | None = None,
 ) -> None:
     """Annotate a spectrum with barrier, vertical labels, and connectors.
 
@@ -1054,8 +1259,14 @@ def _annotate_peaks_with_barrier(
         y_intensity[find_index_of_nearest(x_grid, sh)] for sh in peak_x_sorted
     ]
 
-    # Horizontal barrier and label positions in data coordinates
-    label_barrier = barrier_scale * float(np.max(y_intensity))
+    # Horizontal barrier and label positions in data coordinates. An explicit
+    # ``barrier_y`` pins the barrier to a fixed reference (used when the panel's
+    # intensity is vertically scaled, so the barrier must not track the scaled
+    # peak max).
+    label_barrier = (
+        barrier_y if barrier_y is not None
+        else barrier_scale * float(np.max(y_intensity))
+    )
     labels_position_y = labels_above_barrier_scale * label_barrier
     _y_top = labels_position_y * 1.5
     _lw_connector = max(0.2, 0.2 * line_scale * glyphs.line_lw)
@@ -1087,26 +1298,20 @@ def _annotate_peaks_with_barrier(
     vis_px, vis_py, vis_labs = zip(*visible)
     vis_px = list(vis_px)
 
-    # Resolve label overlaps
+    # Resolve label overlaps while keeping every label inside this axis's
+    # x-limits, so labels never spill across an axis-break border into the gap
+    # or a neighbouring panel. A small inset keeps the anchor off the spine.
     xrange = abs(xmax - xmin)
     mindist = (
         label_mindist_abs
         if label_mindist_abs is not None
         else label_mindist_scale * xrange
     )
-    adj = list(vis_px)
-    dist = np.subtract.outer(adj, adj)
-    np.fill_diagonal(dist, np.inf)
-    for _ in range(200):
-        overlap = np.where(abs(dist) < mindist)
-        if not len(overlap[0]):
-            break
-        for xi, yi in zip(*overlap):
-            if yi > xi:
-                adj[xi] -= mindist / 2
-                adj[yi] += mindist / 2
-        dist = np.subtract.outer(adj, adj)
-        np.fill_diagonal(dist, np.inf)
+    _lo_b, _hi_b = min(xmin, xmax), max(xmin, xmax)
+    _margin = 0.02 * xrange
+    adj = _spread_labels_within_bounds(
+        list(vis_px), mindist, _lo_b + _margin, _hi_b - _margin
+    )
     adj = sorted(adj, reverse=reverse_axis)
 
     for px, py, lx, lab in zip(vis_px, vis_py, adj, vis_labs):

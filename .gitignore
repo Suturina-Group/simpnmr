@@ -42,3 +42,5 @@ examples/**/SIMULATIONS/
 tests/data/pipelines/pcs_isosurface/csv_susceptibility_dyl1/pcs_isosurface_*.cube
 tests/data/pipelines/pcs_isosurface/nevpt2_susceptibility_p3fecl/pcs_isosurface_*.cube
 tests/data/pipelines/spinham/spin_hamiltonian_from_chiT.csv
+# Claude Code local settings
+.claude/

@@ -763,6 +763,36 @@ Used in susceptibility fitting workflows.
         average_shifts: 'all' # Average shifts over all chemical labels
                         ["Me1", "Me2"] # Average shifts over the specified chemical labels
 
+        # Output figure toggles [Optional]. Any omitted key defaults to true.
+        figures:
+          fitted_shifts: true
+          shift_components: true
+          spectra: true
+          r6_fit: true
+          tau_space: true
+          bubble_plots: false
+          chi_t: false
+
+        # Fitted-shifts / mean-components figure layout [Optional]
+        shifts_format: narrow      # size variant: standard | narrow | vertical | vertical_extended (default: standard)
+        shifts_width_scale: 1.3    # multiply the figure width only (default: 1.0)
+        shifts_labels: false       # draw per-point labels on the fitted-shifts scatter (default: true)
+
+        # Broken x-axis for the predicted/experimental spectrum figure [Optional].
+        spectra_break:
+          # Choose ONE way to place the break(s):
+          #  (a) break just after a named peak, or at an explicit ppm:
+          after_label: tBu4a       # or:  after_ppm: -7.5
+          #  (b) explicit per-panel ppm limits, high->low ppm (overrides after_*):
+          segments:
+            - [14, -3]
+            - [-13, -43]
+            - [-70, -76]
+          scales: [1, 4, 20]       # per-panel vertical magnification (shown as "xN" labels)
+          width_ratios: [2, 1, 0.5] # relative panel widths (overrides equal_width)
+          equal_width: true        # equal panel widths (used only when width_ratios is absent)
+          label_scale: 0.7         # scale factor for peak-label font size
+
 .. note::
 
    The required fit variables depend on the selected susceptibility model type.
@@ -773,7 +803,7 @@ Used in susceptibility fitting workflows.
 
    ``susc_fit:input_units: reduced`` uses the Curie-normalised convention already. Each susceptibility component is interpreted as
    ``chi_reduced = chi * T / Curie_prefactor(S)`` and is converted internally to
-    ``Å^3`` units for the actual fit. Dimensionless parameters such as
+   ``Å^3`` units for the actual fit. Dimensionless parameters such as
    ``rho_over_ax`` are not rescaled.
 
 Temperature Dependence of Magnetic Susceptibility Fitting
@@ -839,17 +869,22 @@ are present in the experiment files.
 
     # fit_relaxation block schema (reference):
     fit_relaxation:
-        # Fixed τe for Fermi-contact subtraction [Optional]
+        # Fixed τe for Fermi-contact subtraction; also the reference value used
+        # when selecting the derived τe root (see note below) [Optional]
         tau_e: 5.0e-13  # s — T1e = T2e used to subtract contact contribution
 
-        # τe axis range for τ-space heatmap plots [Optional]
+        # τe axis range for τ-space plots; also bounds the derived-τe search [Optional]
         tau_e_range: [1.0e-14, 1.0e-11]  # [min, max] in s
 
-        # τR axis range for τ-space heatmap plots [Optional]
+        # τR axis range for τ-space plots [Optional]
         tau_r_range: [1.0e-10, 1.0e-7]   # [min, max] in s
 
         # Known rotational correlation time to overlay on τ-space plots [Optional]
         tau_r_fixed: 1.5e-9  # s
+
+        # Distance-weighting exponent for the r⁻⁶ fit [Optional]
+        # Each point is weighted by r_eff**distance_power (0 = equal weights).
+        distance_power: 0.0
 
         # Automatic τR calculation from structure (Optional)
         # Requires tau_r_method plus either tau_r_solvent or tau_r_eta.
@@ -892,6 +927,26 @@ are present in the experiment files.
    resistant to outliers — for example a mis-assigned nucleus or an unusually
    flexible side-chain close to the metal — while leaving well-behaved points
    unaffected.
+
+.. note::
+
+   **R1 / R2 decomposition**
+
+   When a rotational correlation time ``τR`` is available (from ``tau_r_method``
+   or ``tau_r_fixed``) together with at least one r\ :sup:`−6` relaxation fit,
+   an electronic correlation time ``τe`` is derived by inverting the fitted
+   ``p1``.  A single molecular ``τe`` is used: when several r\ :sup:`−6` fits
+   are available (linewidth and/or R1, across isotopes) the most trustworthy
+   one is chosen automatically from the number of data points and the relative
+   uncertainty of ``p1``.  Because the SBM ``p1`` is non-monotonic in ``τc``
+   the inversion can have two roots; the root closest to ``tau_e`` (default
+   1 ps) within ``tau_e_range`` is selected.
+
+   The resulting ``(τR, τe)`` are then used to compute the full R\ :sub:`1` and
+   R\ :sub:`2` decomposition (SBM dipolar/contact + Curie) for every nucleus,
+   written to ``peak_data_<TEMPERATURE>_K_<FIELD>_T.csv`` and recorded in that
+   file's header.  In this case the spectrum linewidths are taken from this
+   relaxation model rather than the raw r\ :sup:`−6` linewidth fit.
 
    Parameter uncertainties are estimated by bootstrap (1000 resamples with
    replacement) and reported as ``p1_err`` / ``p2_err`` in the output CSV

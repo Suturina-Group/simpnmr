@@ -92,15 +92,13 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
 11. ``r6_tau_space_width[_<ISOTOPE>]_<TEMPERATURE>_K.pdf`` / ``r6_tau_space_r1[_<ISOTOPE>]_<TEMPERATURE>_K.pdf``
     τ parameter space plot for a single observable and temperature.
 
-    Shows the (τ\ :sub:`e`, τ\ :sub:`R`) plane as a colour-mapped heatmap of
-    :math:`\log_{10}(p_1^\mathrm{calc} / p_1^\mathrm{fit})`. The contour where
+    Shows the (τ\ :sub:`e`, τ\ :sub:`R`) plane. The contour where
     :math:`p_1^\mathrm{calc} = p_1^\mathrm{fit}` (exact match) is drawn as a
-    solid black line. Dashed lines mark the boundary of the bootstrap
-    confidence interval (default 95%). Both axes are logarithmic and labelled
-    in auto-selected units (fs, ps, ns, or µs).
-
-    The relaxation model (``sbm``, ``curie``, or ``sbm curie``), temperature,
-    and fitted :math:`p_1` value are shown in an annotation box.
+    solid line, with dashed lines marking the bootstrap confidence-interval
+    boundary (default 95%). The observable is identified in a legend. When a
+    fixed τ\ :sub:`R` is supplied, arrows mark the derived τ\ :sub:`e` at the
+    intersection and the τ values are annotated. Both axes are logarithmic and
+    labelled in picoseconds.
 
 12. ``r6_tau_space_combined[_<ISOTOPE>]_<TEMPERATURE>_K.pdf``
     Overlay of linewidth and R\ :sub:`1` τ-space constraints on one plot.
@@ -123,3 +121,40 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
     simultaneously.
 
     Generated when relaxation data are available at more than one temperature.
+
+14. ``peak_data_<TEMPERATURE>_K[_<FIELD>_T].csv``
+    Per-chemical-label averaged shifts, linewidths, and relaxation-rate
+    decomposition. Written by both the ``fit_susc`` and ``predict`` workflows.
+
+    The header comment records the temperature ``T``, the static field
+    ``B0``, and — when a relaxation model was evaluated — the correlation
+    times ``τ_R`` and ``τ_e``. The magnetic field is also embedded in the file
+    name because the relaxation rates are field-dependent.
+
+    Columns (only those with available data are written):
+
+    * ``chem_label``, ``isotope``, ``count`` — chemical label, its nuclear
+      isotope, and the number of equivalent nuclei sharing the label.
+    * ``δ_total_avg``, ``δ_dia_avg``, ``δ_pc_avg`` (ppm) — total, diamagnetic,
+      and pseudocontact shift components.
+    * ``δ_fc_avg`` (ppm) — Fermi-contact shift. Named ``δ_fc_g_corr_avg`` or
+      ``δ_fc_spin_only_avg`` when a g-corrected or spin-only isotropic
+      susceptibility is used; ``Δδ_fc_g_corr_avg`` gives the g-correction
+      relative to the spin-only reference when both are available.
+    * ``δ_orb_avg``, ``δ_orb_iso_avg``, ``δ_orb_aniso_avg`` (ppm) — orbital
+      shift contributions, written only when an orbital contribution is
+      available.
+    * ``linewidth_avg`` (ppm) — predicted linewidth. Named
+      ``linewidth_avg_relax`` when derived from the relaxation model rather
+      than the r\ :sup:`−6` linewidth fit.
+    * ``R1_total``, ``R1_sbm_dipolar``, ``R1_sbm_contact``, ``R1_curie``
+      (s\ :sup:`−1`) — longitudinal relaxation rate and its
+      Solomon–Bloembergen–Morgan dipolar/contact and Curie components.
+    * ``R2_sbm_dipolar``, ``R2_sbm_contact``, ``R2_curie`` (s\ :sup:`−1`) —
+      transverse relaxation-rate components. The R\ :sub:`2` total is not
+      written separately because it equals ``linewidth × π|γ|B₀``.
+
+    The relaxation-rate columns are present only when a relaxation model has
+    been evaluated: ``predict`` with a ``relaxation`` block, or ``fit_susc``
+    when a τ\ :sub:`R` estimate and an r\ :sup:`−6` relaxation fit allow
+    τ\ :sub:`e` to be derived.

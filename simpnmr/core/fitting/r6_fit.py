@@ -126,6 +126,83 @@ def compute_p1_theoretical(
     return p1_si * ang6
 
 
+def solve_tau_e_from_p1(
+    p1_fit: float,
+    tau_R: float,
+    *,
+    omega_I: float,
+    omega_S: float,
+    gamma_I: float,
+    spin: float,
+    orbit: float,
+    total_momentum_J: float | None,
+    temperature: float,
+    observable: str,
+    relaxation_model: str,
+    tau_e_range: list[float] | None = None,
+    tau_e_ref: float = 1e-12,
+    n_points: int = 400,
+) -> float | None:
+    """Invert a fitted ``p1`` to the electronic correlation time ``tau_e``.
+
+    At the fixed rotational correlation time ``tau_R``, scans ``tau_e`` and
+    finds where the theoretical ``p1`` (see :func:`compute_p1_theoretical`)
+    equals the fitted ``p1``. Because the SBM ``p1`` is non-monotonic in
+    ``tau_c`` there can be two crossings; the root **closest (in log space) to
+    ``tau_e_ref``** is returned.
+
+    Args:
+        p1_fit: Fitted ``p1`` prefactor (same units as
+            :func:`compute_p1_theoretical`).
+        tau_R: Fixed rotational correlation time (s).
+        omega_I, omega_S, gamma_I, spin, orbit, total_momentum_J, temperature,
+            observable, relaxation_model: Physical parameters forwarded to
+            :func:`compute_p1_theoretical`.
+        tau_e_range: Optional ``[min, max]`` scan range (s). Defaults to
+            ``[1e-14, 1e-10]``.
+        tau_e_ref: Reference ``tau_e`` (s); the crossing nearest this value in
+            log space is chosen. Defaults to 1 ps.
+        n_points: Grid resolution for the scan.
+
+    Returns:
+        The selected ``tau_e`` (s), or ``None`` if no crossing is found.
+    """
+    lo = np.log10(tau_e_range[0]) if tau_e_range else -14
+    hi = np.log10(tau_e_range[1]) if tau_e_range else -10
+    tau_e = np.logspace(lo, hi, n_points)
+
+    grid = compute_p1_theoretical(
+        tau_e, np.array([float(tau_R)]),
+        omega_I=omega_I, omega_S=omega_S, gamma_I=gamma_I,
+        spin=spin, orbit=orbit, total_momentum_J=total_momentum_J,
+        temperature=temperature, observable=observable,
+        relaxation_model=relaxation_model,
+    )
+    p1_curve = np.asarray(grid).reshape(len(tau_e), -1)[:, 0]
+
+    diff = p1_curve - float(p1_fit)
+    sign = np.sign(diff)
+    crossings = np.where(np.diff(sign) != 0)[0]
+
+    roots: list[float] = []
+    for i in crossings:
+        d0, d1 = diff[i], diff[i + 1]
+        if d1 == d0:
+            continue
+        frac = -d0 / (d1 - d0)
+        log_te = (
+            np.log10(tau_e[i])
+            + frac * (np.log10(tau_e[i + 1]) - np.log10(tau_e[i]))
+        )
+        roots.append(float(10 ** log_te))
+
+    if not roots:
+        return None
+
+    _ref_log = np.log10(max(tau_e_ref, 1e-30))
+    return min(roots, key=lambda t: abs(np.log10(t) - _ref_log))
+
+
 def fit_r6(
     molecule: Molecule,
     experiment: Experiment,
@@ -273,8 +350,21 @@ def fit_r6(
         if not r6_inv_group:
             continue
 
+        _r6_inv_mean = float(np.mean(r6_inv_group))
+        # A non-positive or non-finite ⟨1/r⁶⟩ means an effectively infinite
+        # distance (or missing geometry/HFC data). Such a point carries no
+        # distance information and would yield r_eff = ∞, producing non-finite
+        # distance weights that poison the whole fit — so exclude it.
+        if not np.isfinite(_r6_inv_mean) or _r6_inv_mean <= 0.0:
+            logger.warning(
+                "Signal '%s' has non-positive/non-finite mean 1/r^6 (%.3g) "
+                "— excluded from the r^-6 (%s) fit.",
+                cl, _r6_inv_mean, observable,
+            )
+            continue
+
         labels.append(cl)
-        r6_inv_vals.append(float(np.mean(r6_inv_group)))
+        r6_inv_vals.append(_r6_inv_mean)
         obs_vals.append(float(obs))
 
     if len(labels) < 2:

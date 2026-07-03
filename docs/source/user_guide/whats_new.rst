@@ -276,6 +276,79 @@ the ``permute`` method is selected.
 
 ----
 
+Correlation-driven assignment permutations
+-------------------------------------------
+
+When ``assignment: correlations`` are supplied, only the proton (driver) groups
+listed under ``groups`` need to be permuted — every HSQC/HMBC-correlated
+heteronucleus is reassigned automatically to preserve the correlation. This
+collapses the search from the independent product over *all* groups to the
+product of just the driver-group factorials.
+
+.. code-block:: yaml
+
+    assignment:
+      method: permute
+      groups:
+        - [H_tBu2a, H_tBu2e, H_tBu3a, H_tBu3e, H_tBu4a, H_tBu4e]   # protons only
+      correlations:
+        - {h: H_tBu2a, c: C_tBu2a, type: hsqc}
+        - {h: H_tBu2a, c: tBu2a_q, type: hmbc}
+
+The correlated carbons are not listed under ``groups``; they follow their
+proton. Listing a group explicitly retains the previous independent-permutation
+behaviour for that group.
+
+----
+
+Broken-axis spectrum figures
+----------------------------
+
+The predicted/experimental spectrum figure can be split into multiple panels
+with independent ppm windows, per-panel vertical magnification (shown as
+``×N``), custom panel width ratios, and scalable peak labels, via the new
+``susc_fit: spectra_break`` block.
+
+.. code-block:: yaml
+
+    susc_fit:
+      spectra_break:
+        segments: [[14, -3], [-13, -43], [-70, -76]]
+        scales: [1, 4, 20]
+        width_ratios: [2, 1, 0.5]
+        label_scale: 0.7
+
+The fitted-shifts and mean-components figures also gained ``shifts_format``
+(size variant), ``shifts_width_scale`` and ``shifts_labels`` options.
+
+----
+
+Relaxation-rate decomposition and peak-data files
+-------------------------------------------------
+
+Both ``fit_susc`` and ``predict`` now write a
+``peak_data_<TEMPERATURE>_K_<FIELD>_T.csv`` file with per-chemical-label
+averaged shift components, linewidths, and the R\ :sub:`1`/R\ :sub:`2`
+relaxation-rate decomposition (SBM dipolar/contact + Curie).
+
+In ``fit_susc``, when a τ\ :sub:`R` estimate and an r\ :sup:`−6` relaxation fit
+are available, a single molecular τ\ :sub:`e` is derived by inverting the fitted
+``p1`` — choosing the most trustworthy of the linewidth/R\ :sub:`1` fits — and
+the decomposition is computed from ``(τR, τe)``. The correlation times and field
+are recorded in the file header.
+
+----
+
+Output and figure polish
+------------------------
+
+- CSV outputs use a general number format that keeps full precision for very
+  small magnitudes, so ⟨r⁻⁶⟩ values no longer round to zero.
+- Default marker-edge and legend-frame line weights are thinner across all
+  figures.
+
+----
+
 Bug fixes
 ----------
 
@@ -289,3 +362,8 @@ Bug fixes
 - τ-space combined plot: τ\ :sub:`R` overlay lines were transposed; corrected.
 - ``fit_susc`` incomplete chemical labels now emit a warning rather than
   silently producing wrong assignments.
+- The permutation search streams work to the parallel worker pool instead of
+  building every trial up front, avoiding out-of-memory failures on large
+  permutation spaces.
+- The r\ :sup:`−6` fit no longer aborts when a signal has a non-finite or zero
+  ⟨r⁻⁶⟩ (missing geometry/HFC data); such signals are excluded with a warning.

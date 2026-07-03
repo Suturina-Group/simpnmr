@@ -174,7 +174,7 @@ class FitSuscConfig(Config):
             "correlations",
         ],
         "nuclei": ["isotope", "include", "include_groups", "exclude_groups"],
-        "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures"],
+        "susc_fit": ["type", "variables", "input_units", "average_shifts", "covariance_params", "figures", "spectra_break", "shifts_format", "shifts_width_scale", "shifts_labels"],
         "project": ["name"],
         "chem_labels": ["file"],
         "diamagnetic": [
@@ -255,6 +255,10 @@ class FitSuscConfig(Config):
         self._susc_fit_average_shifts = []
         self._susc_fit_covariance_params: list[str] = []
         self._susc_fit_figures: dict[str, bool] = {}
+        self._susc_fit_spectra_break: dict | None = None
+        self._susc_fit_shifts_format = "standard"
+        self._susc_fit_shifts_width_scale = 1.0
+        self._susc_fit_shifts_labels = True
         self._chem_labels_file = ""
         self._spin_S = None
         self._spin_multiplicity = None
@@ -1032,6 +1036,204 @@ class FitSuscConfig(Config):
     def susc_fit_figure(self, key: str) -> bool:
         """Return whether a figure group is enabled (default True)."""
         return self._susc_fit_figures.get(key, True)
+
+    @property
+    def susc_fit_shifts_format(self) -> str:
+        """Figure-size variant for the fitted-shifts (``shifts_*_K``) plot."""
+        return self._susc_fit_shifts_format
+
+    @susc_fit_shifts_format.setter
+    def susc_fit_shifts_format(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_format = "standard"
+            return
+        variant = str(value).strip().lower()
+        allowed = {"standard", "narrow", "vertical", "vertical_extended"}
+        if variant not in allowed:
+            raise ValueError(
+                "susc_fit:shifts_format must be one of "
+                + ", ".join(sorted(allowed))
+                + f"; got '{value}'"
+            )
+        self._susc_fit_shifts_format = variant
+
+    @property
+    def susc_fit_shifts_width_scale(self) -> float:
+        """Width multiplier for the fitted-shifts (``shifts_*_K``) figure."""
+        return self._susc_fit_shifts_width_scale
+
+    @susc_fit_shifts_width_scale.setter
+    def susc_fit_shifts_width_scale(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_width_scale = 1.0
+            return
+        try:
+            scale = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "susc_fit:shifts_width_scale must be a number"
+            ) from exc
+        if scale <= 0.0:
+            raise ValueError("susc_fit:shifts_width_scale must be positive")
+        self._susc_fit_shifts_width_scale = scale
+
+    @property
+    def susc_fit_shifts_labels(self) -> bool:
+        """Whether to draw per-point labels on the fitted-shifts figure."""
+        return self._susc_fit_shifts_labels
+
+    @susc_fit_shifts_labels.setter
+    def susc_fit_shifts_labels(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_shifts_labels = True
+            return
+        self._susc_fit_shifts_labels = bool(value)
+
+    @property
+    def susc_fit_spectra_break(self) -> dict | None:
+        """Manual x-axis break spec for the pred/exp spectrum figure.
+
+        ``None`` (default) keeps the automatic gap-based segmentation. When
+        set, it is a normalised dict with keys:
+
+        - ``after_labels`` (list[str]): break just below each named peak.
+        - ``after_ppms`` (list[float]): break at each explicit ppm position.
+        - ``segments`` (list[[lo, hi]] | None): explicit per-panel ppm limits,
+          high→low ppm (left→right). When given, it overrides ``after_*`` and
+          fully controls each panel's displayed range.
+        - ``scales`` (list[float]): per-segment vertical scale, high→low ppm
+          (left→right). Length must equal the number of panels.
+        - ``equal_width`` (bool): equal panel widths instead of ppm-proportional.
+        - ``width_ratios`` (list[float] | None): explicit relative panel widths
+          (one per panel); overrides ``equal_width`` when set.
+        - ``label_scale`` (float): multiplier on peak-label font size (default 1).
+        """
+        return self._susc_fit_spectra_break
+
+    @susc_fit_spectra_break.setter
+    def susc_fit_spectra_break(self, value) -> None:
+        if value is None or value == "":
+            self._susc_fit_spectra_break = None
+            return
+        if not isinstance(value, dict):
+            raise ValueError(
+                "susc_fit:spectra_break must be a mapping, e.g. "
+                "{after_label: tBu4a, scales: [1, 4], equal_width: true}"
+            )
+        allowed = {
+            "after_label", "after_ppm", "segments", "scales",
+            "equal_width", "width_ratios", "label_scale",
+        }
+        unknown = set(value) - allowed
+        if unknown:
+            raise ValueError(
+                "susc_fit:spectra_break contains unknown key(s): "
+                + ", ".join(sorted(unknown))
+            )
+
+        def _as_list(v):
+            if v is None:
+                return []
+            return list(v) if isinstance(v, (list, tuple)) else [v]
+
+        equal_width = bool(value.get("equal_width", False))
+
+        label_scale = float(value.get("label_scale", 1.0))
+        if label_scale <= 0.0:
+            raise ValueError(
+                "susc_fit:spectra_break:label_scale must be positive"
+            )
+
+        def _parse_width_ratios(n_panels: int) -> list[float] | None:
+            raw = value.get("width_ratios")
+            if raw is None:
+                return None
+            ratios = [float(x) for x in _as_list(raw)]
+            if len(ratios) != n_panels:
+                raise ValueError(
+                    "susc_fit:spectra_break:width_ratios must have "
+                    f"{n_panels} entries (one per panel) but got {len(ratios)}"
+                )
+            if any(r <= 0.0 for r in ratios):
+                raise ValueError(
+                    "susc_fit:spectra_break:width_ratios must all be positive"
+                )
+            return ratios
+
+        # Explicit per-panel limits take precedence over break points.
+        if value.get("segments") is not None:
+            raw_segs = value["segments"]
+            if not isinstance(raw_segs, (list, tuple)) or not raw_segs:
+                raise ValueError(
+                    "susc_fit:spectra_break:segments must be a non-empty list "
+                    "of [hi, lo] ppm pairs"
+                )
+            segs: list[list[float]] = []
+            for pair in raw_segs:
+                if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
+                    raise ValueError(
+                        "susc_fit:spectra_break:segments entries must be "
+                        "[hi, lo] ppm pairs"
+                    )
+                a, b = float(pair[0]), float(pair[1])
+                segs.append([min(a, b), max(a, b)])  # store as (lo, hi)
+            n_seg = len(segs)
+            scales = _as_list(value.get("scales")) or [1.0] * n_seg
+            scales = [float(x) for x in scales]
+            if len(scales) != n_seg:
+                raise ValueError(
+                    "susc_fit:spectra_break:scales must have "
+                    f"{n_seg} entries (one per segment) but got {len(scales)}"
+                )
+            width_ratios = _parse_width_ratios(n_seg)
+            # Order high→low ppm (left→right), keeping scales/widths aligned.
+            order = sorted(range(n_seg), key=lambda i: segs[i][1], reverse=True)
+            segs = [segs[i] for i in order]
+            scales = [scales[i] for i in order]
+            if width_ratios is not None:
+                width_ratios = [width_ratios[i] for i in order]
+            self._susc_fit_spectra_break = {
+                "after_labels": [],
+                "after_ppms": [],
+                "segments": segs,
+                "scales": scales,
+                "equal_width": equal_width,
+                "width_ratios": width_ratios,
+                "label_scale": label_scale,
+            }
+            return
+
+        if "after_label" not in value and "after_ppm" not in value:
+            raise ValueError(
+                "susc_fit:spectra_break requires 'after_label', 'after_ppm', "
+                "or 'segments'"
+            )
+
+        after_labels = [str(x) for x in _as_list(value.get("after_label"))]
+        after_ppms = [float(x) for x in _as_list(value.get("after_ppm"))]
+        n_breaks = len(after_labels) + len(after_ppms)
+        if n_breaks == 0:
+            raise ValueError(
+                "susc_fit:spectra_break must define at least one break"
+            )
+
+        scales = _as_list(value.get("scales")) or [1.0] * (n_breaks + 1)
+        scales = [float(x) for x in scales]
+        if len(scales) != n_breaks + 1:
+            raise ValueError(
+                "susc_fit:spectra_break:scales must have "
+                f"{n_breaks + 1} entries (n_breaks + 1) but got {len(scales)}"
+            )
+
+        self._susc_fit_spectra_break = {
+            "after_labels": after_labels,
+            "after_ppms": after_ppms,
+            "segments": None,
+            "scales": scales,
+            "equal_width": equal_width,
+            "width_ratios": _parse_width_ratios(n_breaks + 1),
+            "label_scale": label_scale,
+        }
 
     @property
     def nuclei_include(self) -> list | str:

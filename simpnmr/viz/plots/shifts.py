@@ -300,6 +300,8 @@ def plot_shift_contrib(
     save_name: str = "shift_components.pdf",
     window_title: str = "Shift components",
     verbose: bool = True,
+    variant: str = "standard",
+    width_scale: float = 1.0,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plots shift components alongside total and optional experimental values.
 
@@ -376,9 +378,10 @@ def plot_shift_contrib(
     # Make plot
     fig, ax = create_canvas(
         spec.profile,
-        variant="standard",
+        variant=variant,
         window_title=window_title,
         layout="constrained",
+        width_scale=width_scale,
     )
     glyphs = spec.glyphs
     scale = spec.skin_axes(ax)

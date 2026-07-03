@@ -27,6 +27,7 @@ from simpnmr.app.pipelines.fit.vt_fit import fit_vt
 from simpnmr.app.policies.assignment import resolve_assignment_search_settings
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import resolve_output_linewidths
+from simpnmr.app.policies.relax import apply_relaxation_decomposition
 from simpnmr.app.policies.susc import resolve_susc_fit_variables
 
 # Core / domain
@@ -47,10 +48,11 @@ from simpnmr.core.pcs.isosurf import compute_pcs_isosurface
 from simpnmr.io.csv.fit import save_r6_fit
 from simpnmr.io.csv.spec import read_spectrum
 from simpnmr.io.csv.mol import save_molecule_to_csv
+from simpnmr.io.csv.peaks import save_peak_data_to_csv
 from simpnmr.io.csv.susc import save_susc
 from simpnmr.io.cube.pcs_iso_write import write_pcs_cube
 from simpnmr.io.xyz import xyz_write
-from simpnmr.core.fitting.r6_fit import fit_r6
+from simpnmr.core.fitting.r6_fit import fit_r6, solve_tau_e_from_p1
 from simpnmr.viz.plots.fitted_shifts import plot_fitted_shifts
 from simpnmr.viz.plots.r6_fit import (
     plot_r6_fit,
@@ -436,6 +438,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             experiment=_perm_exp_ref,
             groups=config.assignment_groups,
             signal_allowed=_sig_allowed_shared,
+            correlations=_correlations_shared,
         )
         if not permed_assignments_shared:
             logger.warning(
@@ -453,19 +456,24 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             else config.num_threads
         )
         num_threads = min(num_threads, len(permed_assignments_shared))
-        pool = mp.Pool(num_threads)
-        iterables_shared = [
-            (
-                molecules,
-                perm,
-                susc_models,
-                [copy.deepcopy(e) for e in experiments],
-                average_labels,
-                options.runtime.echo_r2,
-            )
-            for perm in permed_assignments_shared
-        ]
-        results_shared = pool.starmap(_obtain_r2a_multi, iterables_shared)
+        # Ship the shared molecule/experiment/model lists once per worker via
+        # the initializer; only the permutation is sent per task.
+        pool = mp.Pool(
+            num_threads,
+            initializer=_perm_worker_init,
+            initargs=(
+                {
+                    "molecules": molecules,
+                    "susc_models": susc_models,
+                    "experiments": experiments,
+                    "average_labels": average_labels,
+                    "echo_r2": options.runtime.echo_r2,
+                },
+            ),
+        )
+        results_shared = pool.map(
+            _obtain_r2a_multi_perm, permed_assignments_shared
+        )
         pool.close()
         pool.join()
         best_perm = permed_assignments_shared[np.nanargmin(results_shared)]
@@ -520,6 +528,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                 experiment=_perm_exp,
                 groups=config.assignment_groups,
                 signal_allowed=_sig_allowed,
+                correlations=_correlations,
             )
 
             logger.info(
@@ -543,29 +552,29 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             if num_threads > len(permed_assignments):
                 num_threads = len(permed_assignments)
 
-            # Create parallel pool
-            pool = mp.Pool(num_threads)
+            # Create parallel pool. Heavy objects are shipped once per worker
+            # via the initializer; only the lightweight assignment list is sent
+            # per task, so no large list of deep copies is materialised here.
+            pool = mp.Pool(
+                num_threads,
+                initializer=_perm_worker_init,
+                initargs=(
+                    {
+                        "molecule": molecule,
+                        "susc_model": susc_model,
+                        "experiment": experiment,
+                        "average_labels": average_labels,
+                        "echo_r2": options.runtime.echo_r2,
+                    },
+                ),
+            )
             logger.info(
                 "Parallel permutation search: %s worker processes",
                 num_threads,
             )
 
-            echo_r2 = options.runtime.echo_r2
-
-            iterables = [
-                (
-                    molecule,
-                    permed_assgn,
-                    susc_model,
-                    copy.deepcopy(experiment),
-                    average_labels,
-                    echo_r2,
-                )
-                for permed_assgn in permed_assignments
-            ]
-
-            # Calculate each assignment's r2 in parallel
-            results = pool.starmap(_obtain_r2a, iterables)
+            # Calculate each assignment's r2 in parallel (order preserved)
+            results = pool.map(_obtain_r2a_perm, permed_assignments)
 
             # Close Pool and let all the processes complete
             pool.close()
@@ -687,6 +696,9 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         f"shifts_{experiment.temperature:.2f}_K",
                     ),
                     verbose=True,
+                    variant=config.susc_fit_shifts_format,
+                    width_scale=config.susc_fit_shifts_width_scale,
+                    show_point_labels=config.susc_fit_shifts_labels,
                     window_title=(
                         f"Fitted shifts at {experiment.temperature:.2f} K"
                     ),
@@ -788,6 +800,8 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                             f"mean_components_{_iso}_{_T:.2f}_K",
                         ),
                         verbose=True,
+                        variant=config.susc_fit_shifts_format,
+                        width_scale=config.susc_fit_shifts_width_scale,
                         window_title=(
                             f"Predicted shift components"
                             f" ({_iso}) at {_T:.2f} K"
@@ -1025,20 +1039,112 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                         ),
                     )
 
-        # Apply r^-6 predicted linewidths to molecule nuclei before spectrum
-        _b0_loop = experiment.magnetic_field
-        for _iso_lw, _width_fit_result in _width_fit_result_by_iso.items():
-            _label_to_lw_loop = dict(
-                zip(_width_fit_result["labels"], _width_fit_result["pred"])
-            )
-            for nuc in molecule.nuclei:
-                if (
-                    nuc.isotope == _iso_lw
-                    and nuc.chem_label in _label_to_lw_loop
+        # Derive a single molecular τ_e from the most trustworthy r⁻⁶
+        # relaxation fit (across isotopes and observables), then compute the
+        # full R1/R2 decomposition for the whole molecule. τ_R and τ_e are
+        # molecular (isotope-independent); only the *source* of τ_e is chosen
+        # by fit trustworthiness (number of points + p1 relative uncertainty).
+        _tau_R_relax = (
+            _tau_r_by_temp.get(experiment.temperature)
+            or config.fit_relaxation_tau_r_fixed
+        )
+        if _tau_R_relax:
+            _tau_e_ref = config.fit_relaxation_tau_e or 1e-12
+            _tau_e_candidates = []  # (score, tau_e, iso, obs, n, rel_err)
+            for _iso_c in _isotopes_mol:
+                _gamma_c = get_nuclear_gamma(_iso_c) * 2 * np.pi * 1e6
+                _omega_I_c = -_gamma_c * experiment.magnetic_field
+                for _obs_c, _by_iso in (
+                    ("width", _width_fit_result_by_iso),
+                    ("r1", _r1_fit_result_by_iso),
                 ):
-                    lw_hz = _label_to_lw_loop[nuc.chem_label]
-                    _gamma_loop = get_nuclear_gamma(nuc.isotope)
-                    nuc.shift.lw = np.float64(lw_hz / (_gamma_loop * _b0_loop))
+                    _res_c = _by_iso.get(_iso_c)
+                    if not _res_c:
+                        continue
+                    _te = solve_tau_e_from_p1(
+                        _res_c["p1"], _tau_R_relax,
+                        omega_I=_omega_I_c, omega_S=_omega_S_r6,
+                        gamma_I=_gamma_c, spin=spin, orbit=config.orbit,
+                        total_momentum_J=config.total_momentum_J,
+                        temperature=experiment.temperature,
+                        observable=_obs_c,
+                        relaxation_model=_relaxation_model,
+                        tau_e_range=config.fit_relaxation_tau_e_range,
+                        tau_e_ref=_tau_e_ref,
+                    )
+                    if _te is None:
+                        continue
+                    _n_c = len(_res_c.get("labels", []))
+                    _p1_c = abs(_res_c.get("p1", 0.0))
+                    _p1e_c = _res_c.get("p1_err")
+                    _rel_c = (
+                        abs(_p1e_c) / _p1_c
+                        if (_p1_c > 0 and _p1e_c is not None)
+                        else float("inf")
+                    )
+                    _score_c = _n_c / max(_rel_c, 1e-6)
+                    _tau_e_candidates.append(
+                        (_score_c, _te, _iso_c, _obs_c, _n_c, _rel_c)
+                    )
+
+            if _tau_e_candidates:
+                _tau_e_candidates.sort(key=lambda c: c[0], reverse=True)
+                _best_c = _tau_e_candidates[0]
+                _tau_e_chosen = _best_c[1]
+                logger.info(
+                    "Relaxation decomposition: τ_R = %.1f ps, τ_e = %.3f ps "
+                    "(from %s %s fit: %d points, p1 rel. unc. %.1f%%)",
+                    _tau_R_relax * 1e12, _tau_e_chosen * 1e12,
+                    _best_c[2], _best_c[3], _best_c[4],
+                    _best_c[5] * 100 if np.isfinite(_best_c[5]) else float("nan"),
+                )
+                for _alt in _tau_e_candidates[1:]:
+                    logger.info(
+                        "  alt τ_e = %.3f ps (from %s %s: %d points, "
+                        "rel. unc. %.1f%%)",
+                        _alt[1] * 1e12, _alt[2], _alt[3], _alt[4],
+                        _alt[5] * 100 if np.isfinite(_alt[5]) else float("nan"),
+                    )
+                try:
+                    apply_relaxation_decomposition(
+                        molecule,
+                        relaxation_model=_relaxation_model,
+                        temperature=experiment.temperature,
+                        magnetic_field_tesla=experiment.magnetic_field,
+                        tau_R=_tau_R_relax,
+                        tau_e1=_tau_e_chosen,
+                        tau_e2=_tau_e_chosen,
+                        hyperfine_method=getattr(
+                            config, "hyperfine_method", None
+                        ),
+                        min_linewidth_hz=getattr(
+                            config, "relaxation_min_linewidth_hz", 0.0
+                        ) or 0.0,
+                    )
+                except Exception as _relax_err:
+                    logger.warning(
+                        "Relaxation decomposition skipped: %s", _relax_err
+                    )
+
+        # Fall back to the raw r⁻⁶-fitted linewidths only when no relaxation
+        # decomposition was computed above.
+        if getattr(molecule, "relaxation", None) is None:
+            # Apply r^-6 predicted linewidths to molecule nuclei before spectrum
+            _b0_loop = experiment.magnetic_field
+            for _iso_lw, _width_fit_result in _width_fit_result_by_iso.items():
+                _label_to_lw_loop = dict(
+                    zip(_width_fit_result["labels"], _width_fit_result["pred"])
+                )
+                for nuc in molecule.nuclei:
+                    if (
+                        nuc.isotope == _iso_lw
+                        and nuc.chem_label in _label_to_lw_loop
+                    ):
+                        lw_hz = _label_to_lw_loop[nuc.chem_label]
+                        _gamma_loop = get_nuclear_gamma(nuc.isotope)
+                        nuc.shift.lw = np.float64(
+                            lw_hz / (_gamma_loop * _b0_loop)
+                        )
 
         # Predicted + experimental spectrum overlay — one per isotope
         _avgs = [
@@ -1098,6 +1204,7 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                             f" {experiment.temperature:.2f} K"
                         ),
                         label_colors=_label_colors,
+                        axis_break=config.susc_fit_spectra_break,
                     )
 
     # VT stacked experimental spectra — one figure per isotope
@@ -1150,19 +1257,58 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
             f"Diamagnetic reference from file {config.diamagnetic_ref_file}\n"
         )
 
-    for molecule in molecules:
-        comment = _comment_base + f"T = {molecule.susc.temperature:.2f} K"
+    for molecule, experiment in zip(molecules, experiments):
+        _T = molecule.susc.temperature
+        comment = _comment_base + f"T = {_T:.2f} K"
         save_molecule_to_csv(
             molecule=molecule,
             file_name=os.path.join(
                 config.project_name,
                 "hyperfines_and_fitted_shifts_"
-                f"{molecule.susc.temperature:.2f}_K.csv",
+                f"{_T:.2f}_K.csv",
             ),
             delimiter=delimiter,
             comment=comment,
             verbose=True,
         )
+
+        # Peak data file — same format as the predict workflow's
+        # peak_data_*.csv, built from the fitted shifts and output linewidths.
+        # The magnetic field is encoded in the name because the linewidths
+        # (relaxation) are field-dependent.
+        _peak_avgs = [
+            nuc.shift.avg for nuc in molecule.nuclei
+            if nuc.shift.avg is not None
+        ]
+        if _peak_avgs:
+            # Guard the final peak-data write so a late failure never discards
+            # an otherwise-complete fit.
+            try:
+                _peak_range = [
+                    float(np.min(_peak_avgs)), float(np.max(_peak_avgs))
+                ]
+                _peak_lw = resolve_output_linewidths(molecule, _peak_range)
+                _b0 = getattr(experiment, "magnetic_field", None)
+                _field_tag = f"_{_b0:.2f}_T" if _b0 is not None else ""
+                _peak_comment = f"T = {_T:.2f} K"
+                if _b0 is not None:
+                    _peak_comment += f", B0 = {_b0:.2f} T"
+                save_peak_data_to_csv(
+                    molecule=molecule,
+                    file_name=os.path.join(
+                        config.project_name,
+                        f"peak_data_{_T:.2f}_K{_field_tag}.csv",
+                    ),
+                    linewidth_by_label=_peak_lw.values_by_label,
+                    linewidth_column_name=_peak_lw.column_name,
+                    comment=_peak_comment,
+                    verbose=True,
+                )
+            except Exception as _peak_err:
+                logger.warning(
+                    "peak_data file not written for %.2f K: %s",
+                    _T, _peak_err,
+                )
 
     # Write susceptibility tensor with model terms
     save_susc(
@@ -1490,41 +1636,57 @@ def _obtain_r2a_multi(
     return total
 
 
-def _obtain_r2a(
-    molecule: Molecule,
-    assignment: list[str],
-    model: models.SusceptibilityModel,
-    experiment: Experiment,
-    average_labels: list[list[str]],
-    echo_r2: bool,
-):
+# Worker-local context for the parallel permutation search. Populated once per
+# worker process via the Pool ``initializer`` so the (potentially heavy)
+# molecule / experiment / model objects are pickled once per worker rather than
+# once per permutation — avoiding building thousands of deep copies up front.
+_PERM_CTX: dict = {}
+
+
+def _perm_worker_init(ctx: dict) -> None:
+    """Pool initializer: stash shared, read-only search data in each worker.
+
+    A single mutable working copy of the experiment is created per worker; its
+    signal assignments are overwritten on every task (so it can be reused
+    without re-copying the spectral data it may carry).
     """
-    Fit a susceptibility model for a proposed assignment and return RMSE.
+    _PERM_CTX.clear()
+    _PERM_CTX.update(ctx)
+    if "experiment" in ctx:
+        _PERM_CTX["work_exp"] = copy.deepcopy(ctx["experiment"])
 
-    This helper is designed to be run in parallel when searching over
-    assignment permutations.
 
-    Args:
-        molecule (Molecule): Molecule instance used for shift prediction.
-        assignment (list[str]): Proposed assignment list (one per signal).
-        model (models.SusceptibilityModel): Model instance to fit.
-        experiment (Experiment): Experiment data to fit against.
-        average_labels (list[list[str]]): Groups of labels to average during
-            fitting.
+def _obtain_r2a_perm(assignment: list[str]) -> float:
+    """Single-temperature permutation task using the worker-local context.
 
-    Returns:
-        float: RMSE value for this assignment.
+    The per-worker experiment copy is reused (assignments are fully overwritten
+    each call); a fresh model copy is taken per task because ``fit_to`` mutates
+    the model and must start from the same initial guess every time.
     """
-
-    # and swap in new, permuted, assignments
+    c = _PERM_CTX
+    experiment = c["work_exp"]
     for it, new in enumerate(assignment):
         experiment.signals[it].assignment = new
-
-    # Fit susceptibility model to experimental chemical shifts
-    model.fit_to(molecule, experiment, average_labels=average_labels)
-
-    # Print to screen if envvar enabled
-    if echo_r2:
+    model = copy.deepcopy(c["susc_model"])
+    model.fit_to(c["molecule"], experiment, average_labels=c["average_labels"])
+    if c["echo_r2"]:
         print(model.rmse)
-
     return model.rmse
+
+
+def _obtain_r2a_multi_perm(assignment: list[str]) -> float:
+    """Shared (multi-temperature) permutation task using the worker context.
+
+    Delegates to :func:`_obtain_r2a_multi`, which deep-copies each experiment
+    and model internally, so the shared lists held in the context are never
+    mutated.
+    """
+    c = _PERM_CTX
+    return _obtain_r2a_multi(
+        c["molecules"],
+        assignment,
+        c["susc_models"],
+        c["experiments"],
+        c["average_labels"],
+        c["echo_r2"],
+    )

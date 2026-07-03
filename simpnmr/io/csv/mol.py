@@ -15,7 +15,11 @@ import logging
 import numpy as np
 import pandas as pd
 
-from simpnmr.io.csv.csv_util import read_csv_safe, write_csv_safe
+from simpnmr.io.csv.csv_util import (
+    format_full_precision,
+    read_csv_safe,
+    write_csv_safe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +242,12 @@ def save_molecule_to_csv(
             "this file are stored in the chi frame."
         )
         merged_comment = frame_comment if not comment else f"{comment}\n{frame_comment}"
+
+    # Keep r⁻⁶ values at full precision (they span many orders of magnitude and
+    # would lose digits under the table-wide float_format); other columns are
+    # unaffected.
+    if "r_inv6 (Å^-6)" in df.columns:
+        df["r_inv6 (Å^-6)"] = format_full_precision(df["r_inv6 (Å^-6)"])
 
     write_csv_safe(df, file_name, merged_comment)
 
