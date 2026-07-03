@@ -36,13 +36,13 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
    Temperature dependence of the magnetic susceptibility components.
 
    Shows :math:`\chi` versus :math:`T`.  
-   Generated when more than one temperature is specified and ``--isoaxrho_plots on`` or ``--save`` is enabled.
+   Generated when more than one temperature is specified and ``--isoaxrh_plots on`` or ``--save`` is enabled.
 
 6. ``susceptibility_components_chiT.pdf``  
    Temperature-scaled susceptibility components.
 
    Shows :math:`\chi T` versus :math:`T`.  
-   Generated when more than one temperature is specified and ``--isoaxrho_plots on`` or ``--save`` is enabled.
+   Generated when more than one temperature is specified and ``--isoaxrh_plots on`` or ``--save`` is enabled.
 
 7. ``susceptibility_tensor.csv``
    Fitted magnetic susceptibility tensors.

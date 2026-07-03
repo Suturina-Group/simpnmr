@@ -1,0 +1,39 @@
+project:
+  name: DyL1_1H_Fitting
+    
+hyperfine:
+  method: pdip
+  file: ../../DATA/HFC/DyL1.xyz
+  paramagnetic_centre: [0.006857, -0.008695, 0.057882]
+  spin: 2.5
+  orbit: 5
+  total_momentum_J: 7.5
+
+nuclei:
+  include: H
+  
+assignment:
+  method: permute
+  groups:
+    - [aax, aeq]
+      
+diamagnetic:
+  method: csv
+  file: ../../DATA/DIA/YL1.csv
+
+experiment:
+  files: ../../DATA/PARA/DyL1_Exp_Decomposition.csv
+  
+chem_labels:
+  file: ../../DATA/LABELS/DyL1_1H_Labels.csv
+  
+susc_fit:
+  type: isoaxrh
+  variables:
+    iso: [fix, 0.0]
+    ax: [fit, 0.001]
+    rh_over_ax: [fix, 0.0]
+    alpha: [fix, 0.0]
+    beta: [fix, 0.0]
+    gamma: [fix, 0.0]
+  average_shifts: 'all'

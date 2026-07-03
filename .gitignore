@@ -29,11 +29,13 @@ __pycache__/
 # These directories contain generated data from example workflows.
 # Do not version them.
 #
-# Pattern notes:
-#   - `examples/**/X/` matches X at any depth under examples/
-#   - Trailing slash ensures only directories are ignored.
+# Ignore everything generated under SIMULATIONS/ (project-named output dirs
+# with CSVs, PDFs, cubes) but keep the input .yml configs the tests drive.
 # ============================================================================
-examples/**/SIMULATIONS/
+examples/**/SIMULATIONS/**
+!examples/**/SIMULATIONS/**/
+!examples/**/SIMULATIONS/**/*.yml
+!examples/**/SIMULATIONS/*.yml
 
 # ============================================================================
 # Generated test artefacts

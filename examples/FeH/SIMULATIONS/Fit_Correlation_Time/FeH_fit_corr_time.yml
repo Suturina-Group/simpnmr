@@ -1,0 +1,23 @@
+project:
+ name: FeH_Correlation_Time_Fit
+
+hyperfine:
+ method: dft 
+ file: ../../DATA/Q_CHEM/FeH_opt_Cs_HFC_TPSSH_def2TZVP.out
+ paramagnetic_centre: [0.0,0.0,0.0]
+
+experiment:
+ files: ../../DATA/EXP/FIELD/FeH_4_7T.csv
+
+chem_labels:
+ file: ../../DATA/LABELS/atom_labels.csv
+
+nuclei:
+ include: [H, C]
+
+fit_corr_time:
+ tau_R: [fix,5.80e-10] 
+ tau_E: [fit,3.0e-11,[1.0e-11,1.0e-10]]
+
+relaxation:
+ model: sbm curie

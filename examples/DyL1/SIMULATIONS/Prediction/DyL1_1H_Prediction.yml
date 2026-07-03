@@ -1,0 +1,38 @@
+project:
+  name: DyL1_1H_Prediction
+  
+hyperfine:
+  method: pdip
+  file: ../../DATA/HFC/DyL1.xyz
+  paramagnetic_centre: [0.006857, -0.008695, 0.057882]
+  spin: 2.5
+  orbit: 5
+  total_momentum_J: 7.5
+
+nuclei:
+  include: H
+  
+diamagnetic:
+  method: csv
+  file: ../../DATA/DIA/YL1.csv
+
+experiment:
+  files: ../../DATA/PARA/DyL1_Exp_Decomposition.csv
+  spectrum_files: ../../DATA/PARA/DyL1_200MHz_29C_MeOH.csv
+  exp_reference: 0.56
+  
+chem_labels:
+  file: ../../DATA/LABELS/DyL1_1H_Labels.csv
+    
+susceptibility:
+  file: ../../DATA/CHI/Chi_DyL1_from_B20.csv
+  format: csv
+  temperatures: 302.15
+
+relaxation:
+  model: sbm curie
+  magnetic_field_tesla: 4.7
+  temperature: 302.15
+  T1e: 0.2e-12
+  T2e: 0.2e-12
+  tR: 140e-12

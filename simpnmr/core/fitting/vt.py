@@ -369,9 +369,6 @@ def compute_analytic_component(
     g_sq_iso = float(g_sq["g_sq_iso"])
     g_sq_ax = float(g_sq["g_sq_ax"])
     g_sq_rh = float(g_sq["g_sq_rh"])
-    ge_g_iso = float(g_sq["ge_g_iso"])
-    ge_g_ax = float(g_sq["ge_g_ax"])
-    ge_g_rh = float(g_sq["ge_g_rh"])
 
     # Accept both scalar and array temperatures.
     t = np.asarray(temperature, dtype=float)
@@ -383,6 +380,11 @@ def compute_analytic_component(
     # Calculate chi component in reduced (Curie) units
     if chi_component == "iso":
         # g-corrected iso formula: χ_iso·T = g_e·g_iso − f(S)/(45kT)·(D·g_e·g_ax + 3E·g_e·g_rh)
+        # The g_e·g cross-products are only needed here (ax/rh use g² invariants),
+        # so read them lazily — callers computing ax/rh may omit them.
+        ge_g_iso = float(g_sq["ge_g_iso"])
+        ge_g_ax = float(g_sq["ge_g_ax"])
+        ge_g_rh = float(g_sq["ge_g_rh"])
         analytic = (
             ge_g_iso
             - (f_S / (45 * KB * t)) * (D_J * ge_g_ax + 3 * E_J * ge_g_rh)

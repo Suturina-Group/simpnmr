@@ -713,7 +713,7 @@ Used in susceptibility fitting workflows.
     # susc_fit block schema (reference):
     susc_fit:
         # Susceptibility model type [Required]
-        type: isoaxrho # Isotropic + axial + rhombic susceptibility model
+        type: isoaxrh # Isotropic + axial + rhombic susceptibility model
               split # Split axial/rhombic susceptibility model
               full # Full anisotropic susceptibility tensor
               eigen # Eigenvalue-based susceptibility model
@@ -724,11 +724,11 @@ Used in susceptibility fitting workflows.
         # Supported: A3, cm3 mol-1, reduced
         input_units: reduced
 
-        # Fit variables definition [Required for type: isoaxrho]
+        # Fit variables definition [Required for type: isoaxrh]
         variables:
           iso: [fit, 0.2]
           ax:  [fit, 0.1]
-          rho_over_ax: [fix, 0.0]
+          rh_over_ax: [fix, 0.0]
 
         # Fit variables definition [Required for type: split]
         variables:
@@ -804,7 +804,7 @@ Used in susceptibility fitting workflows.
    ``susc_fit:input_units: reduced`` uses the Curie-normalised convention already. Each susceptibility component is interpreted as
    ``chi_reduced = chi * T / Curie_prefactor(S)`` and is converted internally to
    ``Å^3`` units for the actual fit. Dimensionless parameters such as
-   ``rho_over_ax`` are not rescaled.
+   ``rh_over_ax`` are not rescaled.
 
 Temperature Dependence of Magnetic Susceptibility Fitting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -854,6 +854,8 @@ Optional. Used in susceptibility fitting workflows that model temperature depend
    Temperature-dependent fitting extends the base susceptibility fitting model.
    When TIP parameters are fixed from ab initio data, the corresponding file and
    format must be provided explicitly.
+
+.. _fit-relaxation-block:
 
 Relaxation Fit Options
 ^^^^^^^^^^^^^^^^^^^^^^
