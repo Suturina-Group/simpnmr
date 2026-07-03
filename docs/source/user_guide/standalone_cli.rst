@@ -1,3 +1,5 @@
+.. _standalone_cli:
+
 Standalone CLI utilities
 ========================
 
@@ -10,7 +12,7 @@ workflows documented elsewhere.
 
 
 ``average_conformers``
----------------------
+----------------------
 
 The ``average_conformers`` command reads N quantum-chemistry output files
 representing different conformers of the same molecule, computes
@@ -97,7 +99,7 @@ A canonical molecule CSV with:
 
 
 ``extract_hfc``
---------------
+---------------
 
 The ``extract_hfc`` command reads a quantum-chemistry output file, extracts
 hyperfine coupling (A) tensors, and writes them to a canonical SimpNMR
