@@ -476,6 +476,19 @@ Then run:
       is picked up automatically, so the run also produces the linewidth and
       relaxation-rate outputs.
 
+With the relaxation model the predicted peaks now carry physical linewidths:
+
+.. figure:: /_static/dy_pred_spectrum_relax.png
+   :alt: Predicted 1H NMR spectrum of the Dy(III) complex with relaxation
+   :width: 95%
+   :align: center
+
+   ``pred_spectrum_302.15_K.pdf`` with the relaxation model. Compare with
+   workflow 1: the peaks farthest from the diamagnetic region (``cax`` at
+   +145 ppm, ``aax`` at −110 ppm) are strongly broadened and shortened by
+   Curie/R\ :sub:`2` relaxation, while the peaks near the centre stay sharp —
+   the position-dependent linewidths the cosmetic display width could not show.
+
 3. Fitting the susceptibility tensor
 ------------------------------------
 
