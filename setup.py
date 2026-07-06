@@ -42,14 +42,24 @@ setuptools.setup(
         "dev": [
             "pytest>=8.0",
             "ruff>=0.1.0",
-        ]
+        ],
+        # Desktop GUI dependencies. PyQt6-WebEngine provides the embedded
+        # Chromium used by the 3Dmol.js molecule viewer.
+        "gui": [
+            "PyQt6",
+            "PyQt6-WebEngine",
+        ],
     },
     entry_points={
         "console_scripts": [
             "simpnmr = simpnmr.cli.main:interface",
             "plot_A_funcs = simpnmr.tools.hfc_plot_batch:main",
             "plot_chi_funcs = simpnmr.tools.susc_plot_batch:main",
-"label_groups = simpnmr.tools.coords.label_groups:main",
-        ]
+            "label_groups = simpnmr.tools.coords.label_groups:main",
+        ],
+        # Windowed launcher (no console window on Windows) for the desktop app.
+        "gui_scripts": [
+            "simpnmr-gui = simpnmr.gui.app:main",
+        ],
     },
 )

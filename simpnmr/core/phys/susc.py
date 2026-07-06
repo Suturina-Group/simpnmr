@@ -219,7 +219,16 @@ def build_susceptibility_from_bleaney(
     # g_J² enters explicitly as g_sq_iso; the Curie prefactor C₀ carries
     # only μ₀ μ_B² J(J+1)/(3 k_B) without a g² factor.
     g_J = calc_g_eff(spin, orbit_L, total_J)
-    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+    # compute_analytic_component needs both the g² invariants (ax/rh) and the
+    # iso-branch keys (ge_g_*). Here we are building a susceptibility *tensor*,
+    # whose isotropic element is the ordinary Curie susceptibility ∝ g_J² — the
+    # g_e·g cross-product is a Fermi-contact-shift construct that does not enter
+    # the susceptibility itself. So ge_g_iso = g_J² and the anisotropic
+    # cross-products vanish for an isotropic g_J.
+    g_sq = {
+        "g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0,
+        "ge_g_iso": g_J ** 2, "ge_g_ax": 0.0, "ge_g_rh": 0.0,
+    }
     prefactor = compute_chi_prefactor(spin, total_J)   # C₀, no g_J²
 
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)

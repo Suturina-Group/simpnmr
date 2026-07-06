@@ -2,48 +2,46 @@ Tutorials
 =========
 
 
-This section provides downloadable example materials for the SimpNMR tutorials
-and workshop. The examples are distributed as a single bundle and are intended
-for hands-on use alongside the paper and the main documentation.
+This section provides two hands-on tutorials, each following one complex through
+the SimpNMR workflows. They differ in how the hyperfine coupling is obtained —
+the point-dipole approximation for a lanthanide, or DFT-calculated tensors for a
+transition metal. Each tutorial is self-contained: the input files are shown
+inline, so you can copy them into a working directory and run the workflows
+immediately — there is no bundle to download.
 
 .. toctree::
    :maxdepth: 1
    :hidden:
 
-   getting_started
-   using_examples
+   dy_point_dipole
+   fe_dft_hfc
 
 .. grid:: 2
    :gutter: 2
 
-   .. grid-item-card:: Getting started
-      :link: getting_started
+   .. grid-item-card:: Dy(III) — point-dipole approximation
+      :link: dy_point_dipole
       :link-type: doc
 
-      Step-by-step first run: install ``simpnmr``, run a shift prediction on
-      an example system, and inspect the outputs.
+      A dysprosium(III) complex: shift prediction, PCS isosurface, prediction
+      with relaxation, and susceptibility fitting, with hyperfine tensors
+      computed from geometry (``method: pdip``).
 
-   .. grid-item-card:: Download examples
-
-      Download the full tutorial example bundle used for the SimpNMR
-      tutorials and workshop.
-
-      :download:`Download tutorial examples <../_downloads/examples.zip>`
-
-   .. grid-item-card:: Using the examples
-      :link: using_examples
+   .. grid-item-card:: Fe(II) — DFT hyperfine tensors
+      :link: fe_dft_hfc
       :link-type: doc
 
-      Overview of the example bundle structure and the commands used to run
-      each workflow.
+      An iron(II) complex: variable-temperature susceptibility fitting and
+      spin-Hamiltonian extraction, with hyperfine tensors read from a DFT
+      calculation (``method: dft``).
 
-Notes on the example bundle
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Notes on the examples
+^^^^^^^^^^^^^^^^^^^^^^
 
-- Most examples are distributed as workflow directories containing ``data/``
-  and ``run.yml``.
-- Output directories are generated locally during execution and are not
-  included in the downloadable bundle.
+- Input files are reproduced inline in each tutorial and created by copy-paste.
+- A few large ab-initio or spectrometer output files are too big to paste;
+  those are offered as individual file downloads where they are used.
+- Output directories are generated locally when you run each workflow.
 
 Related documentation
 ^^^^^^^^^^^^^^^^^^^^^
