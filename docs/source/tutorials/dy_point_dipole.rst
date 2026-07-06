@@ -514,10 +514,11 @@ Download the spectrum and save it as ``data/para/raw_spectrum.csv``:
 
 * :download:`raw_spectrum.csv <../_downloads/examples/03_Shift_Prediction_With_Relaxation/data/para/raw_spectrum.csv>`
 
-Each peak is then **deconvoluted** — in MestReNova or similar NMR software —
-into a **chemical shift**, a **linewidth**, and an **integral** (area). In
-addition, the **longitudinal relaxation rate** R\ :sub:`1` can be measured
-separately (for example by an inversion–recovery experiment) and included.
+The spectrum is then **deconvoluted** — in MestReNova or similar NMR software —
+into a sum of Lorentzian lineshapes. Each Lorentzian yields a **chemical
+shift**, a **linewidth**, and an **integral** (area). In addition, the
+**longitudinal relaxation rate** R\ :sub:`1` can be measured separately (for
+example by an inversion–recovery experiment) and included.
 
 These per-peak values make up the ``experiment.csv`` — one row per assigned
 signal, here recorded at 302.15 K and 4.7 T for :sup:`1`\ H:
