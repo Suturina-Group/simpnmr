@@ -1,272 +1,77 @@
-Worked examples
-===============
+.. _tutorial_fe:
 
-This page collects six worked examples covering the main SimpNMR workflows.
-Each one lists the command to run and the input files it needs, reproduced
-inline so you can copy them into a working directory — there is no bundle to
-download.
+Fe(II) complex: DFT-calculated hyperfine tensors
+================================================
 
-Examples 01–04 all use the same dysprosium complex. Its input files
-(``structure.xyz``, ``chemical_labels.csv``, ``diamagnetic_shifts.csv`` and
-``susceptibility.csv``) are given in full in the :doc:`getting_started`
-tutorial; the examples below reuse them and only show the files that differ.
+This tutorial works through susceptibility fitting and spin-Hamiltonian
+extraction on an **iron(II) complex**, using **hyperfine coupling (HFC) tensors
+from a DFT calculation**.
 
-Set up each example in its own directory, using the layout shown for that
-example, and run the command from inside it.
+For a transition metal such as Fe(II), the unpaired electrons occupy valence
+d-orbitals that delocalise significantly onto the ligands. This covalency
+produces a sizeable Fermi-contact hyperfine contribution that depends on the
+electronic structure, not just the geometry — so the point-dipole approximation
+used for lanthanides (see :doc:`dy_point_dipole`) is not sufficient. Instead,
+SimpNMR reads the full hyperfine tensors from a quantum-chemistry output
+(``hyperfine: method: dft``), and here also takes the ab-initio susceptibility
+from an ORCA calculation.
 
-.. contents:: Examples
+.. contents:: On this page
    :local:
    :depth: 1
+   :backlinks: none
 
+Prerequisites
+-------------
 
-01. Shift prediction
---------------------
-
-The standard prediction workflow: paramagnetic :sup:`1`\ H shifts from a
-structure and a susceptibility tensor. This is the example built step by step
-in :doc:`getting_started` — follow that tutorial for the full input files and a
-walkthrough of the outputs.
+Install ``simpnmr`` by following the :doc:`../user_guide/installation` guide,
+then check it is available:
 
 .. code-block:: bash
 
-   simpnmr predict run.yml
+   simpnmr --version
 
+Command line or the desktop app
+-------------------------------
 
-02. PCS isosurface
-------------------
-
-Generates a pseudocontact-shift isosurface directly from the command line,
-using susceptibility data, a structure file, and a chosen paramagnetic centre.
-
-.. code-block:: bash
-
-   simpnmr calc_pcs_iso susceptibility.csv 302.150 structure.xyz Dy1
-
-Here ``susceptibility.csv`` provides the susceptibility tensor, ``302.150`` is
-the temperature (K), ``structure.xyz`` is the structure file, and ``Dy1``
-selects the paramagnetic centre by atom label.
-
-This example uses the **same** ``structure.xyz`` as the getting-started
-tutorial. It reads the susceptibility from a full tensor table:
-
-.. code-block:: text
-   :caption: susceptibility.csv
-
-   Temperature (K),chi_iso (Å^3),chi_ax (Å^3),chi_rho (Å^3),chi_xx (Å^3),chi_xy (Å^3),chi_xz (Å^3),chi_yy (Å^3),chi_yz (Å^3),chi_zz (Å^3),chi_x (Å^3),chi_y (Å^3),chi_z (Å^3),alpha (degrees),beta (degrees),gamma (degrees)
-   302.150000,0.978758,-0.223376,0.000000,0.074459,0.000000,0.000000,0.074459,0.000000,-0.148917,-0.148917,0.074459,0.074459,180.000000,90.000000,-0.000000
-
-
-03. Shift prediction with relaxation
-------------------------------------
-
-Extends the prediction workflow with a relaxation model, producing predicted
-linewidths and R\ :sub:`1`/R\ :sub:`2` rates alongside the shifts.
+The workflows below can be run from the terminal (the ``simpnmr`` command) or
+from the **desktop GUI**, which presents the same options as a form and can open
+and save the ``run.yml`` shown here. To use the GUI, install the optional GUI
+dependencies and launch it:
 
 .. code-block:: bash
 
-   simpnmr predict run.yml
+   pip install "simpnmr[gui]"
+   simpnmr-gui
 
-**Shared files.** Uses the same ``structure.xyz``, ``chemical_labels.csv``,
-``diamagnetic_shifts.csv`` and ``data/chi/susceptibility.csv`` as the
-:doc:`getting_started` tutorial. Create the same ``data/`` layout, then add the
-files below.
+The window has a toolbar (**New**, **Open YAML…**, **Save YAML**, **Save As…**,
+**▶ Run**, **■ Stop**); a form on the left whose sections mirror the ``run.yml``
+blocks, with a **Workflow** selector (**Predict** / **Fit susceptibility**) at
+the top; and a 3D viewer with a live log panel on the right. The general pattern
+is: **Open YAML…** → choose your ``run.yml`` → set the **Workflow** mode → click
+**▶ Run**.
 
-The configuration adds ``experiment`` and ``relaxation`` blocks:
+The complex and its input files
+-------------------------------
 
-.. code-block:: yaml
-   :caption: run.yml
-
-   project:
-     name: output
-
-   hyperfine:
-     method: pdip
-     file: data/hfc/structure.xyz
-     paramagnetic_centre: [0.006857, -0.008695, 0.057882]
-     spin: 2.5
-     orbit: 5
-     total_momentum_J: 7.5
-
-   nuclei:
-     include: H
-
-   diamagnetic:
-     method: csv
-     file: data/dia/diamagnetic_shifts.csv
-
-   experiment:
-     files: data/para/experiment.csv
-     spectrum_files: data/para/raw_spectrum.csv
-     exp_reference: 0.56
-
-   chem_labels:
-     file: data/labels/chemical_labels.csv
-
-   susceptibility:
-     file: data/chi/susceptibility.csv
-     format: csv
-     temperatures: 302.15
-
-   relaxation:
-     model: sbm curie
-     T1e: 0.2e-12
-     T2e: 0.2e-12
-     tR: 140e-12
-
-The measured peak list:
-
-.. code-block:: text
-   :caption: data/para/experiment.csv
-
-   #temperature 302.15
-   #magnetic_field 4.7
-   #isotope 1H
-   assignment,shift (ppm),width (Hz),area (),r1 (Hz)
-   aax,82.89,587.31,4108.48,3013
-   py5,24.14,97.24,5139.3,126
-   py3,23.91,102.86,3914.16,126
-   py4,21.6,74.05,4609,59
-   aeq,6.73,258.23,6320.07,425
-   caxp,0.56,308.51,4984.95,0
-   ceq,-42.36,182.53,4452.48,400
-   ceqp,-49.12,224.78,4826.13,430
-   cax,-97.33,252.06,4772.37,528
-
-The raw spectrum (``spectrum_files``) is a large two-column trace, too big to
-paste — download it and save it as ``data/para/raw_spectrum.csv``:
-
-* :download:`raw_spectrum.csv <../_downloads/examples/03_Shift_Prediction_With_Relaxation/data/para/raw_spectrum.csv>`
-
-
-04. Susceptibility fitting
---------------------------
-
-Fits a susceptibility tensor to an experimental peak list (the inverse of a
-prediction).
+Create a working directory with the ``data/`` sub-folders:
 
 .. code-block:: bash
 
-   simpnmr fit_susc run.yml
+   mkdir fe-tutorial
+   cd fe-tutorial
+   mkdir -p data/chi data/hfc data/labels data/dia data/para
 
-**Shared files.** Uses the same ``structure.xyz``, ``chemical_labels.csv`` and
-``diamagnetic_shifts.csv`` as the :doc:`getting_started` tutorial, and the
-**same** ``data/para/experiment.csv`` as example 03 above.
+**Ab-initio inputs (downloads).** The hyperfine tensors and the susceptibility
+come from quantum-chemistry calculations whose output files are large. Download
+each and save it under the path shown:
 
-The configuration replaces the fixed ``susceptibility`` block with an
-``assignment`` block and a ``susc_fit`` block:
+* :download:`hyperfine.out <../_downloads/examples/05_VT_Susceptibility_Fitting/data/hfc/hyperfine.out>`
+  → ``data/hfc/hyperfine.out`` (DFT hyperfine tensors)
+* :download:`susceptibility.out <../_downloads/examples/05_VT_Susceptibility_Fitting/data/chi/susceptibility.out>`
+  → ``data/chi/susceptibility.out`` (ORCA NEVPT2 susceptibility)
 
-.. code-block:: yaml
-   :caption: run.yml
-
-   project:
-     name: output
-
-   hyperfine:
-     method: pdip
-     file: data/hfc/structure.xyz
-     paramagnetic_centre: [0.006857, -0.008695, 0.057882]
-     spin: 2.5
-     orbit: 5
-     total_momentum_J: 7.5
-
-   nuclei:
-     include: H
-
-   assignment:
-     method: permute
-     groups:
-       - [aax, aeq]
-
-   diamagnetic:
-     method: csv
-     file: data/dia/diamagnetic_shifts.csv
-
-   experiment:
-     files: data/para/experiment.csv
-
-   chem_labels:
-     file: data/labels/chemical_labels.csv
-
-   susc_fit:
-     type: isoaxrh
-     variables:
-       iso: [fix, 0.00]
-       ax: [fit, 0.001]
-       rh_over_ax: [fix, 0.00]
-     average_shifts: 'all'
-
-
-05. Variable-temperature susceptibility fitting
-------------------------------------------------
-
-Fits the temperature dependence of the susceptibility across a series of
-measured spectra, using ab-initio susceptibility and hyperfine data. This
-example uses a different complex from examples 01–04.
-
-.. code-block:: bash
-
-   simpnmr --hide fit_susc --susc_units 'cm3 mol-1' run.yml
-
-``--hide`` saves the figures without displaying them interactively;
-``--susc_units`` selects the units of the susceptibility input explicitly.
-
-The configuration reads hyperfine tensors from a DFT output
-(``method: dft``) and ab-initio susceptibility from an ORCA output
-(``ab_initio_file``):
-
-.. code-block:: yaml
-   :caption: run.yml
-
-   project:
-     name: output
-
-   hyperfine:
-     method: dft
-     file: data/hfc/hyperfine.out
-     paramagnetic_centre: [9.122358, 5.108520, 11.946464]
-     spin: 2.0
-
-   nuclei:
-     include_groups: ['H4', 'H5', 'H6', 'C4', 'C5', 'C6', 'C7']
-
-   assignment:
-     method: fixed
-
-   diamagnetic:
-     method: csv
-     file: data/dia/diamagnetic_shifts.csv
-
-   experiment:
-     files: [data/para/*K.csv]
-
-   chem_labels:
-     file: data/labels/chemical_labels.csv
-
-   susc_vt:
-     method: vt_2nd_order
-     tip_type: fix_tip_from_ab_initio
-     ab_initio_file: data/chi/susceptibility.out
-     ab_initio_format: orca_nev
-     variables:
-       iso:
-         intercept: [fit, 0.01]
-         slope: [fit, 0.01]
-       ax:
-         intercept: [fit, 0.01]
-         slope: [fit, 0.01]
-       rh:
-         intercept: [fix, 0.0]
-         slope: [fix, 0.0]
-
-   susc_fit:
-     type: isoaxrh
-     variables:
-       iso: [fit, 0.01]
-       ax: [fit, 0.01]
-       rh_over_ax: [fix, 0.00]
-     average_shifts: 'all'
-
-The diamagnetic reference shifts:
+**The diamagnetic reference shifts** (ppm):
 
 .. code-block:: text
    :caption: data/dia/diamagnetic_shifts.csv
@@ -287,6 +92,9 @@ The diamagnetic reference shifts:
    C5,128.46
    C6,129.47
    C7,134.48
+
+**The chemical-label map** — note the extra ``chem_math_label`` column, which
+gives a LaTeX label used in figures:
 
 .. dropdown:: data/labels/chemical_labels.csv
 
@@ -375,9 +183,11 @@ The diamagnetic reference shifts:
       C26,C5,$\mathbf{C}_{\mathit{5}}$
       C27,C4,$\mathbf{C}_{\mathit{4}}$
 
-.. dropdown:: The twelve variable-temperature peak lists (data/para/\*K.csv)
+**The variable-temperature peak lists** — twelve measured spectra, one per
+temperature. Save each block under ``data/para/`` with the file name in its
+caption:
 
-   Save each block under ``data/para/`` with the file name shown in its caption.
+.. dropdown:: The twelve peak lists (data/para/\*K.csv)
 
    .. code-block:: text
       :caption: data/para/experiment_248K.csv
@@ -655,28 +465,111 @@ The diamagnetic reference shifts:
       C6,140.48,13.69,1.00
       C2_up,102.65,206.67,7.48
 
-The ab-initio inputs (``hyperfine.out``, ``susceptibility.out``) are large
-quantum-chemistry output files. Download them and save them under the paths
-shown in ``run.yml``:
+1. Variable-temperature susceptibility fitting
+----------------------------------------------
 
-* :download:`hyperfine.out <../_downloads/examples/05_VT_Susceptibility_Fitting/data/hfc/hyperfine.out>`
-  → ``data/hfc/hyperfine.out``
-* :download:`susceptibility.out <../_downloads/examples/05_VT_Susceptibility_Fitting/data/chi/susceptibility.out>`
-  → ``data/chi/susceptibility.out``
+This workflow fits the temperature dependence of the susceptibility across the
+twelve measured spectra. The configuration reads hyperfine tensors from the DFT
+output (``hyperfine: method: dft``) and the ab-initio susceptibility from the
+ORCA output (``susc_vt: ab_initio_file``):
 
+.. code-block:: yaml
+   :caption: run.yml
 
-06. Spin-Hamiltonian extraction
--------------------------------
+   project:
+     name: output
 
-Extracts spin-Hamiltonian parameters directly from a susceptibility-fit output
-file.
+   hyperfine:
+     method: dft
+     file: data/hfc/hyperfine.out
+     paramagnetic_centre: [9.122358, 5.108520, 11.946464]
+     spin: 2.0
 
-.. code-block:: bash
+   nuclei:
+     include_groups: ['H4', 'H5', 'H6', 'C4', 'C5', 'C6', 'C7']
 
-   simpnmr get_sh --spin 2.0 isoaxrh_fit.csv
+   assignment:
+     method: fixed
 
-The input is the ``iso``/``ax``/``rh`` fit produced by a susceptibility-fitting
-run:
+   diamagnetic:
+     method: csv
+     file: data/dia/diamagnetic_shifts.csv
+
+   experiment:
+     files: [data/para/*K.csv]
+
+   chem_labels:
+     file: data/labels/chemical_labels.csv
+
+   susc_vt:
+     method: vt_2nd_order
+     tip_type: fix_tip_from_ab_initio
+     ab_initio_file: data/chi/susceptibility.out
+     ab_initio_format: orca_nev
+     variables:
+       iso:
+         intercept: [fit, 0.01]
+         slope: [fit, 0.01]
+       ax:
+         intercept: [fit, 0.01]
+         slope: [fit, 0.01]
+       rh:
+         intercept: [fix, 0.0]
+         slope: [fix, 0.0]
+
+   susc_fit:
+     type: isoaxrh
+     variables:
+       iso: [fit, 0.01]
+       ax: [fit, 0.01]
+       rh_over_ax: [fix, 0.00]
+     average_shifts: 'all'
+
+Key points of this configuration:
+
+``hyperfine: method: dft``
+   Reads the full hyperfine tensors from ``hyperfine.out`` instead of computing
+   them from geometry. ``spin: 2.0`` is the total spin *S* = 2 of high-spin
+   Fe(II).
+
+``susc_vt``
+   Models the temperature dependence of the susceptibility to second order
+   (``vt_2nd_order``), fixing the temperature-independent paramagnetism (TIP)
+   from the ab-initio susceptibility in ``susceptibility.out``
+   (``ab_initio_format: orca_nev``).
+
+Run the variable-temperature fit:
+
+.. tab-set::
+
+   .. tab-item:: Command line
+      :sync: cli
+
+      .. code-block:: bash
+
+         simpnmr --hide fit_susc --susc_units 'cm3 mol-1' run.yml
+
+      ``--hide`` saves the figures without displaying them interactively;
+      ``--susc_units`` states the units of the susceptibility input explicitly.
+
+   .. tab-item:: Desktop app
+      :sync: gui
+
+      Launch ``simpnmr-gui``, **Open YAML…** this ``run.yml``, and set the
+      **Workflow** to **Fit susceptibility**. The ``susc_vt`` block populates
+      the variable-temperature section of the form. Choose the susceptibility
+      units in that section (equivalent to ``--susc_units``), then click
+      **▶ Run**.
+
+Among the outputs is an ``isoaxrh``-type fit file summarising the fitted tensor
+as a function of temperature — used as the input to the next workflow.
+
+2. Extracting a spin Hamiltonian
+--------------------------------
+
+The fitted susceptibility can be converted into spin-Hamiltonian parameters.
+Take the ``iso``/``ax``/``rh`` fit produced above (an example is shown below;
+save it as ``isoaxrh_fit.csv``):
 
 .. code-block:: text
    :caption: isoaxrh_fit.csv
@@ -687,3 +580,22 @@ run:
    iso,4.314820,383.105186,0.498071,138.244569,0.970155
    ax,1.743901,323.957098,0.150237,41.699677,0.976824
    rh,0.000000,0.000000,0.000000,0.000000,
+
+Then run:
+
+.. code-block:: bash
+
+   simpnmr get_sh --spin 2.0 isoaxrh_fit.csv
+
+.. note::
+
+   ``get_sh`` is a command-line utility and has no equivalent in the desktop
+   GUI, which covers the **Predict** and **Fit susceptibility** workflows.
+
+Next steps
+----------
+
+- See :doc:`dy_point_dipole` for the lanthanide workflow, where hyperfine
+  tensors are approximated from geometry rather than DFT.
+- Read :doc:`../user_guide/workflows` for an overview of all workflows.
+- Consult :ref:`input_files` when adapting ``run.yml`` to your own system.

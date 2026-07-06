@@ -175,7 +175,7 @@ to print the list of available commands and options.
 
 If both commands print output instead of an error, the installation is
 complete. **You are ready to use SimpNMR** — head to the
-:doc:`../tutorials/getting_started` tutorial for your first run.
+:doc:`../tutorials/dy_point_dipole` tutorial for your first run.
 
 .. _install-troubleshooting:
 
