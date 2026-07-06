@@ -337,6 +337,77 @@ Users who prefer ``conda`` can create an environment the same way
 (``conda create -n simpnmr-env python=3.12`` followed by
 ``conda activate simpnmr-env``) and then ``pip install simpnmr`` inside it.
 
+.. _macos-automator-app:
+
+Optional — a double-click app on macOS (Automator)
+--------------------------------------------------
+
+``simpnmr`` ships a graphical interface. On macOS you can wrap it in a small
+application so you can launch it from the Dock or Launchpad by double-clicking,
+instead of typing a command each time. This uses **Automator**, which is built
+into macOS — nothing extra to install.
+
+**1. Install the GUI.** The graphical interface needs some extra packages
+(Qt). Install them with the ``gui`` option:
+
+.. code-block:: bash
+
+    python3 -m pip install "simpnmr[gui]"
+
+Check it launches from the terminal first:
+
+.. code-block:: bash
+
+    simpnmr-gui
+
+**2. Find the launcher's full path.** Automator runs commands with a minimal
+environment that does not know where ``simpnmr-gui`` lives, so you must give it
+the complete path. Print it with:
+
+.. code-block:: bash
+
+    which simpnmr-gui
+
+Copy the line it prints — for example
+``/Users/you/Library/Python/3.12/bin/simpnmr-gui`` (or a path inside your
+virtual environment). You will paste this in step 5.
+
+.. note::
+
+   If ``which simpnmr-gui`` prints nothing, the launcher is not on your PATH.
+   Re-run the install command in step 1, and see
+   :ref:`the troubleshooting section <install-troubleshooting>` above.
+
+**3. Create an Automator application.**
+
+1. Open **Automator** (press ``Cmd`` + ``Space``, type ``Automator``, press
+   ``Return``).
+2. Choose **New Document**, select **Application**, and click **Choose**.
+3. In the search box on the left, type ``Run Shell Script``. Drag the
+   **Run Shell Script** action into the empty workflow area on the right.
+4. Leave **Shell** set to ``/bin/zsh``.
+5. Replace the default text in the box with the full path from step 2, for
+   example:
+
+   .. code-block:: bash
+
+       /Users/you/Library/Python/3.12/bin/simpnmr-gui
+
+**4. Save it as an app.** Choose **File → Save**, name it ``SimpNMR``, set
+**Where** to **Applications**, and save. ``SimpNMR`` now appears in your
+Applications folder and Launchpad; double-click it to start the interface.
+
+.. tip::
+
+   **Give it an icon.** In Finder, select your ``SimpNMR`` app and press
+   ``Cmd`` + ``I`` to open *Get Info*. Drag an image file (``.png`` or
+   ``.icns``) onto the small icon in the top-left corner of that window.
+
+   **Keep it working after updates.** The app just runs ``simpnmr-gui``, so it
+   automatically picks up new versions when you upgrade with ``pip``. The only
+   time you need to recreate it is if the launcher's path changes (for example,
+   if you move to a different virtual environment).
+
 .. _updating:
 
 Updating
