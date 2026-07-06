@@ -217,7 +217,7 @@ analogue, one value per chemical group (ppm):
 The standard prediction workflow computes paramagnetic :sup:`1`\ H shifts from
 the structure and a susceptibility tensor. Here the susceptibility is not read
 from a file but **generated from a single crystal-field parameter**, the
-second-rank axial Stevens parameter B²₀ (set to 100 cm⁻¹), using Bleaney theory.
+second-rank axial Stevens parameter B²₀ (set to −100 cm⁻¹), using Bleaney theory.
 Create the configuration file ``run.yml`` next to the ``data/`` folder:
 
 .. code-block:: yaml
@@ -247,7 +247,7 @@ Create the configuration file ``run.yml`` next to the ``data/`` folder:
    susceptibility:
      method: bleaney
      bleaney:
-       B20: 100.0
+       B20: -100.0
        B22: 0.0
        alpha: 0.0
        beta: 0.0
@@ -282,7 +282,7 @@ The blocks have the following roles:
 ``susceptibility``
    ``method: bleaney`` builds the susceptibility tensor from the second-rank
    crystal-field parameters using Bleaney theory, instead of reading it from a
-   file. B²₀ sets the axial zero-field splitting (D = 3·B²₀; here 100 cm⁻¹),
+   file. B²₀ sets the axial zero-field splitting (D = 3·B²₀; here −100 cm⁻¹),
    B²₂ the rhombic part, and α/β/γ the orientation of the crystal-field frame;
    the isotropic Landé g\ :sub:`J` is derived from the Dy(III) quantum numbers
    above. ``temperatures`` gives the temperature(s) at which shifts are
@@ -370,7 +370,7 @@ The predicted spectrum gives a quick visual check of the result:
 
    ``pred_spectrum_302.15_K.pdf`` — the predicted :sup:`1`\ H spectrum. Each
    chemical group appears at its averaged paramagnetic shift, spanning roughly
-   +145 to −110 ppm. Because no relaxation model is set, the peaks carry the
+   +130 to −140 ppm. Because no relaxation model is set, the peaks carry the
    cosmetic display width described above.
 
 2. Adding a relaxation model
@@ -410,7 +410,7 @@ temperature the rates apply to:
    susceptibility:
      method: bleaney
      bleaney:
-       B20: 100.0
+       B20: -100.0
        B22: 0.0
        alpha: 0.0
        beta: 0.0
@@ -484,8 +484,8 @@ With the relaxation model the predicted peaks now carry physical linewidths:
    :align: center
 
    ``pred_spectrum_302.15_K.pdf`` with the relaxation model. Compare with
-   workflow 1: the peaks farthest from the diamagnetic region (``cax`` at
-   +145 ppm, ``aax`` at −110 ppm) are strongly broadened and shortened by
+   workflow 1: the peaks farthest from the diamagnetic region (``aax`` at
+   +130 ppm, ``cax`` at −140 ppm) are strongly broadened and shortened by
    Curie/R\ :sub:`2` relaxation, while the peaks near the centre stay sharp —
    the position-dependent linewidths the cosmetic display width could not show.
 
