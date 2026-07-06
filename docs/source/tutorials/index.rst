@@ -2,9 +2,10 @@ Tutorials
 =========
 
 
-This section provides downloadable example materials for the SimpNMR tutorials
-and workshop. The examples are distributed as a single bundle and are intended
-for hands-on use alongside the paper and the main documentation.
+This section provides hands-on tutorials for the SimpNMR workflows and
+workshop. Each tutorial is self-contained: the input files are shown inline on
+the page, so you can copy them into a working directory and run the workflow
+immediately — there is no bundle to download.
 
 .. toctree::
    :maxdepth: 1
@@ -20,30 +21,26 @@ for hands-on use alongside the paper and the main documentation.
       :link: getting_started
       :link-type: doc
 
-      Step-by-step first run: install ``simpnmr``, run a shift prediction on
-      an example system, and inspect the outputs.
+      Step-by-step first run: install ``simpnmr``, assemble the inputs, run a
+      shift prediction on an example system, and inspect the outputs.
 
-   .. grid-item-card:: Download examples
-
-      Download the full tutorial example bundle used for the SimpNMR
-      tutorials and workshop.
-
-      :download:`Download tutorial examples <../_downloads/examples.zip>`
-
-   .. grid-item-card:: Using the examples
+   .. grid-item-card:: Worked examples
       :link: using_examples
       :link-type: doc
 
-      Overview of the example bundle structure and the commands used to run
-      each workflow.
+      Six worked examples covering prediction, PCS isosurfaces, susceptibility
+      fitting, and spin-Hamiltonian extraction, with all input files inline and
+      the command to run each one.
 
-Notes on the example bundle
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Notes on the examples
+^^^^^^^^^^^^^^^^^^^^^^
 
-- Most examples are distributed as workflow directories containing ``data/``
-  and ``run.yml``.
-- Output directories are generated locally during execution and are not
-  included in the downloadable bundle.
+- Most examples are workflow directories containing a ``data/`` folder and a
+  ``run.yml`` configuration file, both reproduced inline in the tutorials.
+- A few examples use large ab-initio or spectrometer output files that are too
+  big to paste; those are offered as individual file downloads on the relevant
+  example.
+- Output directories are generated locally when you run each workflow.
 
 Related documentation
 ^^^^^^^^^^^^^^^^^^^^^
