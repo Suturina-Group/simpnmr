@@ -429,14 +429,15 @@ plots that were absent in workflow 1.
         temperature: 302.15
         magnetic_field_tesla: 4.7
         tau_r_method: ellipsoid     # or 'beadshell'
-        tau_r_solvent: CDCl3        # from the built-in solvent database
+        tau_r_solvent: methanol     # from the built-in solvent database
         T1e: 0.2e-12
         T2e: 0.2e-12
 
    ``tau_r_method`` selects the hydrodynamic model (``ellipsoid`` — a Perrin
    ellipsoid fit to the molecular shape — or the finer ``beadshell`` model), and
-   ``tau_r_solvent`` looks up the solvent viscosity (``CDCl3``, ``D2O``,
-   ``DMSO``, ``CD2Cl2``, …). To use a viscosity that is not in the database,
+   ``tau_r_solvent`` looks up the solvent viscosity (``methanol``, ``CDCl3``,
+   ``D2O``, ``DMSO``, ``CD2Cl2``, …). To use a viscosity that is not in the
+   database,
    give ``tau_r_eta`` (Pa·s) instead of ``tau_r_solvent``. The estimated τ_R is
    printed to the log and recorded in the ``peak_data`` header.
 
