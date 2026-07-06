@@ -514,6 +514,43 @@ Download the spectrum and save it as ``data/para/raw_spectrum.csv``:
 
 * :download:`raw_spectrum.csv <../_downloads/examples/03_Shift_Prediction_With_Relaxation/data/para/raw_spectrum.csv>`
 
+Each peak is then **deconvoluted** — in MestReNova or similar NMR software —
+into a **chemical shift**, a **linewidth**, and an **integral** (area). In
+addition, the **longitudinal relaxation rate** R\ :sub:`1` can be measured
+separately (for example by an inversion–recovery experiment) and included. These
+per-peak values are collected into a small ``experiment.csv``, one row per
+assigned signal. Create it in a new ``data/para/`` folder
+(``mkdir -p data/para``):
+
+.. code-block:: text
+   :caption: data/para/experiment.csv
+
+   #temperature 302.15
+   #magnetic_field 4.7
+   #isotope 1H
+   assignment,shift (ppm),width (Hz),area (),r1 (Hz)
+   aax,82.89,587.31,4108.48,3013
+   py5,24.14,97.24,5139.3,126
+   py3,23.91,102.86,3914.16,126
+   py4,21.6,74.05,4609,59
+   aeq,6.73,258.23,6320.07,425
+   caxp,0.56,308.51,4984.95,0
+   ceq,-42.36,182.53,4452.48,400
+   ceqp,-49.12,224.78,4826.13,430
+   cax,-97.33,252.06,4772.37,528
+
+The columns are:
+
+* ``assignment`` — the chemical-group label the peak belongs to (matching the
+  ``chem_labels`` map).
+* ``shift (ppm)`` — the measured chemical shift.
+* ``width (Hz)`` — the peak linewidth (full width at half maximum).
+* ``area ()`` — the integrated peak area.
+* ``r1 (Hz)`` — the longitudinal relaxation rate R\ :sub:`1` (optional).
+
+The header comment lines record the temperature (K), magnetic field (T) and
+isotope the data were measured at.
+
 The fit replaces the ``susceptibility`` block with an ``assignment`` block
 (which resolves ambiguous peak assignments) and a ``susc_fit`` block (which
 defines the fitted tensor model), and adds an ``experiment`` block pointing at
@@ -561,30 +598,6 @@ the measured data. It reuses the same ``structure.xyz``,
        ax: [fit, 0.001]
        rh_over_ax: [fix, 0.00]
      average_shifts: 'all'
-
-Create the measured peak list in a new ``data/para/`` folder
-(``mkdir -p data/para``):
-
-.. code-block:: text
-   :caption: data/para/experiment.csv
-
-   #temperature 302.15
-   #magnetic_field 4.7
-   #isotope 1H
-   assignment,shift (ppm),width (Hz),area (),r1 (Hz)
-   aax,82.89,587.31,4108.48,3013
-   py5,24.14,97.24,5139.3,126
-   py3,23.91,102.86,3914.16,126
-   py4,21.6,74.05,4609,59
-   aeq,6.73,258.23,6320.07,425
-   caxp,0.56,308.51,4984.95,0
-   ceq,-42.36,182.53,4452.48,400
-   ceqp,-49.12,224.78,4826.13,430
-   cax,-97.33,252.06,4772.37,528
-
-This peak list is the assignment table the fit works from; the continuous
-``raw_spectrum.csv`` above (referenced by ``spectrum_files``) is used to overlay
-the predicted and measured spectra in the output figures.
 
 Run the fit:
 
