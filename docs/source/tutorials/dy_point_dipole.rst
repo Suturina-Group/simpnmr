@@ -491,8 +491,8 @@ With the relaxation model the predicted peaks now carry physical linewidths:
    Curie/R\ :sub:`2` relaxation, while the peaks near the centre stay sharp —
    the position-dependent linewidths the cosmetic display width could not show.
 
-3. Fitting the susceptibility tensor
-------------------------------------
+3. Assignment of experimental peaks and fitting of the magnetic susceptibility
+------------------------------------------------------------------------------
 
 The inverse of a prediction: given a measured peak list, fit the susceptibility
 tensor. This replaces the ``susceptibility`` block with an ``assignment`` block
