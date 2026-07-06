@@ -224,7 +224,7 @@ Create the configuration file ``run.yml`` next to the ``data/`` folder:
    :caption: run.yml
 
    project:
-     name: output
+     name: dy_prediction
 
    hyperfine:
      method: pdip
@@ -258,7 +258,7 @@ The blocks have the following roles:
 
 ``project``
    Names the run. All outputs are written to a directory with this name
-   (here, ``output/``).
+   (here, ``dy_prediction/``). Choose something descriptive for your own system.
 
 ``hyperfine``
    ``method: pdip`` computes point-dipole hyperfine tensors directly from the
@@ -330,11 +330,11 @@ Run the prediction:
          with ``Job finished successfully``; the loaded structure is shown in
          the 3D viewer.
 
-All results are written to the ``output/`` directory:
+All results are written to the ``dy_prediction/`` directory:
 
 .. code-block:: text
 
-   output/
+   dy_prediction/
    ├── peak_data_302.15_K.csv               # per-group averaged shift components
    ├── hyperfines_and_shifts_302.15_K.csv   # per-atom hyperfines and shift terms
    ├── susceptibility_tensor.csv            # susceptibility tensor used
@@ -389,7 +389,7 @@ temperature the rates apply to:
    :caption: run.yml
 
    project:
-     name: output
+     name: dy_prediction_relaxation
 
    hyperfine:
      method: pdip
@@ -623,7 +623,7 @@ the measured data. It reuses the same ``structure.xyz``,
    :caption: run.yml
 
    project:
-     name: output
+     name: dy_susceptibility_fit
 
    hyperfine:
      method: pdip
@@ -678,7 +678,8 @@ Run the fit:
       Launch ``simpnmr-gui``, **Open YAML…** this ``run.yml``, then in the
       **Workflow** box switch to **Fit susceptibility** (this reveals the
       **Assignment** and fit-option sections). Click **▶ Run** to fit the
-      tensor; the fitted shifts and susceptibility appear in the output folder.
+      tensor; the fitted shifts and susceptibility appear in the
+      ``dy_susceptibility_fit/`` folder.
 
 Next steps
 ----------

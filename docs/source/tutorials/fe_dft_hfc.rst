@@ -477,7 +477,7 @@ ORCA output (``susc_vt: ab_initio_file``):
    :caption: run.yml
 
    project:
-     name: output
+     name: fe_vt_fit
 
    hyperfine:
      method: dft
