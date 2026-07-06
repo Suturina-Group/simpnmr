@@ -506,10 +506,10 @@ The starting point is the measured spectrum:
    :align: center
 
    The measured :sup:`1`\ H spectrum of the complex (``raw_spectrum.csv``),
-   recorded at 302.15 K (29 °C) and 200 MHz (:sup:`1`\ H, 4.7 T) in methanol,
-   spanning roughly +121 to −121 ppm. Sharp peaks near 0 ppm are the
-   diamagnetic region; the well-resolved peaks spread to high and low frequency
-   are the paramagnetically shifted protons that the fit assigns and reproduces.
+   recorded at 302.15 K (29 °C) and 200 MHz (:sup:`1`\ H, 4.7 T) in methanol.
+   Sharp peaks near 0 ppm are the diamagnetic region; the well-resolved peaks
+   spread to high and low frequency are the paramagnetically shifted protons
+   that the fit assigns and reproduces.
 
 Download the spectrum and save it as ``data/para/raw_spectrum.csv``:
 
@@ -640,7 +640,7 @@ the measured data. It reuses the same ``structure.xyz``,
    assignment:
      method: permute
      groups:
-       - [aax, aeq]
+       - [py3, py4, py5]
 
    diamagnetic:
      method: csv
@@ -649,7 +649,7 @@ the measured data. It reuses the same ``structure.xyz``,
    experiment:
      files: data/para/experiment.csv
      spectrum_files: data/para/raw_spectrum.csv
-     exp_reference: 0.56
+     exp_reference: 21.6
 
    chem_labels:
      file: data/labels/chemical_labels.csv
@@ -660,7 +660,18 @@ the measured data. It reuses the same ``structure.xyz``,
        iso: [fix, 0.00]
        ax: [fit, 0.001]
        rh_over_ax: [fix, 0.00]
+       alpha: [fix, 0.0]
+       beta: [fix, 0.0]
+       gamma: [fix, 0.0]
      average_shifts: 'all'
+
+The ``assignment`` block lists groups of signals whose labelling is ambiguous:
+the permutation search fits every assignment *within* each group and keeps the
+one with the lowest RMSE between the experimental and calculated shifts. Here it
+tests the three closely spaced pyridine protons ``py3``/``py4``/``py5`` (24.14,
+23.91 and 21.6 ppm),
+whose ordering is not obvious from the spectrum alone. Well-separated signals
+need not be listed — their assignment is unambiguous.
 
 Run the fit:
 
@@ -681,6 +692,34 @@ Run the fit:
       **Assignment** and fit-option sections). Click **▶ Run** to fit the
       tensor; the fitted shifts and susceptibility appear in the
       ``dy_susceptibility_fit/`` folder.
+
+The fit reports the result as a correlation of experimental against calculated
+shifts, together with the fitted susceptibility and its equivalent crystal-field
+parameter:
+
+.. figure:: /_static/dy_fit_shifts.png
+   :alt: Experimental versus calculated shifts from the susceptibility fit
+   :width: 80%
+   :align: center
+
+   ``shifts_302.15_K.pdf`` — experimental against calculated :sup:`1`\ H shifts.
+   The fitted axiality Δχ\ :sub:`ax`\ ·T = −0.28(1) corresponds to a Bleaney
+   parameter B²₀ = −70(2) cm⁻¹ (compare the −100 cm⁻¹ used to *generate* the
+   susceptibility in workflow 1) — confirming that this ``isoaxrh`` fit is the
+   Bleaney fit expressed as susceptibility components. R²\ :sub:`adj` = 0.994,
+   RMSE = 3.7 ppm.
+
+It also overlays the spectrum reconstructed from the fit on the measured one:
+
+.. figure:: /_static/dy_fit_spectrum_comparison.png
+   :alt: Predicted versus experimental spectrum comparison
+   :width: 95%
+   :align: center
+
+   ``pred_and_exp_spectrum_302.15_K.pdf`` — the spectrum reconstructed from the
+   fitted shifts (top, coloured by chemical group) above the measured spectrum
+   (bottom; experiment in black, fit in red), on a broken axis so every
+   paramagnetic peak is visible.
 
 Next steps
 ----------
