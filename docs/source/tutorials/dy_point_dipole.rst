@@ -282,11 +282,13 @@ The blocks have the following roles:
 ``susceptibility``
    ``method: bleaney`` builds the susceptibility tensor from the second-rank
    crystal-field parameters using Bleaney theory, instead of reading it from a
-   file. B²₀ sets the axial zero-field splitting (D = 3·B²₀; here −100 cm⁻¹),
-   B²₂ the rhombic part, and α/β/γ the orientation of the crystal-field frame;
-   the isotropic Landé g\ :sub:`J` is derived from the Dy(III) quantum numbers
-   above. ``temperatures`` gives the temperature(s) at which shifts are
-   evaluated.
+   file. B²₀ (here −100 cm⁻¹) is the crystal-field parameter in front of the
+   axial second-rank Stevens operator, B²₂ the rhombic parameter, and α/β/γ the
+   orientation of the crystal-field frame; the isotropic Landé g\ :sub:`J` is
+   derived from the Dy(III) quantum numbers above. These crystal-field
+   parameters can be estimated, for example, from the emission spectrum of an
+   isostructural Eu(III) complex. ``temperatures`` gives the temperature(s) at
+   which shifts are evaluated.
 
 .. note::
 
