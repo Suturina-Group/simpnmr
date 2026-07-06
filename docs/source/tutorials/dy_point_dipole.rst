@@ -517,39 +517,98 @@ Download the spectrum and save it as ``data/para/raw_spectrum.csv``:
 Each peak is then **deconvoluted** — in MestReNova or similar NMR software —
 into a **chemical shift**, a **linewidth**, and an **integral** (area). In
 addition, the **longitudinal relaxation rate** R\ :sub:`1` can be measured
-separately (for example by an inversion–recovery experiment) and included. These
-per-peak values are collected into a small ``experiment.csv``, one row per
-assigned signal. Create it in a new ``data/para/`` folder
-(``mkdir -p data/para``):
+separately (for example by an inversion–recovery experiment) and included.
 
-.. code-block:: text
-   :caption: data/para/experiment.csv
+These per-peak values make up the ``experiment.csv`` — one row per assigned
+signal, here recorded at 302.15 K and 4.7 T for :sup:`1`\ H:
 
-   #temperature 302.15
-   #magnetic_field 4.7
-   #isotope 1H
-   assignment,shift (ppm),width (Hz),area (),r1 (Hz)
-   aax,82.89,587.31,4108.48,3013
-   py5,24.14,97.24,5139.3,126
-   py3,23.91,102.86,3914.16,126
-   py4,21.6,74.05,4609,59
-   aeq,6.73,258.23,6320.07,425
-   caxp,0.56,308.51,4984.95,0
-   ceq,-42.36,182.53,4452.48,400
-   ceqp,-49.12,224.78,4826.13,430
-   cax,-97.33,252.06,4772.37,528
+.. list-table::
+   :header-rows: 1
+   :widths: 18 16 16 18 16
+   :align: center
 
-The columns are:
+   * - assignment
+     - shift (ppm)
+     - width (Hz)
+     - area
+     - R\ :sub:`1` (Hz)
+   * - ``aax``
+     - 82.89
+     - 587.31
+     - 4108.48
+     - 3013
+   * - ``py5``
+     - 24.14
+     - 97.24
+     - 5139.3
+     - 126
+   * - ``py3``
+     - 23.91
+     - 102.86
+     - 3914.16
+     - 126
+   * - ``py4``
+     - 21.6
+     - 74.05
+     - 4609
+     - 59
+   * - ``aeq``
+     - 6.73
+     - 258.23
+     - 6320.07
+     - 425
+   * - ``caxp``
+     - 0.56
+     - 308.51
+     - 4984.95
+     - 0
+   * - ``ceq``
+     - -42.36
+     - 182.53
+     - 4452.48
+     - 400
+   * - ``ceqp``
+     - -49.12
+     - 224.78
+     - 4826.13
+     - 430
+   * - ``cax``
+     - -97.33
+     - 252.06
+     - 4772.37
+     - 528
 
-* ``assignment`` — the chemical-group label the peak belongs to (matching the
+where each column is:
+
+* **assignment** — the chemical-group label the peak belongs to (matching the
   ``chem_labels`` map).
-* ``shift (ppm)`` — the measured chemical shift.
-* ``width (Hz)`` — the peak linewidth (full width at half maximum).
-* ``area ()`` — the integrated peak area.
-* ``r1 (Hz)`` — the longitudinal relaxation rate R\ :sub:`1` (optional).
+* **shift (ppm)** — the measured chemical shift.
+* **width (Hz)** — the peak linewidth (full width at half maximum).
+* **area** — the integrated peak area.
+* **R**\ :sub:`1` **(Hz)** — the longitudinal relaxation rate (optional).
 
-The header comment lines record the temperature (K), magnetic field (T) and
-isotope the data were measured at.
+Create this as ``data/para/experiment.csv`` (run ``mkdir -p data/para`` first).
+The file is plain CSV, with the temperature, field and isotope given as comment
+lines at the top:
+
+.. dropdown:: data/para/experiment.csv  (copy this to the file)
+
+   .. code-block:: text
+      :caption: data/para/experiment.csv
+
+      #temperature 302.15
+      #magnetic_field 4.7
+      #isotope 1H
+      assignment,shift (ppm),width (Hz),area (),r1 (Hz)
+      aax,82.89,587.31,4108.48,3013
+      py5,24.14,97.24,5139.3,126
+      py3,23.91,102.86,3914.16,126
+      py4,21.6,74.05,4609,59
+      aeq,6.73,258.23,6320.07,425
+      caxp,0.56,308.51,4984.95,0
+      ceq,-42.36,182.53,4452.48,400
+      ceqp,-49.12,224.78,4826.13,430
+      cax,-97.33,252.06,4772.37,528
 
 The fit replaces the ``susceptibility`` block with an ``assignment`` block
 (which resolves ambiguous peak assignments) and a ``susc_fit`` block (which
