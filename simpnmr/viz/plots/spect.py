@@ -769,7 +769,13 @@ def plot_raw_deconv_pred(
             and not (i < _n - 1 and abs(t - _lo_d) < _edge_tol)    # low-ppm break
         ]
         if len(_ticks_i) < 2:
-            _ticks_i = [_lo_d + 0.25 * _span_i, _lo_d + 0.75 * _span_i]
+            # Fall back to two evenly-spaced ticks, rounded to a readable value
+            # (integer for wide segments, one decimal for narrow ones) rather
+            # than raw data positions such as -35.48.
+            _q = [_lo_d + 0.25 * _span_i, _lo_d + 0.75 * _span_i]
+            _nd = 0 if _span_i >= 4 else 1
+            _rounded = [round(v, _nd) for v in _q]
+            _ticks_i = _rounded if _rounded[0] != _rounded[1] else _q
         _at.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
         _ab.xaxis.set_major_locator(ticker.FixedLocator(_ticks_i))
         _ab.xaxis.set_minor_locator(ticker.AutoMinorLocator())
