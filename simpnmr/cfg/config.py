@@ -2058,6 +2058,11 @@ class PredictConfig(FitSuscConfig):
             "T1e",
             "T2e",
             "tR",
+            "tau_r_method",
+            "tau_r_solvent",
+            "tau_r_eta",
+            "tau_r_shell",
+            "tau_r_sigma",
             "min_linewidth_hz",
         ],
     }
@@ -2077,6 +2082,11 @@ class PredictConfig(FitSuscConfig):
         self._relaxation_T1e = None
         self._relaxation_T2e = None
         self._relaxation_tR = None
+        self._relaxation_tau_r_method = None
+        self._relaxation_tau_r_solvent = None
+        self._relaxation_tau_r_eta = None
+        self._relaxation_tau_r_shell = None
+        self._relaxation_tau_r_sigma = None
         self._relaxation_min_linewidth_hz = 0.0
 
         super().__init__(**kwargs)
@@ -2342,6 +2352,83 @@ class PredictConfig(FitSuscConfig):
         except Exception:
             raise ValueError(f"Cannot convert tR value {value} to float")
         return None
+
+    @property
+    def relaxation_tau_r_method(self) -> str | None:
+        """Hydrodynamic model for estimating τ_R ('ellipsoid' or 'beadshell').
+
+        When set, τ_R is computed from the molecular geometry and solvent
+        viscosity instead of being read from ``tR``.
+        """
+        return self._relaxation_tau_r_method
+
+    @relaxation_tau_r_method.setter
+    def relaxation_tau_r_method(self, value):
+        if value is None or value == "":
+            self._relaxation_tau_r_method = None
+            return
+        if value not in ("ellipsoid", "beadshell"):
+            raise ValueError(
+                "relaxation:tau_r_method must be 'ellipsoid' or 'beadshell'"
+            )
+        self._relaxation_tau_r_method = value
+
+    @property
+    def relaxation_tau_r_solvent(self) -> str | None:
+        """Solvent name for viscosity lookup when estimating τ_R."""
+        return self._relaxation_tau_r_solvent
+
+    @relaxation_tau_r_solvent.setter
+    def relaxation_tau_r_solvent(self, value):
+        if value is None or value == "":
+            self._relaxation_tau_r_solvent = None
+            return
+        self._relaxation_tau_r_solvent = str(value)
+
+    @property
+    def relaxation_tau_r_eta(self) -> float | None:
+        """Explicit solvent viscosity (Pa·s), overrides ``tau_r_solvent``."""
+        return self._relaxation_tau_r_eta
+
+    @relaxation_tau_r_eta.setter
+    def relaxation_tau_r_eta(self, value):
+        if value is None or value == "":
+            self._relaxation_tau_r_eta = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("relaxation:tau_r_eta must be positive")
+        self._relaxation_tau_r_eta = v
+
+    @property
+    def relaxation_tau_r_shell(self) -> float | None:
+        """Solvent shell thickness (Å) added to vdW radii when estimating τ_R."""
+        return self._relaxation_tau_r_shell
+
+    @relaxation_tau_r_shell.setter
+    def relaxation_tau_r_shell(self, value):
+        if value is None or value == "":
+            self._relaxation_tau_r_shell = None
+            return
+        v = float(value)
+        if v < 0:
+            raise ValueError("relaxation:tau_r_shell must be non-negative")
+        self._relaxation_tau_r_shell = v
+
+    @property
+    def relaxation_tau_r_sigma(self) -> float | None:
+        """Minibead radius (Å) for the bead-shell τ_R model."""
+        return self._relaxation_tau_r_sigma
+
+    @relaxation_tau_r_sigma.setter
+    def relaxation_tau_r_sigma(self, value):
+        if value is None or value == "":
+            self._relaxation_tau_r_sigma = None
+            return
+        v = float(value)
+        if v <= 0:
+            raise ValueError("relaxation:tau_r_sigma must be positive")
+        self._relaxation_tau_r_sigma = v
 
     @property
     def relaxation_min_linewidth_hz(self) -> float:

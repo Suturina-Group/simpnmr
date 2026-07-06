@@ -443,7 +443,17 @@ Optional. Used in workflows that include relaxation-based shift broadening or we
       #Relaxation Parameters
       T1e: 0.2e-12 # Required parameter
       T2e: 0.2e-12 # Required parameter
-      tR: 140e-12 # Required parameter
+
+      # Rotational correlation time τ_R: give EITHER an explicit tR ...
+      tR: 140e-12 # τ_R in seconds (required unless τ_R is estimated below)
+
+      # ... OR have τ_R estimated from the molecular shape and solvent viscosity
+      tau_r_method: ellipsoid   # Optional: 'ellipsoid' (Perrin) or 'beadshell'
+      tau_r_solvent: CDCl3      # Solvent name from the built-in viscosity database
+      tau_r_eta: 5.4e-4         # Optional: explicit viscosity (Pa·s); overrides tau_r_solvent
+      tau_r_shell: 0.0          # Optional: solvent shell thickness added to vdW radii (Å)
+      tau_r_sigma: 0.6          # Optional: minibead radius (Å) for the bead-shell model
+
       min_linewidth_hz: 5.0 # Optional minimum linewidth floor (Hz); added to the
                             # calculated R2/π linewidth before converting to ppm
 
@@ -460,6 +470,14 @@ Optional. Used in workflows that include relaxation-based shift broadening or we
    When a relaxation model is specified, all required relaxation parameters must
    be provided. When relaxation is enabled, ``hyperfine:paramagnetic_centre``
    must also be provided.
+
+   The rotational correlation time τ_R may be given explicitly as ``tR`` (in
+   seconds) or estimated from the molecular geometry and solvent viscosity by
+   setting ``tau_r_method`` (``ellipsoid`` or ``beadshell``) together with either
+   ``tau_r_solvent`` (a name from the built-in solvent database) or ``tau_r_eta``
+   (an explicit viscosity in Pa·s). When ``tau_r_method`` is set, ``tR`` is not
+   required. The estimation uses the ``relaxation:temperature`` (or the
+   experiment temperature) for the viscosity lookup.
 
    Relaxation evaluation also requires temperature and magnetic field values.
    These may be provided explicitly as ``relaxation:temperature`` and

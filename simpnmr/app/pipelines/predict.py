@@ -42,7 +42,7 @@ from simpnmr.app.policies.susc import resolve_susceptibility_source
 
 # Core / domain
 from simpnmr.core.const.gammas import get_nuclear_gamma
-from simpnmr.core.phys.tau_c import get_viscosity, run_ellipsoid
+from simpnmr.core.phys.tau_c import get_viscosity, run_beadshell, run_ellipsoid
 from simpnmr.core.const.physics import EGAMMA
 from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
 from simpnmr.core.domain.mol import Molecule
@@ -913,11 +913,50 @@ def _apply_relaxation_linewidths(
         tau_R = tau_r
     else:
         relaxation_model = config.relaxation_model
-        tau_c1 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T1e))
-        tau_c2 = 1 / ((1 / config.relaxation_tR) + (1 / config.relaxation_T2e))
+        if config.relaxation_tau_r_method is not None:
+            # Estimate τ_R from the molecular shape and solvent viscosity
+            # instead of reading an explicit tR.
+            if config.relaxation_tau_r_eta is not None:
+                eta = config.relaxation_tau_r_eta
+            elif config.relaxation_tau_r_solvent is not None:
+                eta = get_viscosity(config.relaxation_tau_r_solvent, temperature)
+            else:
+                raise ValueError(
+                    "relaxation:tau_r_method requires either 'tau_r_solvent' "
+                    "or 'tau_r_eta' to be set"
+                )
+            atoms = [
+                (remove_numbers(lbl), coord)
+                for lbl, coord in zip(base_molecule.labels, base_molecule.coords)
+            ]
+            if config.relaxation_tau_r_method == "beadshell":
+                _tau_r_result = run_beadshell(
+                    atoms, eta, temperature,
+                    sigma=config.relaxation_tau_r_sigma or 0.6,
+                    shell=config.relaxation_tau_r_shell or 0.0,
+                )
+            else:
+                _tau_r_result = run_ellipsoid(
+                    atoms, eta, temperature,
+                    shell=config.relaxation_tau_r_shell or 0.0,
+                )
+            tau_R = _tau_r_result["tau_iso"]
+            logger.info(
+                "Estimated τ_R = %.1f ps (%s, η=%.3f mPa·s, T=%.1f K)",
+                tau_R * 1e12, config.relaxation_tau_r_method,
+                eta * 1e3, temperature,
+            )
+        elif config.relaxation_tR is not None:
+            tau_R = config.relaxation_tR
+        else:
+            raise ValueError(
+                "A relaxation model requires either 'tR' or a τ_R estimation "
+                "method ('tau_r_method' with 'tau_r_solvent' or 'tau_r_eta')"
+            )
+        tau_c1 = 1 / ((1 / tau_R) + (1 / config.relaxation_T1e))
+        tau_c2 = 1 / ((1 / tau_R) + (1 / config.relaxation_T2e))
         tau_e1 = config.relaxation_T1e
         tau_e2 = config.relaxation_T2e
-        tau_R = config.relaxation_tR
 
     # Solomon linewidths if relaxation model is SBM
     nuclei_labels = (
