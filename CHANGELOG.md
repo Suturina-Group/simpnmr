@@ -2,6 +2,87 @@
 
 <!-- version list -->
 
+## v2.1.0 (2026-07-06)
+
+### Bug Fixes
+
+- **predict**: Only model relaxation when a relaxation block is configured
+  ([`49e24c7`](https://gitlab.com/suturina-group/simpnmr/-/commit/49e24c7ac08fd6483a604e235276bcd14335218f))
+
+- **susc**: Supply g_e·g cross-products in Bleaney susceptibility
+  ([`9bc3d45`](https://gitlab.com/suturina-group/simpnmr/-/commit/9bc3d45c1e5a56e13d4904fd448c1d370d7e6c9b))
+
+- **susc**: Use Curie g_J² for the Bleaney isotropic susceptibility
+  ([`d43afe5`](https://gitlab.com/suturina-group/simpnmr/-/commit/d43afe544cabed09e85ad19e1c8c2fda8879b312))
+
+- **viz**: Round broken-axis spectrum fallback ticks
+  ([`6b7327e`](https://gitlab.com/suturina-group/simpnmr/-/commit/6b7327eee46e42b878c8069b64606beac33e7c38))
+
+### Documentation
+
+- Add macOS Automator app instructions
+  ([`707e3bb`](https://gitlab.com/suturina-group/simpnmr/-/commit/707e3bb003d9c7b02e0d37d79e36ad535e585bf8))
+
+- Add T, frequency and solvent to the experimental spectrum caption
+  ([`8ba98d7`](https://gitlab.com/suturina-group/simpnmr/-/commit/8ba98d731d076775c3ee93dcf5314ffb1926faff))
+
+- Beginner-friendly, OS-tabbed installation guide
+  ([`c97bcf8`](https://gitlab.com/suturina-group/simpnmr/-/commit/c97bcf85c9f4b322fc59969625eddf75015df376))
+
+- Correct deconvolution wording (spectrum -> sum of Lorentzians)
+  ([`95ed2c8`](https://gitlab.com/suturina-group/simpnmr/-/commit/95ed2c835b12887362d95a46983a3618cac10818))
+
+- Describe B20 as the Stevens-operator crystal-field parameter
+  ([`cc8788a`](https://gitlab.com/suturina-group/simpnmr/-/commit/cc8788ab4b96cf30030dcc74bcd2fcfa0977f5d4))
+
+- Embed the predicted spectrum figure in the Dy tutorial
+  ([`c13bd42`](https://gitlab.com/suturina-group/simpnmr/-/commit/c13bd4240800157e3028c05d6788fe9eb7499324))
+
+- Embed the relaxation spectrum figure in the Dy tutorial
+  ([`37b6e1b`](https://gitlab.com/suturina-group/simpnmr/-/commit/37b6e1b40881ff7c229913b7ae3610ef715307c4))
+
+- Expand and correct the Dy susceptibility-fitting tutorial
+  ([`ef2cc34`](https://gitlab.com/suturina-group/simpnmr/-/commit/ef2cc34cfb5dbe0eded481eccfa7fccc5fd6809c))
+
+- Explain peak deconvolution and experiment.csv columns in Dy fit
+  ([`c81c0a7`](https://gitlab.com/suturina-group/simpnmr/-/commit/c81c0a7003a34bc595e70855b0458388d2a286a5))
+
+- Give each tutorial workflow a descriptive project name
+  ([`f88087d`](https://gitlab.com/suturina-group/simpnmr/-/commit/f88087dab6cb8e645a97858f737ee1b63d3fb770))
+
+- Inline tutorial example files, drop bulk examples.zip
+  ([`8538713`](https://gitlab.com/suturina-group/simpnmr/-/commit/8538713e1c1a491f81b15beed85a4c08e659a476))
+
+- Open the Dy fitting section with the experimental spectrum
+  ([`89e13fa`](https://gitlab.com/suturina-group/simpnmr/-/commit/89e13fa83b68e6b62c1a2b7c286cfce8de5e19cb))
+
+- Rename Dy fitting section to cover assignment and susceptibility fit
+  ([`83b338c`](https://gitlab.com/suturina-group/simpnmr/-/commit/83b338c60ec7a166c42edc9373181d5321d4e057))
+
+- Render the experiment.csv peak data as a table in the Dy fit
+  ([`324db82`](https://gitlab.com/suturina-group/simpnmr/-/commit/324db829bb6ec8fbc1601c9435d364048ed95a51))
+
+- Restructure tutorials into Dy(III) and Fe(II) worked examples
+  ([`964c5b8`](https://gitlab.com/suturina-group/simpnmr/-/commit/964c5b81a69e244cc16f607ec4b4f63b1d2aa94c))
+
+- Show unmeasured R1 as empty, not 0, in the Dy fit example
+  ([`5935e2c`](https://gitlab.com/suturina-group/simpnmr/-/commit/5935e2cac0f180ea32dbca67f4091aa229f7fce8))
+
+- Use B20 = -100 cm^-1 in the Dy tutorial and regenerate spectra
+  ([`b295dc8`](https://gitlab.com/suturina-group/simpnmr/-/commit/b295dc8a8ad98b91d902b28da1fd4931bb700766))
+
+- Use methanol as the τ_R solvent in the Dy tutorial
+  ([`a4da8af`](https://gitlab.com/suturina-group/simpnmr/-/commit/a4da8af69d303c75ada7a6d6ec22674904d86e56))
+
+### Features
+
+- **packaging**: Windows desktop installer with GitLab release upload
+  ([`e27bb38`](https://gitlab.com/suturina-group/simpnmr/-/commit/e27bb38c6c990cef1df78fc61324447693597821))
+
+- **relaxation**: Estimate tau_R from solvent and temperature in predict
+  ([`744c363`](https://gitlab.com/suturina-group/simpnmr/-/commit/744c3636362b6cb8b7816b2c8a0314694d3b404e))
+
+
 ## v2.0.0 (2026-07-03)
 
 ### Bug Fixes
