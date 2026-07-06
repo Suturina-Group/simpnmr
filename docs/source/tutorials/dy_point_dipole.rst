@@ -562,7 +562,7 @@ signal, here recorded at 302.15 K and 4.7 T for :sup:`1`\ H:
      - 0.56
      - 308.51
      - 4984.95
-     - 0
+     - —
    * - ``ceq``
      - -42.36
      - 182.53
@@ -586,7 +586,9 @@ where each column is:
 * **shift (ppm)** — the measured chemical shift.
 * **width (Hz)** — the peak linewidth (full width at half maximum).
 * **area** — the integrated peak area.
-* **R**\ :sub:`1` **(Hz)** — the longitudinal relaxation rate (optional).
+* **R**\ :sub:`1` **(Hz)** — the longitudinal relaxation rate (optional; leave
+  the field empty for any peak whose R\ :sub:`1` was not measured, as for
+  ``caxp`` here).
 
 Create this as ``data/para/experiment.csv`` (run ``mkdir -p data/para`` first).
 The file is plain CSV, with the temperature, field and isotope given as comment
@@ -606,7 +608,7 @@ lines at the top:
       py3,23.91,102.86,3914.16,126
       py4,21.6,74.05,4609,59
       aeq,6.73,258.23,6320.07,425
-      caxp,0.56,308.51,4984.95,0
+      caxp,0.56,308.51,4984.95,
       ceq,-42.36,182.53,4452.48,400
       ceqp,-49.12,224.78,4826.13,430
       cax,-97.33,252.06,4772.37,528
