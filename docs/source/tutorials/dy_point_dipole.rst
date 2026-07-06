@@ -494,8 +494,27 @@ With the relaxation model the predicted peaks now carry physical linewidths:
 3. Assignment of experimental peaks and fitting of the magnetic susceptibility
 ------------------------------------------------------------------------------
 
-The inverse of a prediction: given a measured peak list, fit the susceptibility
-tensor. This replaces the ``susceptibility`` block with an ``assignment`` block
+The inverse of a prediction: rather than computing shifts, we start from a
+measured :sup:`1`\ H spectrum, assign its paramagnetic peaks to chemical groups,
+and fit the susceptibility tensor that best reproduces them.
+
+The starting point is the measured spectrum:
+
+.. figure:: /_static/dy_exp_spectrum.png
+   :alt: Experimental 1H NMR spectrum of the Dy(III) complex
+   :width: 95%
+   :align: center
+
+   The measured :sup:`1`\ H spectrum of the complex (``raw_spectrum.csv``),
+   spanning roughly +121 to −121 ppm. Sharp peaks near 0 ppm are the
+   diamagnetic region; the well-resolved peaks spread to high and low frequency
+   are the paramagnetically shifted protons that the fit assigns and reproduces.
+
+Download the spectrum and save it as ``data/para/raw_spectrum.csv``:
+
+* :download:`raw_spectrum.csv <../_downloads/examples/03_Shift_Prediction_With_Relaxation/data/para/raw_spectrum.csv>`
+
+The fit replaces the ``susceptibility`` block with an ``assignment`` block
 (which resolves ambiguous peak assignments) and a ``susc_fit`` block (which
 defines the fitted tensor model), and adds an ``experiment`` block pointing at
 the measured data. It reuses the same ``structure.xyz``,
@@ -563,11 +582,9 @@ Create the measured peak list in a new ``data/para/`` folder
    ceqp,-49.12,224.78,4826.13,430
    cax,-97.33,252.06,4772.37,528
 
-The raw spectrum (``spectrum_files``, used to overlay the predicted and measured
-spectra) is a large two-column trace, too big to paste — download it and save it
-as ``data/para/raw_spectrum.csv``:
-
-* :download:`raw_spectrum.csv <../_downloads/examples/03_Shift_Prediction_With_Relaxation/data/para/raw_spectrum.csv>`
+This peak list is the assignment table the fit works from; the continuous
+``raw_spectrum.csv`` above (referenced by ``spectrum_files``) is used to overlay
+the predicted and measured spectra in the output figures.
 
 Run the fit:
 
