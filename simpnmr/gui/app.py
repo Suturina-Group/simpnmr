@@ -1740,8 +1740,14 @@ class SimpNMRWindow(QMainWindow):
         ):
             extra_flags.append("--pcs_isosurface")
         base = ["--hide", mode] if hide else [mode]
+        if getattr(sys, "frozen", False):
+            # Frozen build: re-invoke this same executable as the CLI worker
+            # (there is no separate python.exe). See main().
+            launcher = [sys.executable, "--run-pipeline"]
+        else:
+            launcher = [sys.executable, "-c", entry]
         cmd = (
-            [sys.executable, "-c", entry]
+            launcher
             + base + extra_flags
             + [str(self._yaml_path)]
         )
@@ -2135,7 +2141,45 @@ if _MATPLOTLIB_QT_OK:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _run_frozen_worker_if_requested() -> bool:
+    """In a PyInstaller build, let this executable act as the CLI worker.
+
+    A frozen application has no separate ``python.exe`` to launch, so the GUI
+    re-invokes *this same executable* with a ``--run-pipeline`` sentinel to run
+    a workflow (see ``RunController._run``). When that sentinel is present we
+    dispatch to the normal CLI entry point instead of opening the GUI.
+
+    Returns ``True`` when the process handled a pipeline run and the caller
+    should exit without starting the GUI.
+    """
+    if not getattr(sys, "frozen", False):
+        return False
+    if "--run-pipeline" not in sys.argv:
+        return False
+    sys.argv.remove("--run-pipeline")
+    from simpnmr.cli.main import interface
+
+    interface()
+    return True
+
+
 def main():
+    # Support pipeline worker subprocesses spawned by pathos/multiprocess in a
+    # frozen build. freeze_support() must run before anything else; it is a
+    # no-op in a normal (non-frozen) interpreter.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+    try:  # pathos ships its own multiprocessing fork
+        import multiprocess
+
+        multiprocess.freeze_support()
+    except Exception:
+        pass
+
+    if _run_frozen_worker_if_requested():
+        return
+
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     win = SimpNMRWindow()
