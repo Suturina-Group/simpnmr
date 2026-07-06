@@ -361,6 +361,18 @@ pseudocontact-shift field that can be opened in molecular-visualisation software
 to display the field around the complex. For a full description of every output
 file, see :doc:`../user_guide/output_files`.
 
+The predicted spectrum gives a quick visual check of the result:
+
+.. figure:: /_static/dy_pred_spectrum.png
+   :alt: Predicted 1H NMR spectrum of the Dy(III) complex
+   :width: 95%
+   :align: center
+
+   ``pred_spectrum_302.15_K.pdf`` — the predicted :sup:`1`\ H spectrum. Each
+   chemical group appears at its averaged paramagnetic shift, spanning roughly
+   +145 to −110 ppm. Because no relaxation model is set, the peaks carry the
+   cosmetic display width described above.
+
 2. Adding a relaxation model
 ----------------------------
 
