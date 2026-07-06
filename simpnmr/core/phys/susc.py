@@ -13,7 +13,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from simpnmr.core.build.eff_factors import calc_g_eff, choose_S_eff
-from simpnmr.core.const.physics import C, H, KB, MU0, MUB
+from simpnmr.core.const.physics import C, GE, H, KB, MU0, MUB
 
 
 def get_spin_only_susc(
@@ -219,7 +219,14 @@ def build_susceptibility_from_bleaney(
     # g_J² enters explicitly as g_sq_iso; the Curie prefactor C₀ carries
     # only μ₀ μ_B² J(J+1)/(3 k_B) without a g² factor.
     g_J = calc_g_eff(spin, orbit_L, total_J)
-    g_sq = {"g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0}
+    # g² invariants drive the ax/rh components; the g-corrected iso component
+    # additionally needs the g_e·g cross-products. For an isotropic g_J the
+    # anisotropic cross-products vanish and ge_g_iso = g_e·g_J (matching
+    # compute_g_sq_components in the g-tensor path).
+    g_sq = {
+        "g_sq_iso": g_J ** 2, "g_sq_ax": 0.0, "g_sq_rh": 0.0,
+        "ge_g_iso": GE * g_J, "ge_g_ax": 0.0, "ge_g_rh": 0.0,
+    }
     prefactor = compute_chi_prefactor(spin, total_J)   # C₀, no g_J²
 
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
