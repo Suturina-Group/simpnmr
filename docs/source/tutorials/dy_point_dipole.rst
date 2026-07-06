@@ -344,13 +344,17 @@ All results are written to the ``output/`` directory:
    ├── structure.xyz                        # structure with atom labels
    └── chemcraft_structure.xyz              # structure for ChemCraft
 
-(The R\ :sub:`1` and linewidth relaxation-decomposition plots are only produced
-when a ``relaxation`` block is present — see workflow 2.)
+Because there is no ``relaxation`` block, no relaxation model is applied: there
+are no R\ :sub:`1`/linewidth relaxation-decomposition plots, and the predicted
+peaks are given a small cosmetic display width (a fixed fraction of the shift
+range) purely so the spectrum is drawable. Add a ``relaxation`` block
+(workflow 2) to compute physical linewidths and relaxation rates.
 
 The two most useful files are ``peak_data_302.15_K.csv`` (one row per chemical
 group, with the total shift and its diamagnetic / pseudocontact / Fermi-contact
-decomposition; predicted linewidths and relaxation rates are added here only
-when a relaxation model is set up, as in workflow 2) and
+decomposition, plus the cosmetic ``linewidth_avg_auto`` display width; physical
+linewidths and R\ :sub:`1`/R\ :sub:`2` rates appear only with a relaxation
+block, as in workflow 2) and
 ``hyperfines_and_shifts_302.15_K.csv`` (one row per nucleus, before averaging).
 The run also writes ``pcs_isosurf_302.15_K.cube`` — an isosurface of the
 pseudocontact-shift field that can be opened in molecular-visualisation software

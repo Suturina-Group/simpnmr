@@ -29,7 +29,10 @@ from simpnmr.app.loaders.sh_load import (
 from simpnmr.app.loaders.susc_load import load_susceptibilities
 from simpnmr.app.params.options import PredictRunOptions
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
-from simpnmr.app.policies.linewidth import resolve_output_linewidths
+from simpnmr.app.policies.linewidth import (
+    AUTO_LINEWIDTH_FRACTION,
+    resolve_output_linewidths,
+)
 from simpnmr.core.domain.tensor import Susceptibility
 from simpnmr.core.phys.susc import (
     build_susceptibility_from_bleaney,
@@ -691,6 +694,18 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                 np.max([nuc.shift.avg for nuc in iso_nuclei]),
             ]
 
+            # Without a relaxation model no per-nucleus linewidths are set, so
+            # give the spectrum a cosmetic display width (a small fraction of
+            # the shift range) — the same fallback resolve_output_linewidths
+            # writes to the peak_data "auto" column. Leaving nuc.shift.lw unset
+            # keeps that column labelled "auto" rather than "relax".
+            _eff_lw = None
+            if all(nuc.shift.lw is None for nuc in iso_nuclei):
+                _disp_lw = AUTO_LINEWIDTH_FRACTION * abs(
+                    shift_range[1] - shift_range[0]
+                )
+                _eff_lw = {nuc.label: _disp_lw for nuc in iso_nuclei}
+
             with spec.context():
                 if len(config.experiment_files):
                     plot_raw_deconv_pred(
@@ -699,6 +714,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                         shift_range=shift_range,
                         experiment=experiment,
                         spec=spec,
+                        effective_linewidths_by_label=_eff_lw,
                         save=True,
                         show=options.runtime.show_plots,
                         save_name=os.path.join(
@@ -712,6 +728,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
                     isotope=iso,
                     shift_range=shift_range,
                     spec=spec,
+                    effective_linewidths_by_label=_eff_lw,
                     save=True,
                     show=options.runtime.show_plots,
                     save_name=os.path.join(
@@ -839,16 +856,15 @@ def _apply_relaxation_linewidths(
     """
     Apply linewidths using a relaxation model.
 
-    When ``relaxation_model`` is not set in *config*, the rotational
-    correlation time is estimated automatically from the molecular geometry
-    via the Perrin ellipsoid model (water viscosity, temperature-corrected).
-    Temperature defaults to 298 K and magnetic field to 11.75 T when not
-    available from the experiment.  The electronic correlation time defaults
-    to 1 ps and the SBM model is used.  All chosen parameters are logged at
-    INFO level.
+    Relaxation is modelled only when a ``relaxation`` block is explicitly
+    configured (``relaxation_model`` set). In that case the user-supplied
+    ``relaxation_T1e`` / ``relaxation_T2e`` are used together with either an
+    explicit ``relaxation_tR`` or a τ_R estimated from ``relaxation_tau_r_method``
+    and the solvent viscosity.
 
-    When a ``relaxation_model`` is explicitly configured, the user-supplied
-    ``relaxation_tR``, ``relaxation_T1e``, and ``relaxation_T2e`` are used.
+    When no ``relaxation`` block is configured, this function is a no-op:
+    ``base_molecule.relaxation`` is left unset and predicted linewidths fall
+    back to an automatic display width (see ``resolve_output_linewidths``).
 
     This function updates `base_molecule` in-place by storing the computed
     relaxation evaluation in the domain object and by setting `nuc.shift.lw`
@@ -866,97 +882,68 @@ def _apply_relaxation_linewidths(
         None
     """
 
-    _DEFAULT_TAU_E = 1e-12  # 1 ps
-    _DEFAULT_SOLVENT = "water"
-    _DEFAULT_MODEL = "sbm curie"
-    _DEFAULT_TEMPERATURE = 298.0   # K
-    _DEFAULT_FIELD = 11.75         # T  (500 MHz ¹H)
-
-    auto_mode = not getattr(config, "relaxation_model", None)
+    # Relaxation is only modelled when a relaxation block is explicitly
+    # configured. Without one, no relaxation object is stored and predicted
+    # linewidths fall back to an automatic display width (see
+    # resolve_output_linewidths).
+    if not getattr(config, "relaxation_model", None):
+        base_molecule.relaxation = None
+        return
 
     temperature, magnetic_field_tesla = resolve_relaxation_conditions(
         config,
         experiment,
     )
 
-    if auto_mode:
-        if temperature is None:
-            temperature = _DEFAULT_TEMPERATURE
-        if magnetic_field_tesla is None:
-            magnetic_field_tesla = _DEFAULT_FIELD
-
     if magnetic_field_tesla is None or temperature is None:
         base_molecule.relaxation = None
         return
 
-    if auto_mode:
-        eta = get_viscosity(_DEFAULT_SOLVENT, temperature)
+    relaxation_model = config.relaxation_model
+    if config.relaxation_tau_r_method is not None:
+        # Estimate τ_R from the molecular shape and solvent viscosity
+        # instead of reading an explicit tR.
+        if config.relaxation_tau_r_eta is not None:
+            eta = config.relaxation_tau_r_eta
+        elif config.relaxation_tau_r_solvent is not None:
+            eta = get_viscosity(config.relaxation_tau_r_solvent, temperature)
+        else:
+            raise ValueError(
+                "relaxation:tau_r_method requires either 'tau_r_solvent' "
+                "or 'tau_r_eta' to be set"
+            )
         atoms = [
             (remove_numbers(lbl), coord)
             for lbl, coord in zip(base_molecule.labels, base_molecule.coords)
         ]
-        tau_r_result = run_ellipsoid(atoms, eta, temperature)
-        tau_r = tau_r_result["tau_iso"]
-        tau_e = _DEFAULT_TAU_E
-        relaxation_model = _DEFAULT_MODEL
-        logger.info(
-            "No relaxation model configured — auto τ_R = %.1f ps "
-            "(Perrin ellipsoid, η=%.3f mPa·s, T=%.1f K), τ_e = %.1f ps, "
-            "B0 = %.2f T, model = %s",
-            tau_r * 1e12, eta * 1e3, temperature, tau_e * 1e12,
-            magnetic_field_tesla, relaxation_model,
-        )
-        tau_c1 = 1.0 / (1.0 / tau_r + 1.0 / tau_e)
-        tau_c2 = tau_c1
-        tau_e1 = tau_e
-        tau_e2 = tau_e
-        tau_R = tau_r
-    else:
-        relaxation_model = config.relaxation_model
-        if config.relaxation_tau_r_method is not None:
-            # Estimate τ_R from the molecular shape and solvent viscosity
-            # instead of reading an explicit tR.
-            if config.relaxation_tau_r_eta is not None:
-                eta = config.relaxation_tau_r_eta
-            elif config.relaxation_tau_r_solvent is not None:
-                eta = get_viscosity(config.relaxation_tau_r_solvent, temperature)
-            else:
-                raise ValueError(
-                    "relaxation:tau_r_method requires either 'tau_r_solvent' "
-                    "or 'tau_r_eta' to be set"
-                )
-            atoms = [
-                (remove_numbers(lbl), coord)
-                for lbl, coord in zip(base_molecule.labels, base_molecule.coords)
-            ]
-            if config.relaxation_tau_r_method == "beadshell":
-                _tau_r_result = run_beadshell(
-                    atoms, eta, temperature,
-                    sigma=config.relaxation_tau_r_sigma or 0.6,
-                    shell=config.relaxation_tau_r_shell or 0.0,
-                )
-            else:
-                _tau_r_result = run_ellipsoid(
-                    atoms, eta, temperature,
-                    shell=config.relaxation_tau_r_shell or 0.0,
-                )
-            tau_R = _tau_r_result["tau_iso"]
-            logger.info(
-                "Estimated τ_R = %.1f ps (%s, η=%.3f mPa·s, T=%.1f K)",
-                tau_R * 1e12, config.relaxation_tau_r_method,
-                eta * 1e3, temperature,
+        if config.relaxation_tau_r_method == "beadshell":
+            _tau_r_result = run_beadshell(
+                atoms, eta, temperature,
+                sigma=config.relaxation_tau_r_sigma or 0.6,
+                shell=config.relaxation_tau_r_shell or 0.0,
             )
-        elif config.relaxation_tR is not None:
-            tau_R = config.relaxation_tR
         else:
-            raise ValueError(
-                "A relaxation model requires either 'tR' or a τ_R estimation "
-                "method ('tau_r_method' with 'tau_r_solvent' or 'tau_r_eta')"
+            _tau_r_result = run_ellipsoid(
+                atoms, eta, temperature,
+                shell=config.relaxation_tau_r_shell or 0.0,
             )
-        tau_c1 = 1 / ((1 / tau_R) + (1 / config.relaxation_T1e))
-        tau_c2 = 1 / ((1 / tau_R) + (1 / config.relaxation_T2e))
-        tau_e1 = config.relaxation_T1e
-        tau_e2 = config.relaxation_T2e
+        tau_R = _tau_r_result["tau_iso"]
+        logger.info(
+            "Estimated τ_R = %.1f ps (%s, η=%.3f mPa·s, T=%.1f K)",
+            tau_R * 1e12, config.relaxation_tau_r_method,
+            eta * 1e3, temperature,
+        )
+    elif config.relaxation_tR is not None:
+        tau_R = config.relaxation_tR
+    else:
+        raise ValueError(
+            "A relaxation model requires either 'tR' or a τ_R estimation "
+            "method ('tau_r_method' with 'tau_r_solvent' or 'tau_r_eta')"
+        )
+    tau_c1 = 1 / ((1 / tau_R) + (1 / config.relaxation_T1e))
+    tau_c2 = 1 / ((1 / tau_R) + (1 / config.relaxation_T2e))
+    tau_e1 = config.relaxation_T1e
+    tau_e2 = config.relaxation_T2e
 
     # Solomon linewidths if relaxation model is SBM
     nuclei_labels = (

@@ -145,8 +145,11 @@ For susceptibility fitting workflows (``fit_susc``), the names of all generated 
       shift contributions, written only when an orbital contribution is
       available.
     * ``linewidth_avg`` (ppm) — predicted linewidth. Named
-      ``linewidth_avg_relax`` when derived from the relaxation model rather
-      than the r\ :sup:`−6` linewidth fit.
+      ``linewidth_avg_relax`` when derived from a relaxation model, or
+      ``linewidth_avg_auto`` when neither a relaxation model nor an
+      r\ :sup:`−6` linewidth fit is available, in which case a cosmetic display
+      width (a fixed fraction of the shift range) is written so the spectrum
+      remains drawable.
     * ``R1_total``, ``R1_sbm_dipolar``, ``R1_sbm_contact``, ``R1_curie``
       (s\ :sup:`−1`) — longitudinal relaxation rate and its
       Solomon–Bloembergen–Morgan dipolar/contact and Curie components.

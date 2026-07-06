@@ -9,11 +9,23 @@ the molecular shape and solvent viscosity instead of requiring an explicit
 ``tR``.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
+from simpnmr.app.pipelines.predict import _apply_relaxation_linewidths
 from simpnmr.cfg.config import PredictConfig
 from simpnmr.core.phys.tau_c import get_viscosity, run_ellipsoid
+
+
+@pytest.mark.unit
+def test_predict_skips_relaxation_without_block():
+    """No relaxation block → no relaxation model applied (molecule.relaxation None)."""
+    config = SimpleNamespace(relaxation_model="")
+    molecule = SimpleNamespace(relaxation="unset-sentinel")
+    _apply_relaxation_linewidths(config, molecule, None)
+    assert molecule.relaxation is None
 
 
 @pytest.mark.unit
