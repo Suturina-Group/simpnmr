@@ -506,6 +506,7 @@ The starting point is the measured spectrum:
    :align: center
 
    The measured :sup:`1`\ H spectrum of the complex (``raw_spectrum.csv``),
+   recorded at 302.15 K (29 °C) and 200 MHz (:sup:`1`\ H, 4.7 T) in methanol,
    spanning roughly +121 to −121 ppm. Sharp peaks near 0 ppm are the
    diamagnetic region; the well-resolved peaks spread to high and low frequency
    are the paramagnetically shifted protons that the fit assigns and reproduces.
