@@ -21,6 +21,23 @@ import yaml_include
 logger = logging.getLogger(__name__)
 
 
+def _safe_project_name(value: str) -> str:
+    """Validate ``project:name``, which becomes the output directory.
+
+    Reject absolute paths and ``..`` components so a config cannot direct
+    output outside the working directory (path traversal). Ordinary names and
+    nested sub-directories (e.g. ``results/run1``) are allowed.
+    """
+    name = str(value)
+    parts = name.replace("\\", "/").split("/")
+    if os.path.isabs(name) or ".." in parts:
+        raise ValueError(
+            f"project:name must be a relative directory name without '..': "
+            f"{value!r}"
+        )
+    return name
+
+
 class Config(ABC):
     @property
     @abstractmethod
@@ -56,11 +73,19 @@ class Config(ABC):
             Exception: Propagates any other unexpected I/O or parsing errors.
         """
 
-        yaml.add_constructor("!inc", yaml_include.Constructor(base_dir="."))
+        # Register the include constructor on SafeLoader so that safe_load
+        # (used below) still resolves ``!inc`` tags. safe_load avoids the
+        # arbitrary Python-object construction that full_load/UnsafeLoader
+        # permit, so a malicious config cannot execute code.
+        yaml.add_constructor(
+            "!inc",
+            yaml_include.Constructor(base_dir="."),
+            Loader=yaml.SafeLoader,
+        )
 
         try:
             with open(file_name, "r") as f:
-                parsed = yaml.full_load(f)
+                parsed = yaml.safe_load(f)
 
         except yaml.YAMLError as e:
             raise yaml.YAMLError(
@@ -617,9 +642,9 @@ class FitSuscConfig(Config):
     @project_name.setter
     def project_name(self, value: str):
         if isinstance(value, list):
-            self._project_name = value[0]
+            self._project_name = _safe_project_name(value[0])
         elif isinstance(value, str):
-            self._project_name = value
+            self._project_name = _safe_project_name(value)
         else:
             raise ValueError
         return None
@@ -2719,9 +2744,9 @@ class PlotHFCConfig(FitSuscConfig):
     @project_name.setter
     def project_name(self, value: str):
         if isinstance(value, list):
-            self._project_name = value[0]
+            self._project_name = _safe_project_name(value[0])
         elif isinstance(value, str):
-            self._project_name = value
+            self._project_name = _safe_project_name(value)
         else:
             raise ValueError
         return None
