@@ -108,6 +108,17 @@ def _load_legacy_experiments(file_name: str) -> list[Experiment]:
         )
     temperature, magnetic_field = meta
 
+    # Optional isotope from the "# isotope <name>" header, so signals from
+    # different isotopes (e.g. separate 1H and 13C files) are tagged and can be
+    # filtered per isotope downstream.
+    try:
+        isotope = find_first_group(
+            file_name, r"# *isotope +(\S+)", re.IGNORECASE
+        )
+        isotope = isotope.strip() if isotope else None
+    except (IndexError, ValueError, TypeError):
+        isotope = None
+
     # Read CSV, skipping comment lines
     lines = []
     with open(file_name, encoding="utf-8-sig") as f:
@@ -156,6 +167,7 @@ def _load_legacy_experiments(file_name: str) -> list[Experiment]:
             str(row[asgn_col]),
             l_to_g=l_to_g,
             r1=r1,
+            isotope=isotope,
         ))
 
     return [Experiment(temperature, magnetic_field, signals)]
