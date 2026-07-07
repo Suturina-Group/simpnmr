@@ -2,6 +2,54 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-07-07)
+
+### Bug Fixes
+
+- **exp**: Read a trailing isotope column in wide-format experiment files
+  ([`74014a2`](https://gitlab.com/suturina-group/simpnmr/-/commit/74014a2d1e453e6d553b9310ffd20d76ba247887))
+
+- **exp**: Tag comment-format experiment signals with the isotope header
+  ([`e9f669d`](https://gitlab.com/suturina-group/simpnmr/-/commit/e9f669d7c1046689df50e28a6af311a9885f808d))
+
+- **gui**: Drop the isotope/temperature title from spectrum panels
+  ([`c24b3ad`](https://gitlab.com/suturina-group/simpnmr/-/commit/c24b3ad8aeb6a92e572f765008dd5a8d97cb7a86))
+
+- **gui**: Isolate post-run result loaders so a display error can't crash the app
+  ([`af15a51`](https://gitlab.com/suturina-group/simpnmr/-/commit/af15a51a62e8d03eaf5fd49dea13b4eceff29bc7))
+
+- **packaging**: Bundle matplotlib output backends in Windows build
+  ([`e7c0010`](https://gitlab.com/suturina-group/simpnmr/-/commit/e7c0010089b7160a682a647f000f13082d3a9228))
+
+- **predict**: Warn on susceptibility/hyperfine geometry mismatch
+  ([`4f1b93b`](https://gitlab.com/suturina-group/simpnmr/-/commit/4f1b93bc49ecaea50dbbba2fd14c3010cec98ace))
+
+- **security**: Harden config parsing, viewer HTML, and output paths
+  ([`545eee5`](https://gitlab.com/suturina-group/simpnmr/-/commit/545eee57b792c94db00bd89445650614cdf5bd71))
+
+### Continuous Integration
+
+- **windows**: Also attach the installer to the GitLab release on manual runs
+  ([`d293e5c`](https://gitlab.com/suturina-group/simpnmr/-/commit/d293e5c7cdbda71d7b987fc556bf13e5fb4840f0))
+
+- **windows**: Bump actions to Node 24 majors
+  ([`eb82fc2`](https://gitlab.com/suturina-group/simpnmr/-/commit/eb82fc223c3f9e0bdeb074a6b4e812209924e9cc))
+
+- **windows**: Fix PowerShell parse error from non-ASCII in build scripts
+  ([`fed9a1e`](https://gitlab.com/suturina-group/simpnmr/-/commit/fed9a1ea3fc5844a3869b9af320f490910882f50))
+
+### Documentation
+
+- Add a license and liability disclaimer to the home page
+  ([`229efb2`](https://gitlab.com/suturina-group/simpnmr/-/commit/229efb2ccda74912a0d993c1ecf8f13bb691ba18))
+
+- Add the SimpNMR preprint (ChemRxiv DOI) to the citation notes
+  ([`404192b`](https://gitlab.com/suturina-group/simpnmr/-/commit/404192b211a902b302cb30936f4b8052ba76c24b))
+
+- Link the Windows installer directly (auto-versioned)
+  ([`3ebae6e`](https://gitlab.com/suturina-group/simpnmr/-/commit/3ebae6efd74017297b3322308bdad38e691e7df4))
+
+
 ## v2.1.0 (2026-07-06)
 
 ### Bug Fixes
