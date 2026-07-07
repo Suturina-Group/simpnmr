@@ -1986,15 +1986,6 @@ if _MATPLOTLIB_QT_OK:
                     continue
 
                 iso = sp["isotope"]
-                temp = sp["temperature"]
-                title_parts = []
-                if iso:
-                    title_parts.append(iso)
-                if temp is not None:
-                    title_parts.append(f"{temp:.1f} K")
-                subtitle = (
-                    "  ".join(title_parts) if title_parts else path.stem
-                )
                 xlabel = f"{iso} δ (ppm)" if iso else "δ (ppm)"
 
                 lbl_counts = counts_map.get(iso or "", {})
@@ -2009,7 +2000,6 @@ if _MATPLOTLIB_QT_OK:
                     "peak_x": sp["peak_shifts"],
                     "peak_lbl": sp["peak_labels"],
                     "peak_n": peak_n,
-                    "subtitle": subtitle,
                     "xlabel": xlabel,
                     "_busy": False,
                 }
@@ -2049,7 +2039,6 @@ if _MATPLOTLIB_QT_OK:
 
             # ── chrome ───────────────────────────────────────────────
             ax.set_yticks([])
-            ax.set_title(data["subtitle"], fontsize=9, pad=4)
             ax.set_xlabel(data["xlabel"], fontsize=8)
             ax.tick_params(labelsize=7)
             ax.spines[["right", "top", "left"]].set_visible(False)
