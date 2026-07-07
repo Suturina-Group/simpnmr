@@ -15,7 +15,7 @@ This spec is invoked by ``build.ps1`` and by the CI Windows build job.
 
 import os
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # Resolve the repository root relative to this spec file. PyInstaller executes
 # the spec with ``__file__`` available, but SPECPATH is the robust way.
@@ -40,6 +40,13 @@ hiddenimports = [
     "multiprocess",
     "dill",
 ]
+
+# matplotlib chooses its output backend at save time via importlib, so the
+# non-interactive backends (backend_pdf, backend_svg, backend_agg, ...) are
+# invisible to PyInstaller's static analysis. PDF export in particular
+# (viz/layout/export.py -> savefig(*.pdf)) needs matplotlib.backends.backend_pdf.
+# Collect every backend submodule so any format the pipelines write is present.
+hiddenimports += collect_submodules("matplotlib.backends")
 
 # Qt WebEngine ships a large set of resources, translations and the QtWebEngine
 # process executable; collect_all makes sure they are all bundled.
