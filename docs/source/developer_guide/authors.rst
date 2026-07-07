@@ -14,7 +14,10 @@ Citation
 
 To acknowledge ``SimpNMR`` in your work, please include the ``simpnmr`` version number and cite the associated publication.
 
-The primary reference for ``SimpNMR`` is currently **in preparation** and will be added here once available.
+The primary reference for ``SimpNMR`` is the preprint:
+
+   `SimpNMR (ChemRxiv preprint) <https://doi.org/10.26434/chemrxiv.15001463/v2>`_ —
+   https://doi.org/10.26434/chemrxiv.15001463/v2
 
 The version number can be obtained using the following terminal command:
 
