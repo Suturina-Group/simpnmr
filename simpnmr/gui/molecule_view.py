@@ -117,6 +117,8 @@ def parse_xyz(path: str | Path) -> Molecule:
                   and int(first[0]) <= len(raw) - 2)
     body = raw[2:] if has_header else raw
 
+    valid_symbols = set(PERIODIC_TABLE)
+
     atoms: list[Atom] = []
     for i, ln in enumerate(body):
         # keep remainder intact for the label
@@ -127,7 +129,21 @@ def parse_xyz(path: str | Path) -> Molecule:
         if col0.isdigit():
             element = PERIODIC_TABLE[int(col0)]
         else:
-            element = col0[0].upper() + col0[1:].lower()
+            # Column 1 may be a bare symbol ("C", "Dy") or a labelled atom
+            # ("C1", "Dy1", "C2_up"). Strip any trailing index/label so the
+            # element is a real symbol — otherwise 3Dmol cannot map it and
+            # renders every atom as the unknown-element colour with bogus
+            # distance-inferred bonds. Prefer the longest leading run that is
+            # a valid symbol (two-letter elements like Dy/Cl before D/C).
+            lead = re.match(r"[A-Za-z]+", col0)
+            raw_sym = lead.group(0) if lead else col0
+            cand = raw_sym[:1].upper() + raw_sym[1:2].lower()  # first two letters, cased
+            if cand in valid_symbols:
+                element = cand
+            elif cand[:1] in valid_symbols:
+                element = cand[:1]
+            else:
+                element = raw_sym[:1].upper() + raw_sym[1:].lower()
         x, y, z = (float(parts[1]), float(parts[2]), float(parts[3]))
         label = None
         if len(parts) == 5:
