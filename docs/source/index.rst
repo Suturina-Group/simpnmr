@@ -47,6 +47,18 @@ calculations transparent, reproducible, and suitable for systematic studies.
       Downloadable YAML templates for common prediction and fitting workflows.
       Modify the file to run your own calculations with minimal setup.
 
+.. admonition:: License and disclaimer
+   :class: caution
+
+   SimpNMR is free software released under the GNU General Public License
+   v3.0 (see the ``LICENSE`` file in the repository). It is provided **"as is",
+   without warranty of any kind**, express or implied, including but not limited
+   to the warranties of merchantability and fitness for a particular purpose. To
+   the maximum extent permitted by law, the authors and the Suturina Group
+   accept **no liability** for any claim, damage, or other loss arising from the
+   use of this software or of any results it produces. Users are responsible for
+   independently validating all computed results before relying on them.
+
 .. toctree::
    :maxdepth: 1
    :caption: User Guide
