@@ -212,7 +212,11 @@ def _load_wide_experiments(file_name: str) -> list[Experiment]:
     while len(header_row) > 1 and header_row[-1].strip() == "":
         header_row.pop()
 
-    n_data_cols = len(temp_row) - 1  # columns after the label cell
+    # Number of data columns. Size from the longest of the three header rows,
+    # not just the temperature row: a trailing *global* column (e.g. isotope)
+    # has empty temperature/field cells that get stripped above, so relying on
+    # the temperature row alone would drop it and leave signals untagged.
+    n_data_cols = max(len(temp_row), len(field_row), len(header_row)) - 1
 
     # Columns with empty T and B are global metadata (e.g. a single isotope
     # column that applies to all conditions).
