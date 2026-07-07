@@ -1786,8 +1786,17 @@ class SimpNMRWindow(QMainWindow):
         self._update_title()
         if exit_code == 0:
             self._log.append_line("✓ Finished successfully", "#88cc88")
-            self._try_load_structure()
-            self._try_load_spectrum()
+            # A post-run display step (3D structure, spectra) must never take
+            # down the GUI: an unhandled exception in this slot aborts the whole
+            # Qt process. Isolate each loader and log any failure instead.
+            for _loader in (self._try_load_structure, self._try_load_spectrum):
+                try:
+                    _loader()
+                except Exception as _exc:  # noqa: BLE001 - defensive UI guard
+                    self._log.append_line(
+                        f"Could not display results ({_loader.__name__}): {_exc}",
+                        "#ffcc66",
+                    )
         else:
             self._log.append_line(f"✗ Exited with code {exit_code}", "#ff8888")
 
