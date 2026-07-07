@@ -51,11 +51,12 @@ jobs:
           path: ${{ steps.installer.outputs.path }}
 
       - name: Attach installer to GitLab release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
+          # Version is read from simpnmr/__version__.py by the script, which
+          # matches the release tag for both tag builds and manual dispatches.
           pwsh -ExecutionPolicy Bypass -File packaging\windows\upload-gitlab-release.ps1 `
-            -Version $version -InstallerPath "${{ steps.installer.outputs.path }}"
+            -InstallerPath "${{ steps.installer.outputs.path }}"
