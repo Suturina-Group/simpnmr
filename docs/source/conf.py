@@ -23,6 +23,17 @@ copyright = ""
 
 # Title displayed in the HTML documentation header and browser tab.
 html_title = f"SimpNMR v{__version__}"
+
+# Direct download URL for the current release's Windows installer, from the
+# GitLab generic package registry (publicly downloadable). Exposed as a named
+# hyperlink target so the docs always point at the current version.
+_win_installer_url = (
+    "https://gitlab.com/api/v4/projects/suturina-group%2Fsimpnmr"
+    f"/packages/generic/simpnmr-windows/{__version__}/SimpNMR-Setup-{__version__}.exe"
+)
+rst_epilog = f"""
+.. _windows_installer_download: {_win_installer_url}
+"""
 # -- General configuration ---------------------------------------------------
 
 # Sphinx extensions enabled for this documentation build.

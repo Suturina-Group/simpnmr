@@ -10,8 +10,10 @@ Installation
    need Python or the command line. Download the installer, double-click it, and
    launch SimpNMR from the Start menu like any other program:
 
-   * `Download the latest Windows installer <https://gitlab.com/suturina-group/simpnmr/-/releases>`_
-     (``SimpNMR-Setup-<version>.exe`` under the newest release).
+   * **Direct download:** `SimpNMR Windows installer <windows_installer_download_>`_
+     (``SimpNMR-Setup-<version>.exe``) — save it and double-click to install.
+   * Or browse `all releases <https://gitlab.com/suturina-group/simpnmr/-/releases>`_
+     for a specific version.
 
    The rest of this page describes the command-line installation, which works on
    Windows, macOS and Linux and is required for scripted or headless use.
