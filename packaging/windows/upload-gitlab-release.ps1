@@ -11,7 +11,7 @@
          gives it a stable, public download URL;
       2. add an asset link on the release pointing at that URL.
 
-    The GitLab release for the tag is expected to already exist — on this
+    The GitLab release for the tag is expected to already exist - on this
     project it is created by the semantic-release CI job when the tag is pushed.
 
 .PARAMETER Version

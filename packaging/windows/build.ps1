@@ -15,7 +15,7 @@
 
     Requirements on the build machine:
       * Python 3.10+ (64-bit) on PATH
-      * Inno Setup 6 (iscc.exe) on PATH — only needed for the installer step;
+      * Inno Setup 6 (iscc.exe) on PATH - only needed for the installer step;
         the frozen app in dist\SimpNMR\ is produced regardless.
 
 .NOTES
@@ -70,7 +70,7 @@ if ($iscc) {
         throw "Inno Setup ran but the installer was not found at $installer"
     }
 } else {
-    Write-Warning "iscc.exe not found on PATH — skipping installer step."
+    Write-Warning "iscc.exe not found on PATH - skipping installer step."
     Write-Warning "Install Inno Setup 6 to produce SimpNMR-Setup-$Version.exe."
 }
 

@@ -35,7 +35,7 @@ jobs:
 
       - name: Build app and installer
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+        run: pwsh -ExecutionPolicy Bypass -File packaging\windows\build.ps1
 
       - name: Locate installer
         id: installer
@@ -57,5 +57,5 @@ jobs:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          powershell -ExecutionPolicy Bypass -File packaging\windows\upload-gitlab-release.ps1 `
+          pwsh -ExecutionPolicy Bypass -File packaging\windows\upload-gitlab-release.ps1 `
             -Version $version -InstallerPath "${{ steps.installer.outputs.path }}"
