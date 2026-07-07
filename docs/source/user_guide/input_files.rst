@@ -106,13 +106,26 @@ Used in workflows that require hyperfine tensor information, including:
 
 .. note::
 
-   Hyperfine and magnetic susceptibility tensors are assumed to be expressed in
-   compatible coordinate frames.
+   **The hyperfine structure and the susceptibility must share a coordinate
+   frame.** The pseudocontact shift couples the susceptibility tensor to each
+   nucleus's position, so a mismatch between the two frames silently produces
+   wrong shifts and a misaligned PCS field.
 
-   Automatic rotation of QC-derived hyperfine data into the susceptibility
-   eigenframe is performed only for specific combinations of susceptibility
-   source and hyperfine method (e.g. QC-derived hyperfine tensors with
-   ORCA-based susceptibility data).
+   * **CSV / tensor susceptibility** (``susceptibility: file: …`` with
+     ``format: csv``): there is no geometry to align against, so the tensor is
+     used **as-is** and is assumed to already be expressed in the same frame as
+     the hyperfine structure (``hyperfine: file``). You are responsible for
+     ensuring this — no automatic alignment is performed.
+
+   * **Ab-initio susceptibility with DFT hyperfine** (e.g. an ORCA
+     susceptibility output combined with ``hyperfine: method: dft``): the
+     susceptibility-source geometry is automatically aligned onto the hyperfine
+     geometry (Kabsch superposition) and the tensors are rotated into the shared
+     frame. This requires the **same molecule with the same number of atoms in
+     the same order**. Different atom counts are rejected outright, and if the
+     post-alignment RMSD exceeds ~1 Å a **prominent warning** is emitted (the
+     tensor orientation, and hence the pseudocontact shifts and PCS field, may
+     be unreliable) — check that the two structures correspond.
 
 .. note::
 

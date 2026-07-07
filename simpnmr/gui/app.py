@@ -1786,8 +1786,17 @@ class SimpNMRWindow(QMainWindow):
         self._update_title()
         if exit_code == 0:
             self._log.append_line("✓ Finished successfully", "#88cc88")
-            self._try_load_structure()
-            self._try_load_spectrum()
+            # A post-run display step (3D structure, spectra) must never take
+            # down the GUI: an unhandled exception in this slot aborts the whole
+            # Qt process. Isolate each loader and log any failure instead.
+            for _loader in (self._try_load_structure, self._try_load_spectrum):
+                try:
+                    _loader()
+                except Exception as _exc:  # noqa: BLE001 - defensive UI guard
+                    self._log.append_line(
+                        f"Could not display results ({_loader.__name__}): {_exc}",
+                        "#ffcc66",
+                    )
         else:
             self._log.append_line(f"✗ Exited with code {exit_code}", "#ff8888")
 
@@ -1986,15 +1995,6 @@ if _MATPLOTLIB_QT_OK:
                     continue
 
                 iso = sp["isotope"]
-                temp = sp["temperature"]
-                title_parts = []
-                if iso:
-                    title_parts.append(iso)
-                if temp is not None:
-                    title_parts.append(f"{temp:.1f} K")
-                subtitle = (
-                    "  ".join(title_parts) if title_parts else path.stem
-                )
                 xlabel = f"{iso} δ (ppm)" if iso else "δ (ppm)"
 
                 lbl_counts = counts_map.get(iso or "", {})
@@ -2009,7 +2009,6 @@ if _MATPLOTLIB_QT_OK:
                     "peak_x": sp["peak_shifts"],
                     "peak_lbl": sp["peak_labels"],
                     "peak_n": peak_n,
-                    "subtitle": subtitle,
                     "xlabel": xlabel,
                     "_busy": False,
                 }
@@ -2049,7 +2048,6 @@ if _MATPLOTLIB_QT_OK:
 
             # ── chrome ───────────────────────────────────────────────
             ax.set_yticks([])
-            ax.set_title(data["subtitle"], fontsize=9, pad=4)
             ax.set_xlabel(data["xlabel"], fontsize=8)
             ax.tick_params(labelsize=7)
             ax.spines[["right", "top", "left"]].set_visible(False)

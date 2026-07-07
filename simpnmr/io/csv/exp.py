@@ -108,6 +108,17 @@ def _load_legacy_experiments(file_name: str) -> list[Experiment]:
         )
     temperature, magnetic_field = meta
 
+    # Optional isotope from the "# isotope <name>" header, so signals from
+    # different isotopes (e.g. separate 1H and 13C files) are tagged and can be
+    # filtered per isotope downstream.
+    try:
+        isotope = find_first_group(
+            file_name, r"# *isotope +(\S+)", re.IGNORECASE
+        )
+        isotope = isotope.strip() if isotope else None
+    except (IndexError, ValueError, TypeError):
+        isotope = None
+
     # Read CSV, skipping comment lines
     lines = []
     with open(file_name, encoding="utf-8-sig") as f:
@@ -156,6 +167,7 @@ def _load_legacy_experiments(file_name: str) -> list[Experiment]:
             str(row[asgn_col]),
             l_to_g=l_to_g,
             r1=r1,
+            isotope=isotope,
         ))
 
     return [Experiment(temperature, magnetic_field, signals)]
@@ -200,7 +212,11 @@ def _load_wide_experiments(file_name: str) -> list[Experiment]:
     while len(header_row) > 1 and header_row[-1].strip() == "":
         header_row.pop()
 
-    n_data_cols = len(temp_row) - 1  # columns after the label cell
+    # Number of data columns. Size from the longest of the three header rows,
+    # not just the temperature row: a trailing *global* column (e.g. isotope)
+    # has empty temperature/field cells that get stripped above, so relying on
+    # the temperature row alone would drop it and leave signals untagged.
+    n_data_cols = max(len(temp_row), len(field_row), len(header_row)) - 1
 
     # Columns with empty T and B are global metadata (e.g. a single isotope
     # column that applies to all conditions).

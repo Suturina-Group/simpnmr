@@ -19,6 +19,14 @@ from simpnmr.tools.coords import xyz_fmt
 
 logger = logging.getLogger(__name__)
 
+# Kabsch alignment of the susceptibility-source geometry onto the hyperfine
+# geometry pairs atoms by row order. A large post-alignment RMSD therefore
+# signals that the two structures do not correspond (different atom ordering,
+# or a genuinely different geometry), which would produce a wrongly oriented
+# susceptibility. Above this threshold (Å) we emit a prominent warning rather
+# than failing silently.
+_ALIGN_RMSD_WARN_ANGSTROM = 1.0
+
 
 def rotate_coords(coords: np.ndarray, rot_mat: np.ndarray) -> np.ndarray:
     """Rotate Cartesian coordinates by a rotation matrix.
@@ -113,15 +121,24 @@ def get_rotation_and_transformation(
     # Transformation matrix mapping DFT → chi frame
     trans_mat = evecs.T @ rot_mat
 
-    if rmsd > 0.0:
+    if rmsd > _ALIGN_RMSD_WARN_ANGSTROM:
+        logger.warning(
+            "Susceptibility and hyperfine geometries do not correspond well: "
+            "alignment RMSD = %.2f A (> %.2f A). The susceptibility tensor's "
+            "orientation, and hence the pseudocontact shifts and PCS field, may "
+            "be unreliable. They should be the same molecule with matching atom "
+            "ordering; check the two structure files. If the tensor is already "
+            "in the hyperfine structure's frame, supply it as a CSV instead of "
+            "an ab-initio geometry.",
+            rmsd,
+            _ALIGN_RMSD_WARN_ANGSTROM,
+        )
+    elif rmsd > 0.0:
         logger.warning(
             "Distinct Susceptibility and DFT geometries detected; "
-            "applied rotational alignment (RMSD = %.2f).",
+            "applied rotational alignment (RMSD = %.2f A).",
             rmsd,
         )
-
-    # TODO Need to add an additional functional to check if HFC coords are in chi frame
-    # because it leads to the wrong prediction
 
     return rot_mat, trans_mat
 

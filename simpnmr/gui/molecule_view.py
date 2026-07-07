@@ -30,6 +30,7 @@ Dependencies
 from __future__ import annotations
 
 import functools
+import html
 import json
 import re
 import tempfile
@@ -351,6 +352,23 @@ def _load_3dmol_js() -> str:
     )
 
 
+def _html_safe_json(obj) -> str:
+    """JSON-encode ``obj`` for safe inline embedding inside an HTML ``<script>``.
+
+    ``json.dumps`` alone does not escape ``<``/``>``/``&``, so a value such as
+    ``</script>`` in a structure file (atom label, comment) would break out of
+    the script element and allow arbitrary JavaScript to run in the embedded
+    web view. Escaping these to unicode escapes keeps the JSON valid while
+    preventing the breakout.
+    """
+    return (
+        json.dumps(obj)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+
 def build_viewer_html(mol: Molecule,
                       label_colors: Optional[dict[str, str]] = None,
                       rep_index: Optional[dict[str, int]] = None,
@@ -406,15 +424,15 @@ def build_viewer_html(mol: Molecule,
                    'borderThickness': 2.0}
 
     return VIEWER_HTML_TEMPLATE.format(
-        title=title,
+        title=html.escape(str(title)),
         _3dmol_js=_load_3dmol_js(),
-        xyz_json=json.dumps(mol.to_xyz_string()),
-        colored_json=json.dumps(colored),
-        labels_json=json.dumps(labels),
-        base_style_json=json.dumps(base_style),
-        label_style_json=json.dumps(label_style),
-        cube_json=json.dumps(cube_data),
-        default_isoval=json.dumps(default_isoval),
+        xyz_json=_html_safe_json(mol.to_xyz_string()),
+        colored_json=_html_safe_json(colored),
+        labels_json=_html_safe_json(labels),
+        base_style_json=_html_safe_json(base_style),
+        label_style_json=_html_safe_json(label_style),
+        cube_json=_html_safe_json(cube_data),
+        default_isoval=_html_safe_json(default_isoval),
     )
 
 

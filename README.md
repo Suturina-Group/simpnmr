@@ -50,8 +50,10 @@ Developer Guide:
 
 ## Citation
 
-If you use SimpNMR in academic work, please cite the software and the specific
-version used. A DOI record will be added in the future.
+If you use SimpNMR in academic work, please cite the associated preprint and
+the specific version used:
+
+> SimpNMR, ChemRxiv (2026). https://doi.org/10.26434/chemrxiv.15001463/v2
 
 ## License
 
