@@ -230,10 +230,13 @@ def plot_isoaxrh(
         # Axis labels/styling
         ax.set_xlabel(r"$1/T\;10^{3}$ (K$^{-1}$)")
         chi_sub = _chiT_label_map.get(component, component)
+        # Subscript belongs on chi (the tensor component), not on T; the prime
+        # marks the reduced, dimensionless quantity. Keep consistent with the
+        # fit-vs-ab-initio plot below.
         if component == "iso":
-            _ylabel = r"$\Delta\chi'^{g\text{-corr}} T$"
+            _ylabel = r"$\Delta\chi'^{g\text{-corr}}_{\mathrm{iso}}\,T$"
         else:
-            _ylabel = rf"$\Delta\chi T^{{\mathrm{{red}}}}_{{{chi_sub}}}$"
+            _ylabel = rf"$\Delta\chi'_{{{chi_sub}}}\,T$"
         ax.set_ylabel(_ylabel)
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
