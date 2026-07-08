@@ -116,6 +116,23 @@ def _var_row(fix_val: str = "0.01") -> QWidget:
     return row
 
 
+def _ps_str(v) -> str:
+    """Format a seconds value as a picosecond display string.
+
+    Tolerates values PyYAML parsed as strings: ``140e-12`` has no decimal
+    point, so YAML loads it as the string ``"140e-12"`` rather than a float.
+    ``float()`` accepts that form, so coerce before dividing (a raw
+    ``str / float`` would raise "unsupported operand type(s)"). Returns "" for
+    empty or non-numeric values.
+    """
+    if v in (None, ""):
+        return ""
+    try:
+        return f"{float(v) / 1e-12:g}"
+    except (TypeError, ValueError):
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # Config form
 # ---------------------------------------------------------------------------
@@ -1447,8 +1464,7 @@ class ConfigForm(QScrollArea):
             (self._relax_T2e, "T2e"),
             (self._relax_tR, "tR"),
         ]:
-            v = relax.get(key)
-            attr.setText(f"{v / 1e-12:g}" if v not in (None, "") else "")
+            attr.setText(_ps_str(relax.get(key)))
         m = str(relax.get("tau_r_method", "(none)") or "(none)")
         idx = self._relax_tau_r_method.findText(m)
         self._relax_tau_r_method.setCurrentIndex(idx if idx >= 0 else 0)
@@ -1467,11 +1483,7 @@ class ConfigForm(QScrollArea):
         idx = self._tau_r_solvent.findText(solvent)
         self._tau_r_solvent.setCurrentIndex(idx if idx >= 0 else 0)
         self._tau_r_eta.setText(str(fit_relax.get("tau_r_eta", "")))
-        _tau_r_fixed_s = fit_relax.get("tau_r_fixed")
-        self._tau_r_fixed.setText(
-            f"{_tau_r_fixed_s / 1e-12:g}"
-            if _tau_r_fixed_s not in (None, "") else ""
-        )
+        self._tau_r_fixed.setText(_ps_str(fit_relax.get("tau_r_fixed")))
         dp = fit_relax.get("distance_power", "")
         self._r6_distance_power.setText("" if dp == "" else str(dp))
         for key, widget in (
@@ -1480,7 +1492,7 @@ class ConfigForm(QScrollArea):
         ):
             val = fit_relax.get(key)
             widget.setText(
-                f"{val[0] / 1e-12:g} {val[1] / 1e-12:g}"
+                f"{_ps_str(val[0])} {_ps_str(val[1])}"
                 if isinstance(val, list) and len(val) == 2
                 else ""
             )

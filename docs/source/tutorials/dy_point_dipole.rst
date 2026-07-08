@@ -425,7 +425,7 @@ temperature the rates apply to:
      magnetic_field_tesla: 4.7
      T1e: 0.2e-12
      T2e: 0.2e-12
-     tR: 140e-12
+     tR: 140.0e-12
 
 The ``relaxation`` block adds the transverse (linewidth) and longitudinal
 (R\ :sub:`1`) rates and their SBM-dipolar / contact / Curie decomposition,
