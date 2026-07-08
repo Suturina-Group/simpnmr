@@ -545,7 +545,19 @@ class ConfigForm(QScrollArea):
         self._relax_T2e = QLineEdit()
         self._relax_T2e.setPlaceholderText("ps  e.g. 0.2")
         self._relax_tR = QLineEdit()
-        self._relax_tR.setPlaceholderText("ps  e.g. 140")
+        self._relax_tR.setPlaceholderText("ps  e.g. 140  (or estimate below)")
+        # τR can instead be estimated from the molecular shape + solvent
+        # viscosity. Leave τR blank and pick a method + solvent (or give η).
+        self._relax_tau_r_method = QComboBox()
+        self._relax_tau_r_method.addItems(["(none)", "ellipsoid", "beadshell"])
+        self._relax_tau_r_solvent = QComboBox()
+        self._relax_tau_r_solvent.addItems([
+            "(none)", "D2O", "CDCl3", "CD2Cl2", "DMSO-d6", "CD3OD",
+            "acetone-d6", "C6D6", "toluene-d8", "THF-d8", "CD3CN",
+            "DMF-d7", "pyridine-d5", "water", "methanol", "ethanol",
+        ])
+        self._relax_tau_r_eta = QLineEdit()
+        self._relax_tau_r_eta.setPlaceholderText("Pa·s  (overrides solvent)")
         self._relax_min_lw = QLineEdit()
         self._relax_min_lw.setPlaceholderText("Hz  (optional floor, default 0)")
         sec.layout().addRow("Model:", self._relax_model)
@@ -554,6 +566,9 @@ class ConfigForm(QScrollArea):
         sec.layout().addRow("T1e (ps):", self._relax_T1e)
         sec.layout().addRow("T2e (ps):", self._relax_T2e)
         sec.layout().addRow("τR (ps):", self._relax_tR)
+        sec.layout().addRow("τR est. method:", self._relax_tau_r_method)
+        sec.layout().addRow("τR est. solvent:", self._relax_tau_r_solvent)
+        sec.layout().addRow("τR est. η (Pa·s):", self._relax_tau_r_eta)
         sec.layout().addRow("Min linewidth (Hz):", self._relax_min_lw)
         lay.addWidget(sec)
 
@@ -1098,6 +1113,16 @@ class ConfigForm(QScrollArea):
                 val = field.text().strip()
                 if val:
                     relax[key] = float(val) * 1e-12
+            # τR estimation (alternative to a fixed tR): method + solvent, or η.
+            tau_r_method = self._relax_tau_r_method.currentText()
+            if tau_r_method != "(none)":
+                relax["tau_r_method"] = tau_r_method
+                solvent = self._relax_tau_r_solvent.currentText()
+                if solvent != "(none)":
+                    relax["tau_r_solvent"] = solvent
+                eta = self._relax_tau_r_eta.text().strip()
+                if eta:
+                    relax["tau_r_eta"] = float(eta)
             d["relaxation"] = relax
 
         # Fit-only: Fit relaxation / tau_r heatmap
@@ -1424,6 +1449,13 @@ class ConfigForm(QScrollArea):
         ]:
             v = relax.get(key)
             attr.setText(f"{v / 1e-12:g}" if v not in (None, "") else "")
+        m = str(relax.get("tau_r_method", "(none)") or "(none)")
+        idx = self._relax_tau_r_method.findText(m)
+        self._relax_tau_r_method.setCurrentIndex(idx if idx >= 0 else 0)
+        s = str(relax.get("tau_r_solvent", "(none)") or "(none)")
+        idx = self._relax_tau_r_solvent.findText(s)
+        self._relax_tau_r_solvent.setCurrentIndex(idx if idx >= 0 else 0)
+        self._relax_tau_r_eta.setText(str(relax.get("tau_r_eta", "") or ""))
         self._relax_min_lw.setText(str(relax.get("min_linewidth_hz", "")))
 
         # Fit relaxation (fit)
