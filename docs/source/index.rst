@@ -4,10 +4,14 @@ Home
 ``simpnmr`` is a Python package for analysing the solution NMR of paramagnetic
 metal complexes with computational chemistry.
 
-It predicts paramagnetic NMR (pNMR) spectra, fits magnetic susceptibility
-tensors to experimental shifts, and analyses hyperfine and susceptibility
-tensors from electronic-structure calculations. Each calculation is defined by a
-single YAML file and run from the command line or the desktop app.
+Use it to:
+
+- **predict pNMR spectra** — both chemical shifts and paramagnetic relaxation
+  enhancement (PRE) — from quantum-chemistry output (ORCA, Gaussian)
+- **assist the assignment** of experimental paramagnetic peaks
+- **extract the full magnetic susceptibility tensor** from experimental shifts
+- **derive spin-Hamiltonian parameters** for mononuclear complexes, from
+  variable-temperature (VT) pNMR data
 
 
 .. grid:: 4
