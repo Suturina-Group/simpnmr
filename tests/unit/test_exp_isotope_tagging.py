@@ -30,6 +30,27 @@ def test_legacy_experiment_tags_signals_with_isotope(tmp_path):
 
 
 @pytest.mark.unit
+def test_legacy_isotope_header_ignores_trailing_csv_delimiters(tmp_path):
+    """Spreadsheet exports pad comment rows with delimiters
+    ("# isotope 1H,,,,"). The isotope must parse as "1H", not "1H,,,," —
+    otherwise it never matches the molecule's "1H" nuclei and every peak is
+    silently skipped (then a downstream reduction crashes on the empty set)."""
+    csv = (
+        "#temperature 297.22,,,,\n"
+        "#magnetic_field 11.75,,,,\n"
+        "#isotope 1H,,,,\n"
+        "assignment,shift (ppm),width (Hz),area (),r1\n"
+        "H3,171.39,712.65,6.52,893\n"
+        "H1,-14.49,386.48,5.83,752\n"
+    )
+    path = tmp_path / "exp_1H.csv"
+    path.write_text(csv)
+
+    signals = [s for e in _load_legacy_experiments(str(path)) for s in e.signals]
+    assert signals and all(s.isotope == "1H" for s in signals)
+
+
+@pytest.mark.unit
 def test_legacy_experiment_without_isotope_header_is_untagged(tmp_path):
     csv = (
         "#temperature 302.15\n"

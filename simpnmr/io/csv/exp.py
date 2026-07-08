@@ -112,8 +112,13 @@ def _load_legacy_experiments(file_name: str) -> list[Experiment]:
     # different isotopes (e.g. separate 1H and 13C files) are tagged and can be
     # filtered per isotope downstream.
     try:
+        # Capture only the isotope token (e.g. "1H", "13C"). Files exported
+        # from spreadsheets pad comment rows with delimiters
+        # ("# isotope 1H,,,,"), so match alphanumerics rather than \S+ — the
+        # latter would swallow the trailing commas and yield "1H,,,," which
+        # never matches the molecule's "1H" nuclei, silently dropping every peak.
         isotope = find_first_group(
-            file_name, r"# *isotope +(\S+)", re.IGNORECASE
+            file_name, r"#\s*isotope[\s,]+([A-Za-z0-9]+)", re.IGNORECASE
         )
         isotope = isotope.strip() if isotope else None
     except (IndexError, ValueError, TypeError):
