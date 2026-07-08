@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.1.2 (2026-07-08)
+
+### Bug Fixes
+
+- **exp**: Parse isotope header without trailing CSV delimiters
+  ([`7c97f3d`](https://gitlab.com/suturina-group/simpnmr/-/commit/7c97f3d574654ad714d76890164c88f407ade7ea))
+
+- **gui**: Recover element symbol from labelled atoms in 3D viewer
+  ([`0ee139a`](https://gitlab.com/suturina-group/simpnmr/-/commit/0ee139a683f89292c4bd129ecbbafb2ee420c8b4))
+
+- **viz**: Correct chiT component y-axis label
+  ([`92cf31e`](https://gitlab.com/suturina-group/simpnmr/-/commit/92cf31e3ffeb2679dabfb52d03f4611f1aa090b5))
+
+
 ## v2.1.1 (2026-07-07)
 
 ### Bug Fixes
