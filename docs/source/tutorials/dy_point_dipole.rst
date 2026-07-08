@@ -264,9 +264,9 @@ The blocks have the following roles:
    ``method: pdip`` computes point-dipole hyperfine tensors directly from the
    structure. The paramagnetic centre is given as an atom label, ``Dy1``, which
    is resolved to its coordinates from ``structure.xyz`` (you could instead give
-   explicit ``[x, y, z]`` coordinates). The Dy(III) quantum numbers are
-   ``spin`` = 5/2 for the effective treatment, ``orbit`` = 5, and
-   ``total_momentum_J`` = 15/2.
+   explicit ``[x, y, z]`` coordinates). The Dy(III) quantum numbers are those of
+   the free-ion :sup:`6`\ H\ :sub:`15/2` ground term: ``spin`` = 5/2,
+   ``orbit`` = 5, and ``total_momentum_J`` = 15/2.
 
 ``nuclei``
    Selects which nuclei to predict — here all :sup:`1`\ H nuclei.
