@@ -271,11 +271,13 @@ def plot_tau_space(
     z = _norm.ppf(0.5 + confidence / 2.0)
 
     # Grid in log space — use user-supplied ranges or sensible defaults
-    # Default τe: 0.01 fs to 10 ps; default τR: 1 ps to 10 µs
+    # Default τe: 0.01 fs to 10 ps; default τR: 1 ps to 1000 ps (1 ns).
+    # τR is capped at 1 ns by default: larger rotational correlation times are
+    # unphysical for solution tumbling. Pass tau_r_range to override.
     _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
     _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
-    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -9
     # Ensure tau_R_fixed is within the computed grid
     if tau_R_fixed is not None:
         _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
@@ -564,7 +566,7 @@ def plot_tau_space_combined(
     _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
     _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
-    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -9
 
     if tau_R_fixed is not None:
         _tau_r_lo = min(_tau_r_lo, np.log10(tau_R_fixed) - 0.5)
@@ -862,7 +864,7 @@ def plot_tau_space_multitemp(
     _tau_e_lo = np.log10(tau_e_range[0]) if tau_e_range else -14
     _tau_e_hi = np.log10(tau_e_range[1]) if tau_e_range else -10
     _tau_r_lo = np.log10(tau_r_range[0]) if tau_r_range else -12
-    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -5
+    _tau_r_hi = np.log10(tau_r_range[1]) if tau_r_range else -9
     tau_e = np.logspace(_tau_e_lo, _tau_e_hi, n_points)
     tau_R = np.logspace(_tau_r_lo, _tau_r_hi, n_points)
 
