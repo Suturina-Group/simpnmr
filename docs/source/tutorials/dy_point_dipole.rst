@@ -264,9 +264,9 @@ The blocks have the following roles:
    ``method: pdip`` computes point-dipole hyperfine tensors directly from the
    structure. The paramagnetic centre is given as an atom label, ``Dy1``, which
    is resolved to its coordinates from ``structure.xyz`` (you could instead give
-   explicit ``[x, y, z]`` coordinates). The Dy(III) quantum numbers are
-   ``spin`` = 5/2 for the effective treatment, ``orbit`` = 5, and
-   ``total_momentum_J`` = 15/2.
+   explicit ``[x, y, z]`` coordinates). The Dy(III) quantum numbers are those of
+   the free-ion :sup:`6`\ H\ :sub:`15/2` ground term: ``spin`` = 5/2,
+   ``orbit`` = 5, and ``total_momentum_J`` = 15/2.
 
 ``nuclei``
    Selects which nuclei to predict — here all :sup:`1`\ H nuclei.
@@ -425,7 +425,7 @@ temperature the rates apply to:
      magnetic_field_tesla: 4.7
      T1e: 0.2e-12
      T2e: 0.2e-12
-     tR: 140e-12
+     tR: 140.0e-12
 
 The ``relaxation`` block adds the transverse (linewidth) and longitudinal
 (R\ :sub:`1`) rates and their SBM-dipolar / contact / Curie decomposition,
@@ -538,7 +538,7 @@ signal, here recorded at 302.15 K and 4.7 T for :sup:`1`\ H:
      - 82.89
      - 587.31
      - 4108.48
-     - 3013
+     - —
    * - ``py5``
      - 24.14
      - 97.24
@@ -556,20 +556,20 @@ signal, here recorded at 302.15 K and 4.7 T for :sup:`1`\ H:
      - 59
    * - ``aeq``
      - 6.73
-     - 258.23
+     - 221.6
      - 6320.07
      - 425
    * - ``caxp``
      - 0.56
-     - 308.51
+     - 587.4
      - 4984.95
      - —
-   * - ``ceq``
+   * - ``ceqp``
      - -42.36
      - 182.53
      - 4452.48
      - 400
-   * - ``ceqp``
+   * - ``ceq``
      - -49.12
      - 224.78
      - 4826.13
@@ -589,7 +589,7 @@ where each column is:
 * **area** — the integrated peak area.
 * **R**\ :sub:`1` **(Hz)** — the longitudinal relaxation rate (optional; leave
   the field empty for any peak whose R\ :sub:`1` was not measured, as for
-  ``caxp`` here).
+  ``aax`` and ``caxp`` here).
 
 Create this as ``data/para/experiment.csv`` (run ``mkdir -p data/para`` first).
 The file is plain CSV, with the temperature, field and isotope given as comment
@@ -600,18 +600,18 @@ lines at the top:
    .. code-block:: text
       :caption: data/para/experiment.csv
 
-      #temperature 302.15
-      #magnetic_field 4.7
-      #isotope 1H
+      #temperature 302.15,,,,
+      #magnetic_field 4.7,,,,
+      #isotope 1H,,,,
       assignment,shift (ppm),width (Hz),area (),r1 (Hz)
-      aax,82.89,587.31,4108.48,3013
+      aax,82.89,587.31,4108.48,
       py5,24.14,97.24,5139.3,126
       py3,23.91,102.86,3914.16,126
       py4,21.6,74.05,4609,59
-      aeq,6.73,258.23,6320.07,425
-      caxp,0.56,308.51,4984.95,
-      ceq,-42.36,182.53,4452.48,400
-      ceqp,-49.12,224.78,4826.13,430
+      aeq,6.73,221.6,6320.07,425
+      caxp,0.56,587.4,4984.95,
+      ceqp,-42.36,182.53,4452.48,400
+      ceq,-49.12,224.78,4826.13,430
       cax,-97.33,252.06,4772.37,528
 
 The fit replaces the ``susceptibility`` block with an ``assignment`` block
@@ -641,6 +641,7 @@ the measured data. It reuses the same ``structure.xyz``,
      method: permute
      groups:
        - [py3, py4, py5]
+       - [ceq, ceqp]
 
    diamagnetic:
      method: csv
@@ -669,7 +670,7 @@ The ``assignment`` block lists groups of signals whose labelling is ambiguous:
 the permutation search fits every assignment *within* each group and keeps the
 one with the lowest RMSE between the experimental and calculated shifts. Here it
 tests the three closely spaced pyridine protons ``py3``/``py4``/``py5`` (24.14,
-23.91 and 21.6 ppm),
+23.91 and 21.6 ppm) and the ``ceq``/``ceqp`` pair (−42.36 and −49.12 ppm),
 whose ordering is not obvious from the spectrum alone. Well-separated signals
 need not be listed — their assignment is unambiguous.
 
