@@ -666,6 +666,9 @@ the measured data. It reuses the same ``structure.xyz``,
        gamma: [fix, 0.0]
      average_shifts: 'all'
 
+   fit_relaxation:
+     tau_r_fixed: 140.0e-12
+
 The ``assignment`` block lists groups of signals whose labelling is ambiguous:
 the permutation search fits every assignment *within* each group and keeps the
 one with the lowest RMSE between the experimental and calculated shifts. Here it
@@ -673,6 +676,12 @@ tests the three closely spaced pyridine protons ``py3``/``py4``/``py5`` (24.14,
 23.91 and 21.6 ppm) and the ``ceq``/``ceqp`` pair (−42.36 and −49.12 ppm),
 whose ordering is not obvious from the spectrum alone. Well-separated signals
 need not be listed — their assignment is unambiguous.
+
+The ``fit_relaxation`` block fixes the rotational correlation time τ\ :sub:`R`
+(here 140 ps) so the electronic correlation time τ\ :sub:`e` can be derived from
+the measured R\ :sub:`1` and linewidth data through the r\ :sup:`−6` relaxation
+analysis; the fixed τ\ :sub:`R` is also drawn as a horizontal line on the
+τ-space plots.
 
 Run the fit:
 
