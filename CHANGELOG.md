@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-07-09)
+
+### Bug Fixes
+
+- **gui**: Tolerate YAML string time values in relaxation form
+  ([`8c37c52`](https://gitlab.com/suturina-group/simpnmr/-/commit/8c37c52cc5e1d6b4e573ff3e25f930f0d2c19789))
+
+- **viz**: Cap default tau_R axis at 1000 ps in tau-space plots
+  ([`d645ed7`](https://gitlab.com/suturina-group/simpnmr/-/commit/d645ed77b4d0567bf8518b54852d94d66e0915fc))
+
+### Documentation
+
+- Correct Dy(III) quantum-number description
+  ([`5730557`](https://gitlab.com/suturina-group/simpnmr/-/commit/57305574cef6caa41b167130f8cfb71e984b0b01))
+
+- Highlight core capabilities as bullets on the Home page
+  ([`8253675`](https://gitlab.com/suturina-group/simpnmr/-/commit/825367506ff94a8a963fce7e193bfcd3bbe8d0aa))
+
+- Tighten the Home-page intro
+  ([`8f030e2`](https://gitlab.com/suturina-group/simpnmr/-/commit/8f030e25302830b8312b893b8222887fe67f5a03))
+
+- **tutorial**: Add fit_relaxation tau_r_fixed to derive tau_e
+  ([`cf4d864`](https://gitlab.com/suturina-group/simpnmr/-/commit/cf4d864265f92d756d318d187692138b6f302629))
+
+- **tutorial**: Remove fit_relaxation tau_R from the Dy fit
+  ([`b432194`](https://gitlab.com/suturina-group/simpnmr/-/commit/b432194a81024574305236a18490fb60814be585))
+
+- **tutorial**: Update Dy experiment data + permute ceq/ceqp
+  ([`b164146`](https://gitlab.com/suturina-group/simpnmr/-/commit/b1641468c5c8bfe01f901e15c4a1284633f525cf))
+
+### Features
+
+- **gui**: Expose tau_R estimation in the predict relaxation form
+  ([`29da91a`](https://gitlab.com/suturina-group/simpnmr/-/commit/29da91a99fa66c5ca40c94c88b5df6907f694268))
+
+
 ## v2.1.2 (2026-07-08)
 
 ### Bug Fixes
