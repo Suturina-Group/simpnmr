@@ -45,6 +45,16 @@ Use it to:
       Downloadable YAML templates for common prediction and fitting workflows.
       Modify the file to run your own calculations with minimal setup.
 
+Citation
+--------
+
+If you use ``simpnmr`` in academic work, please cite the preprint and state the
+version you used (shown by ``simpnmr --version``):
+
+   *SimpNMR*, ChemRxiv (2026),
+   `doi:10.26434/chemrxiv.15001463
+   <https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001463/v1>`_.
+
 .. admonition:: License and disclaimer
    :class: caution
 
