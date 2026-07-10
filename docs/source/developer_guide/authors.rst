@@ -16,8 +16,8 @@ To acknowledge ``SimpNMR`` in your work, please include the ``simpnmr`` version 
 
 The primary reference for ``SimpNMR`` is the preprint:
 
-   `SimpNMR (ChemRxiv preprint) <https://doi.org/10.26434/chemrxiv.15001463/v2>`_ —
-   https://doi.org/10.26434/chemrxiv.15001463/v2
+   `SimpNMR (ChemRxiv preprint) <https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001463/v1>`_ —
+   https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001463/v1
 
 The version number can be obtained using the following terminal command:
 

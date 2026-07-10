@@ -53,7 +53,7 @@ Developer Guide:
 If you use SimpNMR in academic work, please cite the associated preprint and
 the specific version used:
 
-> SimpNMR, ChemRxiv (2026). https://doi.org/10.26434/chemrxiv.15001463/v2
+> SimpNMR, ChemRxiv (2026). https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001463/v1
 
 ## License
 
