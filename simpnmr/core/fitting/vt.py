@@ -7,10 +7,14 @@ Computes reduced chiT values and uncertainties and fits linear chiT(T) models
 with an optional TIP term.
 """
 
+import logging
+
 import numpy as np
 from scipy.optimize import curve_fit
 
 from simpnmr.core.const.physics import GE, KB, MU0, MUB, C, H
+
+logger = logging.getLogger(__name__)
 
 
 def fit_chit_linear_model(
@@ -550,5 +554,14 @@ def compute_chi_prefactor(
         C in Å³·K.
     """
     J_eff = total_J if total_J is not None else spin
+    if J_eff * (J_eff + 1) == 0:
+        _src = "total_momentum_J" if total_J is not None else "spin"
+        logger.warning(
+            "Curie prefactor is zero: %s = %g gives J(J+1) = 0, so the "
+            "susceptibility and all paramagnetic shifts will be zero. For a "
+            "spin-only system omit total_momentum_J (defaults to S(S+1)) or "
+            "set it to S.",
+            _src, J_eff,
+        )
     return (MU0 * MUB**2 * J_eff * (J_eff + 1)) / (3 * KB) * 1e30  # [Å³·K]
 

@@ -18,19 +18,14 @@ import numpy.typing as npt
 
 from simpnmr.core.util.text import subtitle, title
 from simpnmr.io.qc.backends.gaussian.detect import (  # noqa
-    GAUSSIAN_09_SIGNATURE,
-    GAUSSIAN_16_SIGNATURE,
     GAUSSIAN_SIGNATURE,
-    is_gaussian_09,
-    is_gaussian_16,
     is_gaussian_log,
 )
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
 from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
 from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
-    read_gaussian09_log_cs,
-    read_gaussian16_log_cs,
+    read_gaussian_log_cs,
 )
 from simpnmr.io.qc.backends.orca.detect import (
     ORCA_A5_SIGNATURE,  # noqa
@@ -39,13 +34,9 @@ from simpnmr.io.qc.backends.orca.detect import (
     is_orca_a5_output,  # noqa
     is_orca_a6_output,  # noqa
     is_orca_output,  # noqa
-    is_orca_property,  # noqa
 )
 from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
-from simpnmr.io.qc.backends.orca.geom import (  # noqa
-    read_orca5_output_xyz,
-    read_orca5_property_xyz,
-)
+from simpnmr.io.qc.backends.orca.geom import read_orca5_output_xyz  # noqa
 from simpnmr.io.qc.backends.orca.gtensor import (  # noqa
     read_g_tensor_ab_initio,
 )
@@ -55,13 +46,9 @@ from simpnmr.io.qc.backends.orca.gtensor import (
 from simpnmr.io.qc.backends.orca.ham import read_eff_hamiltonian_tensor  # noqa
 from simpnmr.io.qc.backends.orca.hfc import (  # noqa
     read_orca5_output_a_tensors,
-    read_orca5_property_a_tensors,
     read_orca6_output_a_tensors,
 )
-from simpnmr.io.qc.backends.orca.shield import (  # noqa
-    read_orca5_output_cs,
-    read_orca5_property_cs,
-)
+from simpnmr.io.qc.backends.orca.shield import read_orca5_output_cs  # noqa
 from simpnmr.io.qc.backends.orca.susc import read_orca_susceptibility  # noqa
 from simpnmr.io.qc.errors import (
     ReaderContractError,
@@ -263,7 +250,9 @@ class QCCS(ABC):
     shielding values together with atomic labels and coordinates.
     """
 
-    def __init__(self, file_name, labels, coords, cs_iso, cs_aniso, cs_units):
+    def __init__(
+        self, file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=None
+    ):
         """Initialize a chemical shielding container.
 
         Args:
@@ -273,6 +262,8 @@ class QCCS(ABC):
             cs_iso: Isotropic chemical shielding values by label.
             cs_aniso: Anisotropic chemical shielding values by label.
             cs_units: Units for shielding values.
+            cs_tensor: Full 3x3 shielding tensors by label, or ``None`` when the
+                reader only provides isotropic/anisotropic scalars.
         """
 
         self.file_name = file_name
@@ -282,6 +273,7 @@ class QCCS(ABC):
         self.cs_iso = cs_iso
         self.cs_aniso = cs_aniso
         self.cs_units = cs_units
+        self.cs_tensor = cs_tensor if cs_tensor is not None else {}
 
         return
 
@@ -289,26 +281,11 @@ class QCCS(ABC):
     def guess_from_file(file_name: str) -> "QCCS":
         # Stage 1: detect backend.
         if is_orca_output(file_name):
-            # ORCA: distinguish PROPERTY vs OUTPUT using the legacy marker.
-            if is_orca_property(file_name):
-                return OrcaPropertyCS.read(file_name)
-
             return OrcaOutputCS.read(file_name)
 
         if is_gaussian_log(file_name):
-            # Gaussian: distinguish 09 vs 16 using backend detect helpers.
-            if is_gaussian_16(file_name):
-                return Gaussian16LogCS.read(file_name)
-
-            if is_gaussian_09(file_name):
-                return Gaussian09LogCS.read(file_name)
-
-            raise UnsupportedFileError(
-                message="Unsupported QC file for shielding "
-                "reader (no known signature found)",
-                path=file_name,
-                kind="shield",
-            )
+            # Gaussian 09 and 16 share the same shielding block format.
+            return GaussianLogCS.read(file_name)
 
         raise UnsupportedFileError(
             message="Unsupported QC file for shielding "
@@ -368,6 +345,9 @@ class QCCS(ABC):
 
     "Anisotropic Chemical Shielding values"
     cs_aniso: dict[str, float]
+
+    "Full 3x3 Chemical Shielding tensors by label (empty if reader gives scalars)"
+    cs_tensor: dict[str, npt.NDArray]
 
     """
     Units of Isotropic Chemical Shielding (cs)
@@ -445,7 +425,7 @@ class OrcaOutputCS(QCCS):
         old_labels = np.array(
             xyzf.add_label_indices(old_labels, style="sequential", start_index=0)
         )
-        cs_iso, cs_aniso = read_orca5_output_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_orca5_output_cs(file_name)
 
         new_labels = np.array(
             xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
@@ -457,81 +437,48 @@ class OrcaOutputCS(QCCS):
 
         cs_aniso = {converter[label]: val for label, val in cs_aniso.items()}
 
+        cs_tensor = {
+            converter[label]: t
+            for label, t in cs_tensor.items()
+            if label in converter
+        }
+
         cs_units = "ppm"
 
-        return cls(file_name, new_labels, coords, cs_iso, cs_aniso, cs_units)
-
-
-class OrcaPropertyCS(QCCS):
-    """
-    Chemical Shielding object for Orca PROPERTY files
-    """
-
-    FILETYPE = "Orca PROPERTY"
-
-    COMMON_STR = "!PROPERTIES!"
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data
-        old_labels, coords = read_orca5_property_xyz(file_name)
-        cs_iso, cs_aniso = read_orca5_property_cs(file_name)
-
-        # Convert orca labelling 1-> natoms for all atoms
-        # to 1-n_atoms per element
-        new_labels = np.array(
-            xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
+        return cls(
+            file_name,
+            new_labels,
+            coords,
+            cs_iso,
+            cs_aniso,
+            cs_units,
+            cs_tensor=cs_tensor,
         )
-        converter = {old: new for old, new in zip(old_labels, new_labels)}
-
-        cs_iso = {converter[label]: value for label, value in cs_iso.items()}
-        cs_aniso = {converter[label]: tensor for label, tensor in cs_aniso.items()}
-
-        cs_units = "ppm"
-
-        return cls(file_name, new_labels, coords, cs_iso, cs_aniso, cs_units)
 
 
-class Gaussian16LogCS(QCCS):
-    """
-    Chemical Shielding object for Gaussian LOG files
+class GaussianLogCS(QCCS):
+    """Chemical Shielding object for Gaussian LOG files.
+
+    Gaussian 09 and 16 print the GIAO shielding block in the same format, so a
+    single reader serves both.
     """
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = GAUSSIAN_16_SIGNATURE
+    COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
         # Read raw data
         labels, coords = read_gaussian_log_xyz(file_name)
         labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso = read_gaussian16_log_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_gaussian_log_cs(file_name)
 
         cs_units = "ppm"
 
-        return cls(file_name, labels, coords, cs_iso, cs_aniso, cs_units)
-
-
-class Gaussian09LogCS(QCCS):
-    """
-    Chemical Shielding object for Gaussian LOG files
-    """
-
-    FILETYPE = "Gaussian LOG"
-
-    COMMON_STR = GAUSSIAN_09_SIGNATURE
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data
-        labels, coords = read_gaussian_log_xyz(file_name)
-        labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso = read_gaussian09_log_cs(file_name)
-
-        cs_units = "ppm"
-
-        return cls(file_name, labels, coords, cs_iso, cs_aniso, cs_units)
+        return cls(
+            file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
+        )
 
 
 class QCSpin(ABC):
@@ -668,11 +615,6 @@ class QCA(ABC):
             return GaussianLogA.read(file_name)
 
         if is_orca_output(file_name):
-            # ORCA: prefer explicit PROPERTY marker when present.
-            if is_orca_property(file_name):
-                return Orca5PropertyA.read(file_name)
-
-            # ORCA OUTPUT
             if is_orca_a6_output(file_name):
                 return Orca6OutputA.read(file_name)
 
@@ -952,31 +894,3 @@ class Orca6OutputA(QCA):
         return cls(file_name, new_labels, coords, a_fc, a_sd, a_orb, a_units)
 
 
-class Orca5PropertyA(QCA):
-    """
-    A Tensor object for Orca PROPERTY files
-    """
-
-    FILETYPE = "Orca PROPERTY"
-
-    COMMON_STR = ORCA_A5_SIGNATURE
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data
-        old_labels, coords = read_orca5_property_xyz(file_name)
-        a_fc, a_sd, a_orb = read_orca5_property_a_tensors(file_name)
-
-        # Convert orca labelling 1-> natoms for all atoms
-        # to 1-n_atoms per element
-        new_labels = np.array(
-            xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
-        )
-        converter = {old: new for old, new in zip(old_labels, new_labels)}
-
-        a_fc = {converter[label]: value for label, value in a_fc.items()}
-        a_sd = {converter[label]: value for label, value in a_sd.items()}
-        a_orb = {converter[label]: value for label, value in a_orb.items()}
-        a_units = "MHz"
-
-        return cls(file_name, new_labels, coords, a_fc, a_sd, a_orb, a_units)
