@@ -29,7 +29,6 @@ from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # no
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
 from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
 from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
-    read_gaussian09_log_cs,
     read_gaussian16_log_cs,
 )
 from simpnmr.io.qc.backends.orca.detect import (
@@ -542,14 +541,17 @@ class Gaussian09LogCS(QCCS):
 
     @classmethod
     def _read(cls, file_name: str):
-        # Read raw data
+        # Read raw data. The GIAO shielding block is identical to Gaussian 16,
+        # so reuse that reader (which also returns the full 3x3 tensor).
         labels, coords = read_gaussian_log_xyz(file_name)
         labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso = read_gaussian09_log_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_gaussian16_log_cs(file_name)
 
         cs_units = "ppm"
 
-        return cls(file_name, labels, coords, cs_iso, cs_aniso, cs_units)
+        return cls(
+            file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
+        )
 
 
 class QCSpin(ABC):
