@@ -30,7 +30,7 @@ from simpnmr.app.loaders.susc_load import load_susceptibilities
 from simpnmr.app.params.options import PredictRunOptions
 from simpnmr.app.policies.hfc import has_missing_selected_chem_labels
 from simpnmr.app.policies.linewidth import (
-    AUTO_LINEWIDTH_FRACTION,
+    _auto_display_linewidth_ppm,
     resolve_output_linewidths,
 )
 from simpnmr.core.domain.tensor import Susceptibility
@@ -701,9 +701,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
             # keeps that column labelled "auto" rather than "relax".
             _eff_lw = None
             if all(nuc.shift.lw is None for nuc in iso_nuclei):
-                _disp_lw = AUTO_LINEWIDTH_FRACTION * abs(
-                    shift_range[1] - shift_range[0]
-                )
+                _disp_lw = _auto_display_linewidth_ppm(shift_range)
                 _eff_lw = {nuc.label: _disp_lw for nuc in iso_nuclei}
 
             with spec.context():

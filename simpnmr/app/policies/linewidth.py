@@ -77,5 +77,12 @@ def resolve_output_linewidths(
 
 
 def _auto_display_linewidth_ppm(shift_range: Sequence[float]) -> float:
-    span = abs(max(shift_range) - min(shift_range))
+    lo, hi = min(shift_range), max(shift_range)
+    span = abs(hi - lo)
+    if span == 0.0:
+        # A single peak (or coincident peaks) has no range to scale from. Fall
+        # back to the peak's own shift magnitude, with a 1 ppm floor, so the
+        # cosmetic width is never zero — a zero FWHM makes the Lorentzian divide
+        # by zero and the spectrum become NaN.
+        span = max(abs(lo), abs(hi), 1.0)
     return AUTO_LINEWIDTH_FRACTION * span
