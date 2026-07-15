@@ -18,18 +18,14 @@ import numpy.typing as npt
 
 from simpnmr.core.util.text import subtitle, title
 from simpnmr.io.qc.backends.gaussian.detect import (  # noqa
-    GAUSSIAN_09_SIGNATURE,
-    GAUSSIAN_16_SIGNATURE,
     GAUSSIAN_SIGNATURE,
-    is_gaussian_09,
-    is_gaussian_16,
     is_gaussian_log,
 )
 from simpnmr.io.qc.backends.gaussian.elstate import read_gaussian_log_spin  # noqa
 from simpnmr.io.qc.backends.gaussian.geom import read_gaussian_log_xyz  # noqa
 from simpnmr.io.qc.backends.gaussian.hfc import read_gaussian_log_a_tensors  # noqa
 from simpnmr.io.qc.backends.gaussian.shield import (  # noqa
-    read_gaussian16_log_cs,
+    read_gaussian_log_cs,
 )
 from simpnmr.io.qc.backends.orca.detect import (
     ORCA_A5_SIGNATURE,  # noqa
@@ -300,19 +296,8 @@ class QCCS(ABC):
             return OrcaOutputCS.read(file_name)
 
         if is_gaussian_log(file_name):
-            # Gaussian: distinguish 09 vs 16 using backend detect helpers.
-            if is_gaussian_16(file_name):
-                return Gaussian16LogCS.read(file_name)
-
-            if is_gaussian_09(file_name):
-                return Gaussian09LogCS.read(file_name)
-
-            raise UnsupportedFileError(
-                message="Unsupported QC file for shielding "
-                "reader (no known signature found)",
-                path=file_name,
-                kind="shield",
-            )
+            # Gaussian 09 and 16 share the same shielding block format.
+            return GaussianLogCS.read(file_name)
 
         raise UnsupportedFileError(
             message="Unsupported QC file for shielding "
@@ -507,45 +492,23 @@ class OrcaPropertyCS(QCCS):
         return cls(file_name, new_labels, coords, cs_iso, cs_aniso, cs_units)
 
 
-class Gaussian16LogCS(QCCS):
-    """
-    Chemical Shielding object for Gaussian LOG files
+class GaussianLogCS(QCCS):
+    """Chemical Shielding object for Gaussian LOG files.
+
+    Gaussian 09 and 16 print the GIAO shielding block in the same format, so a
+    single reader serves both.
     """
 
     FILETYPE = "Gaussian LOG"
 
-    COMMON_STR = GAUSSIAN_16_SIGNATURE
+    COMMON_STR = GAUSSIAN_SIGNATURE
 
     @classmethod
     def _read(cls, file_name: str):
         # Read raw data
         labels, coords = read_gaussian_log_xyz(file_name)
         labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso, cs_tensor = read_gaussian16_log_cs(file_name)
-
-        cs_units = "ppm"
-
-        return cls(
-            file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
-        )
-
-
-class Gaussian09LogCS(QCCS):
-    """
-    Chemical Shielding object for Gaussian LOG files
-    """
-
-    FILETYPE = "Gaussian LOG"
-
-    COMMON_STR = GAUSSIAN_09_SIGNATURE
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data. The GIAO shielding block is identical to Gaussian 16,
-        # so reuse that reader (which also returns the full 3x3 tensor).
-        labels, coords = read_gaussian_log_xyz(file_name)
-        labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso, cs_tensor = read_gaussian16_log_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_gaussian_log_cs(file_name)
 
         cs_units = "ppm"
 

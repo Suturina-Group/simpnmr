@@ -11,7 +11,7 @@ orientation survive, not just the isotropic value.
 import numpy as np
 import pytest
 
-from simpnmr.io.qc.backends.gaussian.shield import read_gaussian16_log_cs
+from simpnmr.io.qc.backends.gaussian.shield import read_gaussian_log_cs
 
 # Two real nuclei from a Gaussian TPSSh shielding log (Cu, P).
 _BLOCK = """ SCF GIAO Magnetic shielding tensor (ppm):
@@ -36,7 +36,7 @@ def log(tmp_path):
 
 
 def test_reads_full_tensor_and_scalars(log):
-    cs_iso, cs_aniso, cs_tensor = read_gaussian16_log_cs(log)
+    cs_iso, cs_aniso, cs_tensor = read_gaussian_log_cs(log)
     assert set(cs_tensor) == {"Cu1", "P2"}
     assert cs_iso["Cu1"] == pytest.approx(1099.6202)
     assert cs_aniso["Cu1"] == pytest.approx(1263.2798)
@@ -55,6 +55,6 @@ def test_reads_full_tensor_and_scalars(log):
 
 
 def test_parses_negative_components(log):
-    _, _, cs_tensor = read_gaussian16_log_cs(log)
+    _, _, cs_tensor = read_gaussian_log_cs(log)
     # P2 has ZX = -4.8015
     assert cs_tensor["P2"][2, 0] == pytest.approx(-4.8015)

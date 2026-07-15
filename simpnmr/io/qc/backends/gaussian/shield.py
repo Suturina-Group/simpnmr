@@ -20,8 +20,8 @@ _CS_COMPONENT_RE = re.compile(r"([XYZ][XYZ])=\s*(-?\d+\.?\d*)")
 _AXIS = {"X": 0, "Y": 1, "Z": 2}
 
 
-def read_gaussian16_log_cs(file_name):
-    """Read chemical shielding data from a Gaussian 16 log file.
+def read_gaussian_log_cs(file_name):
+    """Read chemical shielding data from a Gaussian log file (09 or 16).
 
     Args:
         file_name: Path to the Gaussian log file.
