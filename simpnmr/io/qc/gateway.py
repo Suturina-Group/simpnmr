@@ -263,7 +263,9 @@ class QCCS(ABC):
     shielding values together with atomic labels and coordinates.
     """
 
-    def __init__(self, file_name, labels, coords, cs_iso, cs_aniso, cs_units):
+    def __init__(
+        self, file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=None
+    ):
         """Initialize a chemical shielding container.
 
         Args:
@@ -273,6 +275,8 @@ class QCCS(ABC):
             cs_iso: Isotropic chemical shielding values by label.
             cs_aniso: Anisotropic chemical shielding values by label.
             cs_units: Units for shielding values.
+            cs_tensor: Full 3x3 shielding tensors by label, or ``None`` when the
+                reader only provides isotropic/anisotropic scalars.
         """
 
         self.file_name = file_name
@@ -282,6 +286,7 @@ class QCCS(ABC):
         self.cs_iso = cs_iso
         self.cs_aniso = cs_aniso
         self.cs_units = cs_units
+        self.cs_tensor = cs_tensor if cs_tensor is not None else {}
 
         return
 
@@ -369,6 +374,9 @@ class QCCS(ABC):
     "Anisotropic Chemical Shielding values"
     cs_aniso: dict[str, float]
 
+    "Full 3x3 Chemical Shielding tensors by label (empty if reader gives scalars)"
+    cs_tensor: dict[str, npt.NDArray]
+
     """
     Units of Isotropic Chemical Shielding (cs)
     """
@@ -445,7 +453,7 @@ class OrcaOutputCS(QCCS):
         old_labels = np.array(
             xyzf.add_label_indices(old_labels, style="sequential", start_index=0)
         )
-        cs_iso, cs_aniso = read_orca5_output_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_orca5_output_cs(file_name)
 
         new_labels = np.array(
             xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
@@ -457,9 +465,17 @@ class OrcaOutputCS(QCCS):
 
         cs_aniso = {converter[label]: val for label, val in cs_aniso.items()}
 
+        cs_tensor = {
+            converter[label]: t
+            for label, t in cs_tensor.items()
+            if label in converter
+        }
+
         cs_units = "ppm"
 
-        return cls(file_name, new_labels, coords, cs_iso, cs_aniso, cs_units)
+        return cls(
+            file_name, new_labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
+        )
 
 
 class OrcaPropertyCS(QCCS):
@@ -506,11 +522,13 @@ class Gaussian16LogCS(QCCS):
         # Read raw data
         labels, coords = read_gaussian_log_xyz(file_name)
         labels = np.array(xyzf.add_label_indices(labels))
-        cs_iso, cs_aniso = read_gaussian16_log_cs(file_name)
+        cs_iso, cs_aniso, cs_tensor = read_gaussian16_log_cs(file_name)
 
         cs_units = "ppm"
 
-        return cls(file_name, labels, coords, cs_iso, cs_aniso, cs_units)
+        return cls(
+            file_name, labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
+        )
 
 
 class Gaussian09LogCS(QCCS):
