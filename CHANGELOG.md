@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-07-15)
+
+### Bug Fixes
+
+- **predict**: Non-zero cosmetic linewidth for single-peak spectra
+  ([`50c3890`](https://gitlab.com/suturina-group/simpnmr/-/commit/50c3890862dcb537f43131b2ff9b1e0e1dbbfdda))
+
+- **susc**: Warn when total_momentum_J=0 zeroes the Curie prefactor
+  ([`4bcea1f`](https://gitlab.com/suturina-group/simpnmr/-/commit/4bcea1fbb2c8391cf4546f03387e805709a00b6f))
+
+### Code Style
+
+- **qc**: Wrap long comment in gaussian shielding reader
+  ([`782aa76`](https://gitlab.com/suturina-group/simpnmr/-/commit/782aa76667fbb5f60016774181db32d4fedc42a2))
+
+### Documentation
+
+- Add Citation section with preprint link to the Home page
+  ([`7a756cd`](https://gitlab.com/suturina-group/simpnmr/-/commit/7a756cd8335e639582f00a65776b1ae5851c2c78))
+
+### Features
+
+- **qc**: Read and store the full 3x3 shielding tensor
+  ([`a277a2e`](https://gitlab.com/suturina-group/simpnmr/-/commit/a277a2ed9a977b6088845edf304a37ac6fd0bc47))
+
+### Refactoring
+
+- **qc**: Collapse redundant Gaussian 09/16 shielding split
+  ([`50b34c2`](https://gitlab.com/suturina-group/simpnmr/-/commit/50b34c21f9510b539941f7f99da44b1dad836734))
+
+- **qc**: Drop the ORCA property-file reader path
+  ([`4cf5bda`](https://gitlab.com/suturina-group/simpnmr/-/commit/4cf5bdab8bc105c3568818afd17f53356fee4410))
+
+- **qc**: Remove broken read_gaussian09_log_cs dead code
+  ([`92c7ff9`](https://gitlab.com/suturina-group/simpnmr/-/commit/92c7ff9532ee49426149c045fe1d4500e864aadd))
+
+
 ## v2.2.0 (2026-07-09)
 
 ### Bug Fixes
