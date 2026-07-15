@@ -17,52 +17,6 @@ from simpnmr.core.util.strings import remove_letters, remove_numbers
 logger = logging.getLogger(__name__)
 
 
-def read_orca5_property_a_tensors(
-    file_name: str,
-) -> tuple[dict[str, float], dict[str, np.ndarray]]:
-    """Read hyperfine coupling tensors from an ORCA property file.
-
-    Args:
-        file_name: Path to the ORCA property file.
-
-    Returns:
-        A tuple `(a_iso, a_dtensor)` where:
-            * `a_iso` maps atom labels to isotropic couplings in MHz.
-            * `a_dtensor` maps atom labels to 3x3 deviatoric (traceless) tensors in MHz.
-    """
-
-    a_iso = {}
-    a_dtensor = {}
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if "EPRNMR_ATensor" in line:
-                while "Number of stored nuclei" not in line:
-                    line = next(f)
-                n_calcd = int(line.split()[4])
-                while "Nucleus:" not in line:
-                    line = next(f)
-                for _ in range(n_calcd):
-                    label = "{}{}".format(line.split()[2], line.split()[1])
-                    for _ in range(6):
-                        line = next(f)
-                    # Raw values
-                    row_1 = [float(val) for val in line.split()[1:]]
-                    line = next(f)
-                    row_2 = [float(val) for val in line.split()[1:]]
-                    line = next(f)
-                    row_3 = [float(val) for val in line.split()[1:]]
-                    a_dtensor[label] = np.array([row_1, row_2, row_3])
-                    for _ in range(9):
-                        line = next(f)
-                    # Isotropic value
-                    a_iso[label] = float(line.split()[-1])
-                    a_dtensor[label] -= np.eye(3) * a_iso[label]
-                    line = next(f)
-
-    return a_iso, a_dtensor
-
-
 def read_orca5_output_a_tensors(
     file_name: str,
 ) -> tuple[

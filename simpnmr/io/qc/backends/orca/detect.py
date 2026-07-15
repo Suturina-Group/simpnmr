@@ -13,7 +13,6 @@ import re
 from typing import List
 
 ORCA_SIGNATURE = "* O   R   C   A *"
-ORCA_PROPERTY_SIGNATURE = "!PROPERTIES!"
 
 ORCA_A5_SIGNATURE = (
     "            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#"
@@ -45,27 +44,6 @@ def is_orca_output(file_name: str) -> bool:
     with open(file_name, "r") as f:
         for line in f:
             if ORCA_SIGNATURE in line:
-                return True
-
-    return False
-
-
-def is_orca_property(file_name: str) -> bool:
-    """Return whether the provided file looks like an ORCA property output.
-
-    This mirrors the legacy reader behavior, which distinguished ORCA property
-    files by the presence of the "!PROPERTIES!" marker.
-
-    Args:
-        file_name: Path to the candidate text output file.
-
-    Returns:
-        True if the ORCA property marker is found, otherwise False.
-    """
-
-    with open(file_name, "r") as f:
-        for line in f:
-            if ORCA_PROPERTY_SIGNATURE in line:
                 return True
 
     return False

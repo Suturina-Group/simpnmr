@@ -34,13 +34,9 @@ from simpnmr.io.qc.backends.orca.detect import (
     is_orca_a5_output,  # noqa
     is_orca_a6_output,  # noqa
     is_orca_output,  # noqa
-    is_orca_property,  # noqa
 )
 from simpnmr.io.qc.backends.orca.elstate import read_orca_spin  # noqa
-from simpnmr.io.qc.backends.orca.geom import (  # noqa
-    read_orca5_output_xyz,
-    read_orca5_property_xyz,
-)
+from simpnmr.io.qc.backends.orca.geom import read_orca5_output_xyz  # noqa
 from simpnmr.io.qc.backends.orca.gtensor import (  # noqa
     read_g_tensor_ab_initio,
 )
@@ -50,13 +46,9 @@ from simpnmr.io.qc.backends.orca.gtensor import (
 from simpnmr.io.qc.backends.orca.ham import read_eff_hamiltonian_tensor  # noqa
 from simpnmr.io.qc.backends.orca.hfc import (  # noqa
     read_orca5_output_a_tensors,
-    read_orca5_property_a_tensors,
     read_orca6_output_a_tensors,
 )
-from simpnmr.io.qc.backends.orca.shield import (  # noqa
-    read_orca5_output_cs,
-    read_orca5_property_cs,
-)
+from simpnmr.io.qc.backends.orca.shield import read_orca5_output_cs  # noqa
 from simpnmr.io.qc.backends.orca.susc import read_orca_susceptibility  # noqa
 from simpnmr.io.qc.errors import (
     ReaderContractError,
@@ -289,10 +281,6 @@ class QCCS(ABC):
     def guess_from_file(file_name: str) -> "QCCS":
         # Stage 1: detect backend.
         if is_orca_output(file_name):
-            # ORCA: distinguish PROPERTY vs OUTPUT using the legacy marker.
-            if is_orca_property(file_name):
-                return OrcaPropertyCS.read(file_name)
-
             return OrcaOutputCS.read(file_name)
 
         if is_gaussian_log(file_name):
@@ -458,38 +446,14 @@ class OrcaOutputCS(QCCS):
         cs_units = "ppm"
 
         return cls(
-            file_name, new_labels, coords, cs_iso, cs_aniso, cs_units, cs_tensor=cs_tensor
+            file_name,
+            new_labels,
+            coords,
+            cs_iso,
+            cs_aniso,
+            cs_units,
+            cs_tensor=cs_tensor,
         )
-
-
-class OrcaPropertyCS(QCCS):
-    """
-    Chemical Shielding object for Orca PROPERTY files
-    """
-
-    FILETYPE = "Orca PROPERTY"
-
-    COMMON_STR = "!PROPERTIES!"
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data
-        old_labels, coords = read_orca5_property_xyz(file_name)
-        cs_iso, cs_aniso = read_orca5_property_cs(file_name)
-
-        # Convert orca labelling 1-> natoms for all atoms
-        # to 1-n_atoms per element
-        new_labels = np.array(
-            xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
-        )
-        converter = {old: new for old, new in zip(old_labels, new_labels)}
-
-        cs_iso = {converter[label]: value for label, value in cs_iso.items()}
-        cs_aniso = {converter[label]: tensor for label, tensor in cs_aniso.items()}
-
-        cs_units = "ppm"
-
-        return cls(file_name, new_labels, coords, cs_iso, cs_aniso, cs_units)
 
 
 class GaussianLogCS(QCCS):
@@ -651,11 +615,6 @@ class QCA(ABC):
             return GaussianLogA.read(file_name)
 
         if is_orca_output(file_name):
-            # ORCA: prefer explicit PROPERTY marker when present.
-            if is_orca_property(file_name):
-                return Orca5PropertyA.read(file_name)
-
-            # ORCA OUTPUT
             if is_orca_a6_output(file_name):
                 return Orca6OutputA.read(file_name)
 
@@ -935,31 +894,3 @@ class Orca6OutputA(QCA):
         return cls(file_name, new_labels, coords, a_fc, a_sd, a_orb, a_units)
 
 
-class Orca5PropertyA(QCA):
-    """
-    A Tensor object for Orca PROPERTY files
-    """
-
-    FILETYPE = "Orca PROPERTY"
-
-    COMMON_STR = ORCA_A5_SIGNATURE
-
-    @classmethod
-    def _read(cls, file_name: str):
-        # Read raw data
-        old_labels, coords = read_orca5_property_xyz(file_name)
-        a_fc, a_sd, a_orb = read_orca5_property_a_tensors(file_name)
-
-        # Convert orca labelling 1-> natoms for all atoms
-        # to 1-n_atoms per element
-        new_labels = np.array(
-            xyzf.add_label_indices(xyzf.remove_label_indices(old_labels))
-        )
-        converter = {old: new for old, new in zip(old_labels, new_labels)}
-
-        a_fc = {converter[label]: value for label, value in a_fc.items()}
-        a_sd = {converter[label]: value for label, value in a_sd.items()}
-        a_orb = {converter[label]: value for label, value in a_orb.items()}
-        a_units = "MHz"
-
-        return cls(file_name, new_labels, coords, a_fc, a_sd, a_orb, a_units)
