@@ -11,11 +11,9 @@ import re
 
 import numpy as np
 
-# Gaussian prints the shielding tensor as labelled components, three per line:
-#   XX=  904.8946   YX=  493.4538   ZX=   56.5242   (column X: sigma_xx, sigma_yx, sigma_zx)
-#   XY=  ...         YY=  ...         ZY=  ...        (column Y)
-#   XZ=  ...         YZ=  ...         ZZ=  ...        (column Z)
-# so component "AB" maps to tensor[A, B] (sigma_AB, generally non-symmetric).
+# Gaussian prints the shielding tensor as labelled components, three per line
+# (XX/YX/ZX, then XY/YY/ZY, then XZ/YZ/ZZ), so component "AB" maps to
+# tensor[A, B] (sigma_AB, generally non-symmetric).
 _CS_COMPONENT_RE = re.compile(r"([XYZ][XYZ])=\s*(-?\d+\.?\d*)")
 _AXIS = {"X": 0, "Y": 1, "Z": 2}
 
