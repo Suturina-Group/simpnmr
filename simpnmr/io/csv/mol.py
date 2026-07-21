@@ -270,10 +270,10 @@ def _build_molecule_df(molecule):
         and hfc_by_label[lab].r_inv6 is not None
         for lab in (nuc.label for nuc in molecule.nuclei)
     )
-    has_fc_gcorr = (
-        getattr(molecule.susc, "iso_g_corr", None) is not None
-        and getattr(molecule.susc, "iso_spin_only", None) is not None
-    )
+    # The spin-only / g-correction split is computed directly from S and T, so
+    # it is reported whenever the canonical susceptibility is g-corrected —
+    # including fit-derived susceptibilities that carry no spin-only channel.
+    has_fc_gcorr = getattr(molecule.susc, "iso_g_corr", None) is not None
     has_fc_spin_only = (
         getattr(molecule.susc, "iso_spin_only", None) is not None
         and getattr(molecule.susc, "iso_g_corr", None) is None

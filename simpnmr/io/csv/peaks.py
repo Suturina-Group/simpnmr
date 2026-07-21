@@ -121,10 +121,9 @@ def save_peak_data_to_csv(
     contact_r2_by_label = _r2.contact if _r2 is not None else None
     curie_r2_by_label = _r2.curie if _r2 is not None else None
 
-    has_fc_gcorr = (
-        getattr(molecule.susc, "iso_g_corr", None) is not None
-        and getattr(molecule.susc, "iso_spin_only", None) is not None
-    )
+    # Split reported whenever the canonical susceptibility is g-corrected; the
+    # spin-only reference is computed from S and T, not the susceptibility.
+    has_fc_gcorr = getattr(molecule.susc, "iso_g_corr", None) is not None
     has_fc_spin_only = (
         getattr(molecule.susc, "iso_spin_only", None) is not None
         and getattr(molecule.susc, "iso_g_corr", None) is None
