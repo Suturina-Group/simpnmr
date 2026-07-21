@@ -26,8 +26,12 @@ def A_chi():
 
 def test_tensor_trace_matches_scalar(A_chi):
     A, chi = A_chi
-    assert np.isclose(np.trace(Shift.calc_pcs_tensor(A, chi)) / 3.0, Shift.calc_pcs(A, chi))
-    assert np.isclose(np.trace(Shift.calc_fcs_tensor(A, chi)) / 3.0, Shift.calc_fcs(A, chi))
+    assert np.isclose(
+        np.trace(Shift.calc_pcs_tensor(A, chi)) / 3.0, Shift.calc_pcs(A, chi)
+    )
+    assert np.isclose(
+        np.trace(Shift.calc_fcs_tensor(A, chi)) / 3.0, Shift.calc_fcs(A, chi)
+    )
 
 
 def test_pcs_tensor_is_raw_non_symmetric(A_chi):
