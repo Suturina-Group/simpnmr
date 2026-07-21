@@ -113,8 +113,13 @@ def load_susceptibility_csv(
     rows = read_susceptibilities_csv(susceptibility_file)
     suscs: list[Susceptibility] = []
 
-    has_csv_chi_iso = any(chi_iso is not None for _, _, chi_iso in rows)
-    has_rows_without_csv_chi_iso = any(chi_iso is None for _, _, chi_iso in rows)
+    def _row_iso(row):
+        # g-corrected isotropic susceptibility takes precedence over plain chi_iso
+        _, _, chi_iso, chi_iso_g_corr = row
+        return chi_iso_g_corr if chi_iso_g_corr is not None else chi_iso
+
+    has_csv_chi_iso = any(_row_iso(r) is not None for r in rows)
+    has_rows_without_csv_chi_iso = any(_row_iso(r) is None for r in rows)
 
     if has_csv_chi_iso:
         if has_rows_without_csv_chi_iso:
@@ -144,13 +149,18 @@ def load_susceptibility_csv(
                 "those rows"
             )
 
-    for tensor, temperature, chi_iso in rows:
+    for tensor, temperature, chi_iso, chi_iso_g_corr in rows:
         susc = build_chi_d_tensor_from_csv(
             temperature=float(temperature),
             tensor=tensor,
         )
 
-        if chi_iso is not None:
+        if chi_iso_g_corr is not None:
+            # Explicit g-corrected isotropic susceptibility (e.g. from a fit):
+            # adopt it as the canonical iso so the Fermi contact is g-corrected.
+            susc = build_chi_iso_from_csv(susc, chi_iso=float(chi_iso_g_corr))
+            susc.iso_g_corr = float(chi_iso_g_corr)
+        elif chi_iso is not None:
             susc = build_chi_iso_from_csv(susc, chi_iso=float(chi_iso))
         elif electronic is not None:
             susc = build_chi_iso_spin_only(

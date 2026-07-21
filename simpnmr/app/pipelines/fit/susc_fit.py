@@ -1310,6 +1310,14 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     _T, _peak_err,
                 )
 
+    # The fitted isotropic susceptibility is the effective g-corrected value
+    # (the true spin-only chi_iso cannot be recovered from the fit), so record it
+    # as iso_g_corr — written to chi_iso_g_corr with chi_iso left blank, and read
+    # back by prediction as the g-corrected Fermi-contact susceptibility.
+    for _molecule in molecules:
+        if _molecule.susc.iso_g_corr is None:
+            _molecule.susc.iso_g_corr = _molecule.susc.iso
+
     # Write susceptibility tensor with model terms
     save_susc(
         molecules,
