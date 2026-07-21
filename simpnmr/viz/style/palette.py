@@ -65,6 +65,7 @@ class ShiftColours:
 
     total: str
     fc: str
+    fc_spin_only: str
     pc: str
     dia: str
 
@@ -72,13 +73,15 @@ class ShiftColours:
 SHIFT_COLOURS: dict[PlotProfile, ShiftColours] = {
     "paper": ShiftColours(
         total="#111111",  # total pNMR shift (black)
-        fc="#3455DB",  # Fermi contact contribution (dark blue)
+        fc="#3455DB",  # Fermi contact contribution, g-corrected (dark blue)
+        fc_spin_only="#9DB2F0",  # spin-only Fermi contact (light blue)
         pc="#F22613",  # pseudocontact contribution (red)
         dia="#28A228",  # diamagnetic contribution (green)
     ),
     "poster": ShiftColours(
         total="#111111",  # total pNMR shift (black)
-        fc="#3455DB",  # Fermi contact contribution (dark blue)
+        fc="#3455DB",  # Fermi contact contribution, g-corrected (dark blue)
+        fc_spin_only="#9DB2F0",  # spin-only Fermi contact (light blue)
         pc="#F22613",  # pseudocontact contribution (red)
         dia="#28A228",  # diamagnetic contribution (green)
     ),

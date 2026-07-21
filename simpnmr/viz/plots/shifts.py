@@ -135,8 +135,14 @@ def plot_shift_spread(
 
     xvals = np.arange(1, len(_order) + 1)
 
+    # When a g-correction split is available, the Fermi contact is drawn as two
+    # violins (spin-only and g-corrected), so reserve one extra slot.
+    _has_fc_split = "fc" in terms and any(
+        getattr(nuc.shift, "fc_spin_only", None) is not None for nuc in _nuclei
+    )
+
     # width of bars, and shift to apply for starting positions
-    width = 1 / (len(terms) + 2)
+    width = 1 / (len(terms) + 2 + (1 if _has_fc_split else 0))
     widthscaler = 1.0
 
     # Total Theoretical shift violin plot
@@ -180,24 +186,35 @@ def plot_shift_spread(
 
     widthscaler += 1
 
-    # Fermi contact shift violin plot
+    # Fermi contact shift violin plot. With a g-correction split, show the
+    # spin-only and g-corrected Fermi contact as two distinct violins.
     if "fc" in terms:
-        fc = {nuc.chem_math_label: [] for nuc in _nuclei}
-        for nuc in _nuclei:
-            fc[nuc.chem_math_label].append(nuc.shift.fc)
-        _violin = ax.violinplot(
-            dataset=[fc[o] for o in _order],
-            positions=(xvals + width * widthscaler),
-            widths=width,
-            vert=True,
-            showmeans=True,
-        )
-        widthscaler += 1
-        set_violin_colours(_violin, shift_colours.fc)
-        legend_markers.append(
-            mpatches.Patch(color=_violin["bodies"][0].get_facecolor().flatten()),
-        )
-        legend_labels.append("FC")
+        if _has_fc_split:
+            _fc_variants = [
+                ("fc_spin_only", "FC (spin-only)", shift_colours.fc_spin_only),
+                ("fc", "FC (g-corr)", shift_colours.fc),
+            ]
+        else:
+            _fc_variants = [("fc", "FC", shift_colours.fc)]
+        for _attr, _lbl, _colour in _fc_variants:
+            fc = {nuc.chem_math_label: [] for nuc in _nuclei}
+            for nuc in _nuclei:
+                fc[nuc.chem_math_label].append(getattr(nuc.shift, _attr))
+            _violin = ax.violinplot(
+                dataset=[fc[o] for o in _order],
+                positions=(xvals + width * widthscaler),
+                widths=width,
+                vert=True,
+                showmeans=True,
+            )
+            widthscaler += 1
+            set_violin_colours(_violin, _colour)
+            legend_markers.append(
+                mpatches.Patch(
+                    color=_violin["bodies"][0].get_facecolor().flatten()
+                ),
+            )
+            legend_labels.append(_lbl)
 
     # Pseudo contact shift violin plot
     if "pc" in terms:
@@ -372,8 +389,14 @@ def plot_shift_contrib(
                 for k, _ in sorted(exps.items(), key=lambda item: item[1], reverse=True)
             ]
 
+    # When a g-correction split is available, the Fermi contact is drawn as two
+    # bars (spin-only and g-corrected), so reserve one extra slot.
+    _has_fc_split = "fc" in terms and any(
+        getattr(nuc.shift, "fc_spin_only", None) is not None for nuc in _nuclei
+    )
+
     # width of bars, and shift to apply for starting positions
-    width = 1 / (len(terms) + 1)
+    width = 1 / (len(terms) + 1 + (1 if _has_fc_split else 0))
 
     # Make plot
     fig, ax = create_canvas(
@@ -431,18 +454,28 @@ def plot_shift_contrib(
 
     # Fermi contact part
     if "fc" in terms:
-        # Take average
-        fc = dict.fromkeys(cl_to_al, 0)
-        for nuc in _nuclei:
-            fc[nuc.chem_math_label] += nuc.shift.fc / cl_to_al[nuc.chem_math_label]
-        ax.bar(
-            (xvals + width * widthscaler),
-            [fc[o] for o in order],
-            width,
-            label="FC",
-            color=shift_colours.fc,
-        )
-        widthscaler += 1
+        # With a g-correction split, draw spin-only and g-corrected FC bars.
+        if _has_fc_split:
+            _fc_variants = [
+                ("fc_spin_only", "FC (spin-only)", shift_colours.fc_spin_only),
+                ("fc", "FC (g-corr)", shift_colours.fc),
+            ]
+        else:
+            _fc_variants = [("fc", "FC", shift_colours.fc)]
+        for _attr, _lbl, _colour in _fc_variants:
+            fc = dict.fromkeys(cl_to_al, 0)
+            for nuc in _nuclei:
+                fc[nuc.chem_math_label] += (
+                    getattr(nuc.shift, _attr) / cl_to_al[nuc.chem_math_label]
+                )
+            ax.bar(
+                (xvals + width * widthscaler),
+                [fc[o] for o in order],
+                width,
+                label=_lbl,
+                color=_colour,
+            )
+            widthscaler += 1
 
     # Pseudocontact part
     if "pc" in terms:
