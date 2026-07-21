@@ -674,6 +674,12 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         # Update susceptibility tensor of Molecule using model
         molecule.susc = susc_model.tosusceptibility()
 
+        # The fitted isotropic susceptibility is the effective g-corrected value
+        # (the true spin-only chi_iso cannot be recovered from the fit). Record it
+        # as iso_g_corr before computing shifts, so the Fermi contact is split into
+        # spin-only and g-correction contributions in the shift plots and CSVs.
+        molecule.susc.iso_g_corr = molecule.susc.iso
+
         # Calculate shifts using new susceptibility tensor
         molecule.calculate_shifts()
         molecule.average_shifts()
@@ -1309,14 +1315,6 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
                     "peak_data file not written for %.2f K: %s",
                     _T, _peak_err,
                 )
-
-    # The fitted isotropic susceptibility is the effective g-corrected value
-    # (the true spin-only chi_iso cannot be recovered from the fit), so record it
-    # as iso_g_corr — written to chi_iso_g_corr with chi_iso left blank, and read
-    # back by prediction as the g-corrected Fermi-contact susceptibility.
-    for _molecule in molecules:
-        if _molecule.susc.iso_g_corr is None:
-            _molecule.susc.iso_g_corr = _molecule.susc.iso
 
     # Write susceptibility tensor with model terms
     save_susc(
