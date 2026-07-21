@@ -697,6 +697,11 @@ class Shift:
         self._orb_aniso = orb_aniso  # Orbital anisotropic
         self._dia = dia  # Diamagnetic
         self._lw = lw
+        # Full 3x3 shift tensors (raw, non-symmetric); the scalar components
+        # above are one third of each tensor's trace.
+        self._pc_tensor = np.zeros((3, 3), dtype=float)
+        self._fc_tensor = np.zeros((3, 3), dtype=float)
+        self._orb_tensor = np.zeros((3, 3), dtype=float)
         self._avg = copy.copy(self.total)
         pass
 
@@ -711,6 +716,36 @@ class Shift:
     @property
     def paramag(self) -> float:
         return self.hf + self.orb
+
+    # --- Full 3x3 shift tensors (raw, non-symmetric) -----------------------
+    @property
+    def pc_tensor(self) -> NDArray:
+        return self._pc_tensor
+
+    @pc_tensor.setter
+    def pc_tensor(self, val: NDArray):
+        self._pc_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def fc_tensor(self) -> NDArray:
+        return self._fc_tensor
+
+    @fc_tensor.setter
+    def fc_tensor(self, val: NDArray):
+        self._fc_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def orb_tensor(self) -> NDArray:
+        return self._orb_tensor
+
+    @orb_tensor.setter
+    def orb_tensor(self, val: NDArray):
+        self._orb_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def paramag_tensor(self) -> NDArray:
+        """Total paramagnetic shift tensor (ppm): fc + pc + orb (raw 3x3)."""
+        return self._fc_tensor + self._pc_tensor + self._orb_tensor
 
     @property
     def avg(self) -> float:
@@ -921,6 +956,34 @@ class Shift:
         """Computes the Fermi contact contribution to the chemical shift."""
         shift = chi.iso * (1.0 / 3.0 * np.trace(A.fc))
         return shift
+
+    # --- Full 3x3 shift tensors (raw, non-symmetric) -----------------------
+    # Each is the shift tensor before the isotropic average; taking one third
+    # of its trace recovers the corresponding scalar above.
+    @staticmethod
+    def calc_pcs_tensor(A: Hyperfine, chi: "Susceptibility") -> NDArray:
+        """Pseudocontact shift tensor (ppm). ``trace/3`` == :meth:`calc_pcs`."""
+        return chi.dtensor @ A.sd
+
+    @staticmethod
+    def calc_fcs_tensor(A: Hyperfine, chi: "Susceptibility") -> NDArray:
+        """Fermi-contact shift tensor (ppm). ``trace/3`` == :meth:`calc_fcs`."""
+        return chi.iso * A.fc
+
+    @staticmethod
+    def calc_orb_tensor(
+        A: Hyperfine, chi: "Susceptibility", g_tensor_dft: NDArray
+    ) -> NDArray:
+        """Orbital shift tensor (ppm). ``trace/3`` == :meth:`calc_orb`."""
+        g_tensor_dft = np.asarray(g_tensor_dft, dtype=float)
+        if g_tensor_dft.shape != (3, 3):
+            raise ValueError("g_tensor_dft must be a (3, 3) matrix")
+        try:
+            g_inv_t = la.inv(g_tensor_dft).T
+        except la.LinAlgError as exc:
+            raise ValueError("g_tensor_dft must be invertible") from exc
+        a_orb_eff = GE * (g_inv_t @ (A.sd + A.orb).T)
+        return chi.iso * a_orb_eff + chi.dtensor @ a_orb_eff - chi.dtensor @ A.sd
 
     @staticmethod
     def calc_paramag(

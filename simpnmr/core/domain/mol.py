@@ -855,15 +855,21 @@ class Molecule:
         for nuc in self.nuclei:
             nuc.shift.pc = Shift.calc_pcs(nuc.A, self.susc)
             nuc.shift.fc = Shift.calc_fcs(nuc.A, self.susc)
+            nuc.shift.pc_tensor = Shift.calc_pcs_tensor(nuc.A, self.susc)
+            nuc.shift.fc_tensor = Shift.calc_fcs_tensor(nuc.A, self.susc)
 
             if orb_available:
                 nuc.shift.orb_iso = Shift.calc_orb_iso(nuc.A, self.susc, g_tensor_dft)
                 nuc.shift.orb_aniso = Shift.calc_orb_aniso(
                     nuc.A, self.susc, g_tensor_dft
                 )
+                nuc.shift.orb_tensor = Shift.calc_orb_tensor(
+                    nuc.A, self.susc, g_tensor_dft
+                )
             else:
                 nuc.shift.orb_iso = 0.0
                 nuc.shift.orb_aniso = 0.0
+                nuc.shift.orb_tensor = np.zeros((3, 3), dtype=float)
 
         self._calculate_fc_gcorr_delta()
         return

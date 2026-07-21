@@ -418,6 +418,20 @@ def _build_molecule_df(molecule):
             if has_fc_gcorr
             else []
         ),
+        # Full paramagnetic shift tensor (raw 3x3, non-symmetric): fc + pc + orb.
+        # Its trace/3 equals δ_total − δ_dia.
+        *[
+            (
+                f"δ_para_{a}{b} (ppm)",
+                lambda ctx, i=i, j=j: (
+                    ctx["nuc"].shift.paramag_tensor[i, j]
+                    if ctx["nuc"] is not None
+                    else np.nan
+                ),
+            )
+            for a, i in (("x", 0), ("y", 1), ("z", 2))
+            for b, j in (("x", 0), ("y", 1), ("z", 2))
+        ],
     ]
 
     orb_specs = [
