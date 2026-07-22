@@ -53,9 +53,15 @@ def test_fc_contributions_sum_to_total():
 
 
 @pytest.mark.unit
-def test_split_available_without_stored_spin_only():
-    # the pre-change code skipped when susc.iso_spin_only was None
+def test_spin_only_channel_populated_from_spin_and_temperature():
+    # A susc that carries only the g-corrected iso (e.g. loaded from a fit CSV):
+    # calculate_shifts populates the spin-only channel from spin & temperature
+    # so the Fermi contact can be split.
     m, nuc = _molecule_with_g_corr_only()
+    assert m.susc.iso_spin_only is None  # not stored initially
     m.calculate_shifts()
-    assert m.susc.iso_spin_only is None
+    expected = get_spin_only_susc(
+        spin=1.0, orbit=0.0, total_momentum_J=None, temperature=298.0
+    )
+    assert m.susc.iso_spin_only == pytest.approx(expected)
     assert nuc.shift.fc_spin_only is not None

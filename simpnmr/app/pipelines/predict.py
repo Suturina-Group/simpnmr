@@ -199,7 +199,11 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         for T in config.susceptibility_temperatures:
             chi_iso = get_spin_only_susc(spin, orbit, total_J, T)
             tensor = np.eye(3) * chi_iso
-            suscs.append(Susceptibility(tensor=tensor, temperature=T))
+            susc = Susceptibility(tensor=tensor, temperature=T)
+            # Spin-only method: the isotropic susceptibility is the spin-only
+            # value; there is no g-correction, so the Fermi contact is spin-only.
+            susc.iso_spin_only = float(chi_iso)
+            suscs.append(susc)
         logger.info(
             "Spin-only susceptibility built for %d temperature(s) "
             "(S=%.1f, L=%.1f, J=%.1f)",
@@ -263,6 +267,9 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         # Δχ·T/C components (as read from the isoaxrh plot after fit_susc)
         # and ZYZ Euler angles.  No L=0 restriction — the Curie prefactor
         # only scales the tensor, and the user is supplying fitted values.
+        # The reduced iso component (chi_iso_T) is the g-corrected chi_iso: the
+        # builder records it as iso_g_corr, so the Fermi contact is split into
+        # spin-only and g-correction contributions just like the fit workflow.
         rc = config.susceptibility_reduced_chi
         rh_over_ax = float(rc["rh_over_ax"])
         if not (0.0 <= rh_over_ax <= 1.0 / 3.0):
@@ -288,7 +295,7 @@ def run_predict(config, options: PredictRunOptions | None = None) -> int:
         )
         logger.info(
             "Reduced-chiT susceptibility built for %d temperature(s) "
-            "(rh/ax=%.4f)",
+            "(rh/ax=%.4f); iso component treated as g-corrected chi_iso",
             len(suscs),
             rh_over_ax,
         )

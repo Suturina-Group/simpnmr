@@ -89,16 +89,14 @@ def load_susceptibility_csv(
 
     The CSV loader always constructs the tensor-backed susceptibility object
     first. If a CSV isotropic susceptibility value is present, it is attached
-    directly as the canonical isotropic susceptibility. Otherwise, when
-    electronic-state data is available, the loader first attaches the spin-only
-    isotropic susceptibility reference channel. If a g-tensor is also
-    available, it then attaches the g-corrected isotropic susceptibility
-    channel and promotes it to the canonical ``susc.iso`` while preserving
-    ``susc.iso_spin_only`` for downstream delta-shift reporting. If only the
-    spin-only channel is available, that channel becomes the canonical
-    ``susc.iso``. If insufficient data is available, the isotropic
-    susceptibility channel is skipped and only the tensor-backed susceptibility
-    object is returned.
+    as the g-corrected contact channel (``susc.iso_g_corr``). Otherwise, when
+    electronic-state data is available, the loader attaches the spin-only
+    isotropic susceptibility channel (``susc.iso_spin_only``), and, if a
+    g-tensor is also available, the g-corrected channel (``susc.iso_g_corr``).
+    The true isotropic susceptibility (``susc.iso`` = Tr(chi)/3) is always
+    derived from the tensor and is read-only. If insufficient data is
+    available, the isotropic channels are skipped and only the tensor-backed
+    susceptibility object is returned.
 
     Args:
         susceptibility_file: Path to the CSV susceptibility source file.
@@ -114,9 +112,13 @@ def load_susceptibility_csv(
     suscs: list[Susceptibility] = []
 
     def _row_iso(row):
-        # g-corrected isotropic susceptibility takes precedence over plain chi_iso
-        _, _, chi_iso, chi_iso_g_corr = row
-        return chi_iso_g_corr if chi_iso_g_corr is not None else chi_iso
+        # A row carries an isotropic susceptibility if any channel is present:
+        # g-corrected, spin-only, or a legacy plain chi_iso column.
+        _, _, chi_iso, chi_iso_spin_only, chi_iso_g_corr = row
+        for value in (chi_iso_g_corr, chi_iso_spin_only, chi_iso):
+            if value is not None:
+                return value
+        return None
 
     has_csv_chi_iso = any(_row_iso(r) is not None for r in rows)
     has_rows_without_csv_chi_iso = any(_row_iso(r) is None for r in rows)
@@ -149,39 +151,40 @@ def load_susceptibility_csv(
                 "those rows"
             )
 
-    for tensor, temperature, chi_iso, chi_iso_g_corr in rows:
+    for tensor, temperature, chi_iso, chi_iso_spin_only, chi_iso_g_corr in rows:
         susc = build_chi_d_tensor_from_csv(
             temperature=float(temperature),
             tensor=tensor,
         )
 
+        # Explicit channels from the CSV take precedence. The true iso
+        # (Tr(chi)/3) is always available from the tensor and is read-only.
+        if chi_iso_spin_only is not None:
+            susc.iso_spin_only = float(chi_iso_spin_only)
         if chi_iso_g_corr is not None:
-            # Explicit g-corrected isotropic susceptibility (e.g. from a fit):
-            # adopt it as the canonical iso so the Fermi contact is g-corrected.
-            susc = build_chi_iso_from_csv(susc, chi_iso=float(chi_iso_g_corr))
             susc.iso_g_corr = float(chi_iso_g_corr)
-        elif chi_iso is not None:
-            susc = build_chi_iso_from_csv(susc, chi_iso=float(chi_iso))
-        elif electronic is not None:
-            susc = build_chi_iso_spin_only(
-                susc,
-                spin=electronic.spin_S,
-                orbit=electronic.orbit_L,
-                total_momentum_J=electronic.total_J,
-            )
-            if g_tensor is not None:
-                susc = build_chi_iso_g_corr(
+
+        if chi_iso_g_corr is None and chi_iso_spin_only is None:
+            if chi_iso is not None:
+                # Legacy plain chi_iso column (old CSV format): this was the
+                # isotropic value that drove the Fermi contact, so treat it as
+                # the g-corrected contact channel.
+                susc = build_chi_iso_from_csv(susc, chi_iso=float(chi_iso))
+            elif electronic is not None:
+                susc = build_chi_iso_spin_only(
                     susc,
                     spin=electronic.spin_S,
                     orbit=electronic.orbit_L,
                     total_momentum_J=electronic.total_J,
-                    g_tensor=g_tensor,
                 )
-                susc.iso = susc.iso_g_corr
-            else:
-                susc.iso = susc.iso_spin_only
-        else:
-            pass
+                if g_tensor is not None:
+                    susc = build_chi_iso_g_corr(
+                        susc,
+                        spin=electronic.spin_S,
+                        orbit=electronic.orbit_L,
+                        total_momentum_J=electronic.total_J,
+                        g_tensor=g_tensor,
+                    )
 
         suscs.append(susc)
 
@@ -198,14 +201,12 @@ def load_susceptibility_orca(
     """Load susceptibility objects from an ORCA output file.
 
     The ORCA loader always constructs the tensor-backed susceptibility object
-    first. When electronic-state data is available, the loader first attaches
-    the spin-only isotropic susceptibility reference channel. If a g-tensor is
-    also available, it then attaches the g-corrected isotropic susceptibility
-    channel and promotes it to the canonical ``susc.iso`` while preserving
-    ``susc.iso_spin_only`` for downstream delta-shift reporting. If only the
-    spin-only channel is available, that channel becomes the canonical
-    ``susc.iso``. If insufficient data is available, the isotropic
-    susceptibility channel is skipped and only the tensor-backed susceptibility
+    first. When electronic-state data is available, the loader attaches the
+    spin-only isotropic susceptibility channel (``susc.iso_spin_only``), and, if
+    a g-tensor is also available, the g-corrected channel (``susc.iso_g_corr``).
+    The true isotropic susceptibility (``susc.iso`` = Tr(chi)/3) is always
+    derived from the tensor and is read-only. If insufficient data is available,
+    the isotropic channels are skipped and only the tensor-backed susceptibility
     object is returned.
 
     Args:
@@ -268,9 +269,6 @@ def load_susceptibility_orca(
                     total_momentum_J=electronic.total_J,
                     g_tensor=g_tensor,
                 )
-                susc.iso = susc.iso_g_corr
-            else:
-                susc.iso = susc.iso_spin_only
         else:
             pass
 

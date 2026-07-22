@@ -234,7 +234,9 @@ def plot_isoaxrh(
         # marks the reduced, dimensionless quantity. Keep consistent with the
         # fit-vs-ab-initio plot below.
         if component == "iso":
-            _ylabel = r"$\Delta\chi'^{g\text{-corr}}_{\mathrm{iso}}\,T$"
+            # The g-corrected iso is a full isotropic susceptibility, not a
+            # deviatoric Delta component, so it carries no Delta prefix.
+            _ylabel = r"$\chi'^{g\text{-corr}}_{\mathrm{iso}}\,T$"
         else:
             _ylabel = rf"$\Delta\chi'_{{{chi_sub}}}\,T$"
         ax.set_ylabel(_ylabel)
@@ -445,7 +447,9 @@ def plot_exp_vs_ab_initio(
         ax.set_xlabel(r"$1/T\;10^{3}$ (K$^{-1}$)")
         chi_sub = _chiT_label_map.get(component, component)
         if component == "iso":
-            ylabel = r"$\Delta\chi'^{g\text{-corr}}_{\mathrm{iso}}\,T$"
+            # The g-corrected iso is a full isotropic susceptibility, not a
+            # deviatoric Delta component, so it carries no Delta prefix.
+            ylabel = r"$\chi'^{g\text{-corr}}_{\mathrm{iso}}\,T$"
         else:
             ylabel = rf"$\Delta\chi'_{{{chi_sub}}}\,T$"
         ax.set_ylabel(ylabel)

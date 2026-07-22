@@ -333,28 +333,24 @@ class SpinHamiltonian:
 
 
 class Molecule:
-    def _calculate_fc_gcorr_delta(self) -> None:
-        """Split the Fermi contact into spin-only and g-correction contributions.
+    def _populate_spin_only_channel(self) -> None:
+        """Populate ``chi.iso_spin_only`` from the electronic state.
 
-        The spin-only reference is computed directly from the spin and the
-        temperature (the spin-only Curie susceptibility), not from the stored
-        ``chi.iso_spin_only`` — so the split is available even for fit-derived
-        g-corrected susceptibilities that carry no spin-only channel.
-
-        With ``A_iso = Tr(A.fc) / 3``::
-
-            fc_spin_only    = A_iso * chi_iso_spin_only(S, T)
-            fc_delta_g_corr = A_iso * (chi_iso_g_corr - chi_iso_spin_only)
-                            = fc - fc_spin_only
-
-        so the two contributions sum to the total (g-corrected) Fermi contact.
+        The spin-only isotropic susceptibility (the spin-only Curie value) is
+        computed from the spin, orbital/total angular momenta, and temperature.
+        It is the reference used to split the Fermi contact into its spin-only
+        and g-correction parts, so it must be available in every shift-computing
+        path (fit included). An already-set channel (e.g. from a file loader) is
+        left untouched; the value is skipped when the spin is unknown.
         """
-        from simpnmr.core.phys.susc import get_spin_only_susc
-
-        if self.susc.iso_g_corr is None or self.electronic.spin_S is None:
+        if self.susc.iso_spin_only is not None:
+            return
+        if self.electronic is None or self.electronic.spin_S is None:
             return
 
-        chi_iso_spin_only = get_spin_only_susc(
+        from simpnmr.core.phys.susc import get_spin_only_susc
+
+        self.susc.iso_spin_only = get_spin_only_susc(
             spin=float(self.electronic.spin_S),
             orbit=(
                 0.0
@@ -364,13 +360,6 @@ class Molecule:
             total_momentum_J=self.electronic.total_J,
             temperature=float(self.susc.temperature),
         )
-
-        for nuc in self.nuclei:
-            a_iso = float(np.trace(nuc.A.fc)) / 3.0
-            fc_spin_only = chi_iso_spin_only * a_iso
-            nuc.shift.fc_spin_only = fc_spin_only
-            nuc.shift.fc_delta_g_corr = nuc.shift.fc - fc_spin_only
-
         return
 
     """Molecular container holding structure, available HFC data, and runtime nuclei.
@@ -868,9 +857,16 @@ class Molecule:
                     "SpinHamiltonian.g_tensor_dft is missing."
                 )
 
+        # Populate the spin-only isotropic susceptibility channel from the
+        # electronic state so the Fermi contact can be split into its spin-only
+        # and g-correction parts in every path (fit included).
+        self._populate_spin_only_channel()
+
         for nuc in self.nuclei:
             nuc.shift.pc = Shift.calc_pcs(nuc.A, self.susc)
             nuc.shift.fc = Shift.calc_fcs(nuc.A, self.susc)
+            nuc.shift.fc_spin_only = Shift.calc_fc_spin_only(nuc.A, self.susc)
+            nuc.shift.fc_delta_g_corr = Shift.calc_fc_delta_gcorr(nuc.A, self.susc)
             nuc.shift.pc_tensor = Shift.calc_pcs_tensor(nuc.A, self.susc)
             nuc.shift.fc_tensor = Shift.calc_fcs_tensor(nuc.A, self.susc)
 
@@ -887,7 +883,6 @@ class Molecule:
                 nuc.shift.orb_aniso = 0.0
                 nuc.shift.orb_tensor = np.zeros((3, 3), dtype=float)
 
-        self._calculate_fc_gcorr_delta()
         return
 
     def apply_diamagnetic_shifts(

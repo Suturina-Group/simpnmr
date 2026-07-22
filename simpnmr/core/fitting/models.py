@@ -283,9 +283,14 @@ class SusceptibilityModel(ABC):
     def tosusceptibility(self) -> Susceptibility:
         """Converts the fitted model into a `Susceptibility` instance.
 
+        The fitted isotropic susceptibility is the effective g-corrected value
+        (the true spin-only chi_iso cannot be recovered from the fit), so it is
+        recorded as ``chi.iso_g_corr``. The tensor already carries the same
+        value on its diagonal, so the read-only ``chi.iso`` (Tr(chi)/3) matches.
+
         Returns:
-            A `Susceptibility` object at `self.temperature` with canonical
-            ``chi.iso`` assigned from the fitted model.
+            A `Susceptibility` object at `self.temperature` with
+            ``chi.iso_g_corr`` assigned from the fitted model.
         """
         tensor = self.totensor(self.final_var_values)
         susc = Susceptibility(tensor, self.temperature)
@@ -294,7 +299,7 @@ class SusceptibilityModel(ABC):
         if fitted_iso is None:
             fitted_iso = float(np.trace(tensor) / 3.0)
 
-        susc.iso = float(fitted_iso)
+        susc.iso_g_corr = float(fitted_iso)
         return susc
 
     @staticmethod

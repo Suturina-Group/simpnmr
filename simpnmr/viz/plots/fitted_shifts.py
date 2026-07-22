@@ -259,14 +259,18 @@ def plot_fitted_shifts(
         T = float(molecule.susc.temperature)
         red_conv = T / norm_factor
 
-        iso_red = float(molecule.susc.iso) * red_conv
+        # Labelled as the g-corrected iso; use that channel (falling back to the
+        # true Tr(chi)/3, which equals it for a fit).
+        _iso_g_corr = molecule.susc.iso_g_corr
+        _iso_source = _iso_g_corr if _iso_g_corr is not None else molecule.susc.iso
+        iso_red = float(_iso_source) * red_conv
         iso_err_red = _err_scaled("iso", red_conv)
         if iso_err_red is not None:
             iso_line = format_compact_uncertainty(iso_red, iso_err_red)
         else:
             iso_line = _fmt_val(iso_red, ".4f")
         model_lines.append(
-            f"$\\chi$′$_\\mathrm{{iso}}$T: {iso_line}"
+            f"$\\chi'^{{g\\text{{-corr}}}}_{{\\mathrm{{iso}}}}\\,T$: {iso_line}"
         )
 
         dax_red = ax0 * red_conv

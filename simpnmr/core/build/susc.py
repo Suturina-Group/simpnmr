@@ -80,11 +80,13 @@ def build_chi_iso_from_csv(
     *,
     chi_iso: float,
 ) -> Susceptibility:
-    """Attach isotropic susceptibility read directly from CSV data.
+    """Attach an isotropic susceptibility read directly from CSV data.
 
-    This builder performs no physical transformation. It simply stores the
-    provided CSV isotropic susceptibility value in the canonical ``susc.iso``
-    field on an existing susceptibility domain object.
+    This builder performs no physical transformation. It records the provided
+    CSV isotropic susceptibility as the g-corrected contact channel
+    (``susc.iso_g_corr``): a stored ``chi_iso``/``chi_iso_g_corr`` column is the
+    isotropic value that drives the (g-corrected) Fermi contact. The true
+    Tr(chi)/3 is read-only and derived from the tensor.
 
     Args:
         susc: Existing susceptibility domain object to enrich.
@@ -94,7 +96,7 @@ def build_chi_iso_from_csv(
         The same susceptibility domain object enriched with CSV isotropic
         susceptibility.
     """
-    susc.iso = float(chi_iso)
+    susc.iso_g_corr = float(chi_iso)
     return susc
 
 
@@ -108,8 +110,8 @@ def build_chi_iso_spin_only(
     """Attach spin-only isotropic susceptibility to a domain object.
 
     This builder computes the spin-only isotropic susceptibility channel and
-    stores it in both ``susc.iso_spin_only`` and the canonical ``susc.iso``
-    field on an existing susceptibility domain object.
+    stores it in ``susc.iso_spin_only`` on an existing susceptibility domain
+    object.
 
     Args:
         susc: Existing susceptibility domain object to enrich.
@@ -143,8 +145,8 @@ def build_chi_iso_g_corr(
     """Attach g-corrected isotropic susceptibility to a domain object.
 
     This builder computes the g-tensor-corrected isotropic susceptibility
-    channel and stores it in both ``susc.iso_g_corr`` and the canonical
-    ``susc.iso`` field on an existing susceptibility domain object.
+    channel and stores it in ``susc.iso_g_corr`` on an existing susceptibility
+    domain object.
 
     Args:
         susc: Existing susceptibility domain object to enrich.
