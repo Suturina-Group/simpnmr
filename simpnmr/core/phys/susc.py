@@ -446,9 +446,12 @@ def get_g_corr_iso_susc(
     # Use Landé g_J (or GE) to get an effective g-factor
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
 
-    # Trace-based expression with g correction (cm^3 mol^-1)
+    # Trace-based expression with g correction (Å³). The matrix product (not an
+    # element-wise product) is required so the result is a rotation-invariant
+    # scalar: Tr(chi @ g^-T) is frame-independent, whereas summing only the
+    # diagonal products depends on the molecular-frame orientation.
     chi_true_iso = g_eff / 3.0 * np.trace(
-        chi_tensors * np.linalg.inv(g_tensor.T)
+        chi_tensors @ np.linalg.inv(g_tensor.T)
     )
 
     return chi_true_iso
