@@ -239,6 +239,101 @@ tensor from the same QC source.
    from the transformed combination
    :math:`\mathbf{A}^{\mathrm{SD}}+\mathbf{A}^{\mathrm{ORB}}`.
 
+.. _RELAX:
+
+Paramagnetic relaxation
+-----------------------
+
+``simpnmr`` evaluates nucleus-resolved longitudinal (:math:`R_1`) and
+transverse (:math:`R_2`) paramagnetic relaxation rates from the
+Solomon–Bloembergen–Morgan (SBM) dipolar and Fermi-contact terms and the
+Guéron Curie-spin term. All terms share the Lorentzian spectral density
+
+.. math::
+
+    J(\omega,\tau) = \frac{\tau}{1+\omega^2\tau^2}
+
+where :math:`\omega_I` and :math:`\omega_S` are the nuclear and electron
+Larmor angular frequencies, :math:`r` is the electron–nucleus distance,
+:math:`\gamma_I` is the nuclear gyromagnetic ratio, :math:`A_{\mathrm{iso}}`
+is the isotropic Fermi-contact coupling (in angular-frequency units), and
+:math:`T` is the temperature. The correlation times are the dipolar
+correlation times :math:`\tau_{c1}, \tau_{c2}`, the electronic correlation
+times :math:`\tau_{e1}, \tau_{e2}`, and the rotational correlation time
+:math:`\tau_R`.
+
+.. note::
+
+   :math:`g_{\mathrm{eff}}` and :math:`S_{\mathrm{eff}}` are the effective
+   electron *g*-factor and angular-momentum quantum number. For spin-only
+   systems they are the free-electron value :math:`g_e` and the spin
+   :math:`S`; for systems with a well-defined total angular momentum they are
+   the Landé :math:`g_J` and :math:`J`.
+
+SBM dipolar relaxation
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. math::
+
+    R_1^{\mathrm{DD}} = \frac{2}{15}\left(\frac{\mu_0}{4\pi}\right)^2
+    \frac{\gamma_I^2\, g_{\mathrm{eff}}^2\, \mu_B^2\,
+    S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)}{r^6}
+    \Big[\,3\,J(\omega_I,\tau_{c1}) + 6\,J(\omega_I+\omega_S,\tau_{c2})
+    + J(\omega_I-\omega_S,\tau_{c2})\,\Big]
+
+.. math::
+
+    R_2^{\mathrm{DD}} = \frac{1}{15}\left(\frac{\mu_0}{4\pi}\right)^2
+    \frac{\gamma_I^2\, g_{\mathrm{eff}}^2\, \mu_B^2\,
+    S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)}{r^6}
+    \Big[\,4\,J(0,\tau_{c1}) + 3\,J(\omega_I,\tau_{c1})
+    + 6\,J(\omega_S,\tau_{c2}) + 6\,J(\omega_I+\omega_S,\tau_{c2})
+    + J(\omega_I-\omega_S,\tau_{c2})\,\Big]
+
+SBM Fermi-contact relaxation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. math::
+
+    R_1^{\mathrm{SC}} = \frac{2}{3}\, A_{\mathrm{iso}}^2\,
+    S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)\, J(\omega_I-\omega_S,\tau_{e2})
+
+.. math::
+
+    R_2^{\mathrm{SC}} = \frac{1}{3}\, A_{\mathrm{iso}}^2\,
+    S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)
+    \Big[\,J(0,\tau_{e1}) + J(\omega_I-\omega_S,\tau_{e2})\,\Big]
+
+Guéron Curie relaxation
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Curie-spin term uses the point-dipole approximation and the
+thermally averaged (static) electron moment:
+
+.. math::
+
+    R_1^{\mathrm{Curie}} = \frac{2}{5}\left(\frac{\mu_0}{4\pi}\right)^2
+    \frac{\omega_I^2\, g_{\mathrm{eff}}^4\, \mu_B^4\,
+    \big[S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)\big]^2}{(3 k_B T)^2\, r^6}\,
+    3\,J(\omega_I,\tau_R)
+
+.. math::
+
+    R_2^{\mathrm{Curie}} = \frac{1}{5}\left(\frac{\mu_0}{4\pi}\right)^2
+    \frac{\omega_I^2\, g_{\mathrm{eff}}^4\, \mu_B^4\,
+    \big[S_{\mathrm{eff}}(S_{\mathrm{eff}}+1)\big]^2}{(3 k_B T)^2\, r^6}
+    \Big[\,4\,J(0,\tau_R) + 3\,J(\omega_I,\tau_R)\,\Big]
+
+.. note::
+
+   For both the SBM dipolar and the Curie terms the :math:`R_1` prefactor is
+   twice the :math:`R_2` prefactor (:math:`\tfrac{2}{15}` vs
+   :math:`\tfrac{1}{15}`, and :math:`\tfrac{2}{5}` vs :math:`\tfrac{1}{5}`).
+   In the high-field, fast-motion limit (:math:`\omega_S\tau \gg 1`,
+   :math:`\omega_I\tau \ll 1`) the dipolar spectral densities reduce to
+   :math:`3\tau` for :math:`R_1` and :math:`4\tau+3\tau=7\tau` for
+   :math:`R_2`, so :math:`R_2/R_1 \to 7/6`.
+
 .. _EULER:
 
 Susceptibility tensor and Euler angle convention
