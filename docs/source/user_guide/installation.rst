@@ -12,8 +12,8 @@ Installation
 
    * **Direct download:** `SimpNMR Windows installer <windows_installer_download_>`_
      (``SimpNMR-Setup-<version>.exe``) — save it and double-click to install.
-   * Or browse `all releases <https://gitlab.com/suturina-group/simpnmr/-/releases>`_
-     for a specific version.
+   * Or browse `all versions <https://gitlab.com/suturina-group/simpnmr/-/packages>`_
+     in the package registry to download a specific release.
 
    The rest of this page describes the command-line installation, which works on
    Windows, macOS and Linux and is required for scripted or headless use.
