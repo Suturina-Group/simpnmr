@@ -123,6 +123,10 @@ def build_susceptibility_from_sh(
     prefactor = compute_chi_prefactor(spin)  # Å³·K
     R = _zyz_rotation_matrix(alpha_deg, beta_deg, gamma_deg)
 
+    # g-tensor rotated into the molecular frame (same eigenframe as chi), used
+    # to compute the g-corrected isotropic susceptibility for the Fermi contact.
+    g_mol = R @ g_diag @ R.T
+
     def _analytic(comp, t):
         # compute_analytic_component returns chi/prefactor [1/K];
         # chi [Å³] = analytic * prefactor
@@ -150,7 +154,21 @@ def build_susceptibility_from_sh(
         # Rotate eigenframe → molecular frame: chi_mol = R @ chi_eigen @ R.T
         chi_mol = R @ chi_eigen @ R.T
 
-        suscs.append(Susceptibility(tensor=chi_mol, temperature=float(T)))
+        susc = Susceptibility(tensor=chi_mol, temperature=float(T))
+        # The SH tensor is built from the real g-tensor, so its isotropic part is
+        # the g-corrected susceptibility that drives the Fermi contact. Record it
+        # explicitly (chi and g are both known) so predict splits FC into
+        # spin-only and g-correction contributions, matching the fit workflow.
+        susc.iso_g_corr = float(
+            get_g_corr_iso_susc(
+                spin=spin,
+                orbit=0.0,
+                g_tensor=g_mol,
+                chi_tensors=chi_mol,
+                total_momentum_J=None,
+            )
+        )
+        suscs.append(susc)
 
     return suscs
 
@@ -257,7 +275,13 @@ def build_susceptibility_from_bleaney(
         chi_eigen = np.diag([chi_xx, chi_yy, chi_zz])
         chi_mol = R @ chi_eigen @ R.T
 
-        suscs.append(Susceptibility(tensor=chi_mol, temperature=float(T)))
+        susc = Susceptibility(tensor=chi_mol, temperature=float(T))
+        # Bleaney uses an isotropic g_J, so the g-corrected isotropic
+        # susceptibility equals the true Tr(chi)/3. Record it as iso_g_corr so
+        # the Fermi contact is driven by that value (and split reports a ~zero
+        # g-correction delta), consistent with the other parametric paths.
+        susc.iso_g_corr = susc.iso
+        suscs.append(susc)
 
     return suscs
 
@@ -361,7 +385,10 @@ def build_susceptibility_from_reduced_chi(
     temperature.
 
     Args:
-        chi_iso_T: Reduced iso component Δχ_iso·T/C (dimensionless).
+        chi_iso_T: Reduced iso component Δχ_iso·T/C (dimensionless). This is the
+            g-corrected isotropic susceptibility: fit_susc plots the fitted iso
+            (which it records as the g-corrected chi_iso) on the isoaxrh plot, so
+            the value is stored as ``iso_g_corr`` on each returned Susceptibility.
         chi_ax_T:  Reduced axial component Δχ_ax·T/C (dimensionless).
         chi_rh_T:  Reduced rhombic component Δχ_rh·T/C (dimensionless).
         alpha_deg: ZYZ Euler angle α (molecular → eigenframe) in degrees.
@@ -414,7 +441,13 @@ def build_susceptibility_from_reduced_chi(
         chi_eigen = np.diag([chi_xx, chi_yy, chi_zz])
         chi_mol = R @ chi_eigen @ R.T
 
-        suscs.append(Susceptibility(tensor=chi_mol, temperature=float(T)))
+        susc = Susceptibility(tensor=chi_mol, temperature=float(T))
+        # The reduced iso component is taken from the fit_susc isoaxrh plot, whose
+        # isotropic value is the g-corrected chi_iso (fit_susc records its fitted
+        # iso as iso_g_corr). Record it as iso_g_corr so predict splits the Fermi
+        # contact into spin-only and g-correction contributions, as in the fit.
+        susc.iso_g_corr = susc.iso
+        suscs.append(susc)
 
     return suscs
 
@@ -446,9 +479,12 @@ def get_g_corr_iso_susc(
     # Use Landé g_J (or GE) to get an effective g-factor
     g_eff = calc_g_eff(spin, orbit, total_momentum_J)
 
-    # Trace-based expression with g correction (cm^3 mol^-1)
+    # Trace-based expression with g correction (Å³). The matrix product (not an
+    # element-wise product) is required so the result is a rotation-invariant
+    # scalar: Tr(chi @ g^-T) is frame-independent, whereas summing only the
+    # diagonal products depends on the molecular-frame orientation.
     chi_true_iso = g_eff / 3.0 * np.trace(
-        chi_tensors * np.linalg.inv(g_tensor.T)
+        chi_tensors @ np.linalg.inv(g_tensor.T)
     )
 
     return chi_true_iso

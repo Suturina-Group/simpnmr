@@ -671,7 +671,10 @@ def run_fit_susc(config, options: FitSuscRunOptions | None = None) -> int:
         if not susc_model.fit_status:
             continue
 
-        # Update susceptibility tensor of Molecule using model
+        # Update susceptibility tensor of Molecule using model. tosusceptibility
+        # records the fitted isotropic value as the g-corrected channel
+        # (chi.iso_g_corr); calculate_shifts then adds the spin-only channel and
+        # splits the Fermi contact into spin-only and g-correction parts.
         molecule.susc = susc_model.tosusceptibility()
 
         # Calculate shifts using new susceptibility tensor

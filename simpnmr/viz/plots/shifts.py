@@ -180,7 +180,7 @@ def plot_shift_spread(
 
     widthscaler += 1
 
-    # Fermi contact shift violin plot
+    # Fermi contact shift violin plot (total, g-corrected when available)
     if "fc" in terms:
         fc = {nuc.chem_math_label: [] for nuc in _nuclei}
         for nuc in _nuclei:
@@ -372,6 +372,12 @@ def plot_shift_contrib(
                 for k, _ in sorted(exps.items(), key=lambda item: item[1], reverse=True)
             ]
 
+    # A g-correction split renders the Fermi contact as one stacked column
+    # (spin-only base + g-correction delta) — still a single bar slot.
+    _has_fc_split = "fc" in terms and any(
+        getattr(nuc.shift, "fc_spin_only", None) is not None for nuc in _nuclei
+    )
+
     # width of bars, and shift to apply for starting positions
     width = 1 / (len(terms) + 1)
 
@@ -431,18 +437,46 @@ def plot_shift_contrib(
 
     # Fermi contact part
     if "fc" in terms:
-        # Take average
-        fc = dict.fromkeys(cl_to_al, 0)
-        for nuc in _nuclei:
-            fc[nuc.chem_math_label] += nuc.shift.fc / cl_to_al[nuc.chem_math_label]
-        ax.bar(
-            (xvals + width * widthscaler),
-            [fc[o] for o in order],
-            width,
-            label="FC",
-            color=shift_colours.fc,
-        )
-        widthscaler += 1
+        if _has_fc_split:
+            # One FC column: spin-only base with the g-correction delta stacked.
+            fc_so = dict.fromkeys(cl_to_al, 0)
+            fc_delta = dict.fromkeys(cl_to_al, 0)
+            for nuc in _nuclei:
+                n = cl_to_al[nuc.chem_math_label]
+                fc_so[nuc.chem_math_label] += nuc.shift.fc_spin_only / n
+                fc_delta[nuc.chem_math_label] += nuc.shift.fc_delta_g_corr / n
+            _pos = xvals + width * widthscaler
+            _base = [fc_so[o] for o in order]
+            ax.bar(
+                _pos,
+                _base,
+                width,
+                label="FC (spin-only)",
+                color=shift_colours.fc_spin_only,
+            )
+            ax.bar(
+                _pos,
+                [fc_delta[o] for o in order],
+                width,
+                bottom=_base,
+                label="ΔFC (g-corr)",
+                color=shift_colours.fc,
+            )
+            widthscaler += 1
+        else:
+            fc = dict.fromkeys(cl_to_al, 0)
+            for nuc in _nuclei:
+                fc[nuc.chem_math_label] += (
+                    nuc.shift.fc / cl_to_al[nuc.chem_math_label]
+                )
+            ax.bar(
+                (xvals + width * widthscaler),
+                [fc[o] for o in order],
+                width,
+                label="FC",
+                color=shift_colours.fc,
+            )
+            widthscaler += 1
 
     # Pseudocontact part
     if "pc" in terms:

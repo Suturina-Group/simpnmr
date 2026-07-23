@@ -322,6 +322,12 @@ class ConfigForm(QScrollArea):
         self._rc_iso.setPlaceholderText(
             "scalar or comma-separated (one per T)"
         )
+        self._rc_iso.setToolTip(
+            "g-corrected isotropic susceptibility × T (reduced χ_iso·T).\n"
+            "This is the fitted isotropic value from fit_susc, which records it\n"
+            "as the g-corrected χ_iso — not a deviatoric Δχ. Used for the\n"
+            "g-corrected Fermi contact."
+        )
         self._rc_ax = QLineEdit()
         self._rc_ax.setPlaceholderText(
             "scalar or comma-separated (one per T)"
@@ -331,7 +337,7 @@ class ConfigForm(QScrollArea):
         self._rc_alpha = QLineEdit("0.0")
         self._rc_beta = QLineEdit("0.0")
         self._rc_gamma = QLineEdit("0.0")
-        _rc_form.addRow("Δχ_iso·T:", self._rc_iso)
+        _rc_form.addRow("χ_iso^(g-corr)·T:", self._rc_iso)
         _rc_form.addRow("Δχ_ax·T:", self._rc_ax)
         _rc_form.addRow("Δχ_rh·T / Δχ_ax·T:", self._rc_rh_over_ax)
         _rc_form.addRow("α (°):", self._rc_alpha)

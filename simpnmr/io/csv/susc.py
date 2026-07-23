@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 def read_susceptibilities_csv(
     file_name: str,
-) -> List[Tuple[np.ndarray, float, float | None]]:
+) -> List[
+    Tuple[np.ndarray, float, float | None, float | None, float | None]
+]:
     """Read susceptibility tensors from a CSV file.
 
     The reader loads full susceptibility tensors and temperature values from a
@@ -40,10 +42,12 @@ def read_susceptibilities_csv(
         file_name: Path to the susceptibility CSV file.
 
     Returns:
-        A list of tuples ``(tensor, temperature, chi_iso)``, where ``tensor`` is
+        A list of tuples
+        ``(tensor, temperature, chi_iso, chi_iso_spin_only, chi_iso_g_corr)``,
+        where ``tensor`` is
         a ``3x3`` susceptibility tensor in ``Å^3``, ``temperature`` is in
-        kelvin, and ``chi_iso`` is the optional isotropic susceptibility value
-        read from the CSV file when present.
+        kelvin, and the three ``chi_iso*`` entries are the optional isotropic
+        susceptibility channels read from the CSV when present.
 
     Raises:
         KeyError: If required tensor or temperature columns are missing.
@@ -71,7 +75,9 @@ def read_susceptibilities_csv(
     if renamer:
         data.rename(renamer, inplace=True, axis=1)
 
-    out: List[Tuple[np.ndarray, float, float | None]] = []
+    out: List[
+        Tuple[np.ndarray, float, float | None, float | None, float | None]
+    ] = []
     for _, row in data.iterrows():
         tensor = np.array(
             [
@@ -81,12 +87,27 @@ def read_susceptibilities_csv(
             ],
             dtype=float,
         )
-        chi_iso = None
-        if "chi_iso (Å^3)" in row.index:
-            value = row["chi_iso (Å^3)"]
-            if not pd.isna(value):
-                chi_iso = float(value)
-        out.append((tensor, float(row["Temperature (K)"]), chi_iso))
+        # Match iso columns by name prefix to avoid unit-string encoding
+        # issues. "chi_iso (" excludes "chi_iso_g_corr (" via the space.
+        def _iso_col(prefix):
+            for col in row.index:
+                if col.startswith(prefix + " ("):
+                    value = row[col]
+                    return None if pd.isna(value) else float(value)
+            return None
+
+        chi_iso = _iso_col("chi_iso")
+        chi_iso_spin_only = _iso_col("chi_iso_spin_only")
+        chi_iso_g_corr = _iso_col("chi_iso_g_corr")
+        out.append(
+            (
+                tensor,
+                float(row["Temperature (K)"]),
+                chi_iso,
+                chi_iso_spin_only,
+                chi_iso_g_corr,
+            )
+        )
 
     return out
 
@@ -134,11 +155,34 @@ def save_susc(
         conv = 1e-24 * NA / (4 * np.pi)
         unit_label = r"cm^3 mol^-1"
 
+    # Write the three isotropic susceptibility channels explicitly, each when
+    # known: the true Tr(chi)/3 (chi_iso), the spin-only reference
+    # (chi_iso_spin_only), and the g-corrected contact value (chi_iso_g_corr).
+    # Prediction reads the spin-only and g-corrected channels back directly; the
+    # true iso is also recoverable from the tensor.
+    def _iso_true(m):
+        v = m.susc.iso
+        return None if v is None else v * conv
+
+    def _iso_spin_only(m):
+        v = m.susc.iso_spin_only
+        return None if v is None else v * conv
+
+    def _iso_g_corr(m):
+        v = m.susc.iso_g_corr
+        return None if v is None else v * conv
+
     # Write susceptibility tensor to CSV
     out = {
         "Temperature (K)": [molecule.susc.temperature for molecule in molecules],
-        f"chi_iso ({unit_label})": [molecule.susc.iso * conv for molecule in molecules],
+        f"chi_iso ({unit_label})": [_iso_true(m) for m in molecules],
         f"chi_iso-s-dev ({unit_label})": None,
+        f"chi_iso_spin_only ({unit_label})": [
+            _iso_spin_only(m) for m in molecules
+        ],
+        f"chi_iso_spin_only-s-dev ({unit_label})": None,
+        f"chi_iso_g_corr ({unit_label})": [_iso_g_corr(m) for m in molecules],
+        f"chi_iso_g_corr-s-dev ({unit_label})": None,
         f"chi_ax ({unit_label})": [
             molecule.susc.axiality * conv for molecule in molecules
         ],
@@ -227,7 +271,10 @@ def save_susc(
         for key in susc_models[0].fit_stdev:
             if key == "rh_over_ax":
                 continue
-            out[f"chi_{key}-s-dev ({unit_label})"] = [
+            # The fitted isotropic value is written as chi_iso_g_corr, so its
+            # uncertainty accompanies that column.
+            col_key = "iso_g_corr" if key == "iso" else key
+            out[f"chi_{col_key}-s-dev ({unit_label})"] = [
                 model.fit_stdev[key] * conv for model in susc_models
             ]
 
@@ -236,19 +283,6 @@ def save_susc(
         out.pop(pop)
 
     df = pd.DataFrame(data=out)
-
-    # TODO: the current pipeline works fine for fitting only,
-    # For prediction, we need to check whether chi iso has been treated
-    # as spin only value, or calculated with g contribution, or just as Tr(chi)/3
-
-    # Update outpul labels to reflect the physically meaningful definition
-    # chi_iso_g_corr = g_e / 3 * Tr(chi @ g.T)
-    df = df.rename(
-        columns={
-            f"chi_iso ({unit_label})": f"chi_iso ({unit_label})",
-            f"chi_iso-s-dev ({unit_label})": f"chi_iso-s-dev ({unit_label})",
-        }
-    )
 
     write_csv_safe(df, file_name, comment)
 

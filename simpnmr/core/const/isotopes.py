@@ -13,7 +13,7 @@ DEFAULT_ISOTOPES = {
     "N": "15N",
     "O": "17O",
     "Si": "29Si",
-    "B": "10B",
+    "B": "11B",
     "Li": "6Li",
     "F": "19F",
 }

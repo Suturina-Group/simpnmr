@@ -270,10 +270,10 @@ def _build_molecule_df(molecule):
         and hfc_by_label[lab].r_inv6 is not None
         for lab in (nuc.label for nuc in molecule.nuclei)
     )
-    has_fc_gcorr = (
-        getattr(molecule.susc, "iso_g_corr", None) is not None
-        and getattr(molecule.susc, "iso_spin_only", None) is not None
-    )
+    # The spin-only / g-correction split is computed directly from S and T, so
+    # it is reported whenever the canonical susceptibility is g-corrected —
+    # including fit-derived susceptibilities that carry no spin-only channel.
+    has_fc_gcorr = getattr(molecule.susc, "iso_g_corr", None) is not None
     has_fc_spin_only = (
         getattr(molecule.susc, "iso_spin_only", None) is not None
         and getattr(molecule.susc, "iso_g_corr", None) is None
@@ -418,6 +418,20 @@ def _build_molecule_df(molecule):
             if has_fc_gcorr
             else []
         ),
+        # Full paramagnetic shift tensor (raw 3x3, non-symmetric): fc + pc + orb.
+        # Its trace/3 equals δ_total − δ_dia.
+        *[
+            (
+                f"δ_para_{a}{b} (ppm)",
+                lambda ctx, i=i, j=j: (
+                    ctx["nuc"].shift.paramag_tensor[i, j]
+                    if ctx["nuc"] is not None
+                    else np.nan
+                ),
+            )
+            for a, i in (("x", 0), ("y", 1), ("z", 2))
+            for b, j in (("x", 0), ("y", 1), ("z", 2))
+        ],
     ]
 
     orb_specs = [

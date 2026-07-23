@@ -62,7 +62,7 @@ def calc_r1_dipolar(
         gamma_I = gamma_I_dict[label]
         omega_I = omega_I_dict[label]
         prefactor = (
-            (1 / 10)
+            (2 / 15)
             * (1 / r**6)
             * (MU0 / (4 * np.pi)) ** 2
             * (gamma_I * g_eff * MUB) ** 2

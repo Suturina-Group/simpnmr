@@ -249,7 +249,6 @@ class Susceptibility:
         self, tensor: NDArray = np.zeros([3, 3]), temperature: float = 0.0
     ) -> None:
         self._dtensor = None
-        self._iso = None
         self._iso_spin_only = None
         self._iso_g_corr = None
         self._eigvals = None
@@ -294,15 +293,16 @@ class Susceptibility:
 
     @property
     def iso(self) -> float:
-        """Isotropic susceptibility (Å³)."""
-        if self._iso is None:
-            self.calc_iso()
-        return self._iso
+        """True isotropic susceptibility, Tr(chi)/3 (Å³).
 
-    @iso.setter
-    def iso(self, val: float):
-        self._iso = val
-        return
+        This is the genuine isotropic part of the susceptibility tensor and a
+        diagnostic/analysis quantity; it also underlies the deviatoric tensor
+        and axiality, and it is the isotropic susceptibility used by the orbital
+        shift term. It is intentionally read-only. The Fermi contact instead
+        uses the explicit :attr:`iso_spin_only` and :attr:`iso_g_corr` channels
+        (contact = spin-only part + g-correction delta).
+        """
+        return self._calc_iso(self._tensor)
 
     @property
     def iso_spin_only(self) -> float | None:
@@ -330,11 +330,6 @@ class Susceptibility:
                 "g-corrected isotropic susceptibility must be a float or None"
             )
         self._iso_g_corr = None if val is None else float(val)
-        return
-
-    def calc_iso(self):
-        """Computes and stores the isotropic component from `self.tensor`."""
-        self.iso = self._calc_iso(self.tensor)
         return
 
     @staticmethod
@@ -697,6 +692,11 @@ class Shift:
         self._orb_aniso = orb_aniso  # Orbital anisotropic
         self._dia = dia  # Diamagnetic
         self._lw = lw
+        # Full 3x3 shift tensors (raw, non-symmetric); the scalar components
+        # above are one third of each tensor's trace.
+        self._pc_tensor = np.zeros((3, 3), dtype=float)
+        self._fc_tensor = np.zeros((3, 3), dtype=float)
+        self._orb_tensor = np.zeros((3, 3), dtype=float)
         self._avg = copy.copy(self.total)
         pass
 
@@ -711,6 +711,36 @@ class Shift:
     @property
     def paramag(self) -> float:
         return self.hf + self.orb
+
+    # --- Full 3x3 shift tensors (raw, non-symmetric) -----------------------
+    @property
+    def pc_tensor(self) -> NDArray:
+        return self._pc_tensor
+
+    @pc_tensor.setter
+    def pc_tensor(self, val: NDArray):
+        self._pc_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def fc_tensor(self) -> NDArray:
+        return self._fc_tensor
+
+    @fc_tensor.setter
+    def fc_tensor(self, val: NDArray):
+        self._fc_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def orb_tensor(self) -> NDArray:
+        return self._orb_tensor
+
+    @orb_tensor.setter
+    def orb_tensor(self, val: NDArray):
+        self._orb_tensor = np.asarray(val, dtype=float)
+
+    @property
+    def paramag_tensor(self) -> NDArray:
+        """Total paramagnetic shift tensor (ppm): fc + pc + orb (raw 3x3)."""
+        return self._fc_tensor + self._pc_tensor + self._orb_tensor
 
     @property
     def avg(self) -> float:
@@ -850,6 +880,8 @@ class Shift:
             raise ValueError("g_tensor_dft must be invertible") from exc
 
         a_orb_eff = GE * (g_inv_t @ (A.sd + A.orb).T)
+        # The orbital contribution pairs with the true isotropic susceptibility
+        # (Tr(chi)/3), not the g-corrected/spin-only contact channels.
         shift = chi.iso * (1.0 / 3.0) * np.trace(a_orb_eff)
         return shift
 
@@ -917,10 +949,70 @@ class Shift:
         return shift
 
     @staticmethod
+    def _chi_iso_spin_only(chi: "Susceptibility") -> float:
+        """Spin-only isotropic susceptibility for the contact term (0 if unset)."""
+        return 0.0 if chi.iso_spin_only is None else float(chi.iso_spin_only)
+
+    @staticmethod
+    def _chi_iso_delta_gcorr(chi: "Susceptibility") -> float:
+        """g-correction increment to the isotropic susceptibility for contact.
+
+        ``chi_iso_g_corr - chi_iso_spin_only`` when the g-corrected channel is
+        known, otherwise ``0`` (no g-correction, so the contact is spin-only).
+        """
+        if chi.iso_g_corr is None:
+            return 0.0
+        return float(chi.iso_g_corr) - Shift._chi_iso_spin_only(chi)
+
+    @staticmethod
+    def calc_fc_spin_only(A: Hyperfine, chi: "Susceptibility") -> float:
+        """Spin-only part of the Fermi contact shift."""
+        return Shift._chi_iso_spin_only(chi) * (1.0 / 3.0 * np.trace(A.fc))
+
+    @staticmethod
+    def calc_fc_delta_gcorr(A: Hyperfine, chi: "Susceptibility") -> float:
+        """g-correction part of the Fermi contact shift (delta over spin-only)."""
+        return Shift._chi_iso_delta_gcorr(chi) * (1.0 / 3.0 * np.trace(A.fc))
+
+    @staticmethod
     def calc_fcs(A: Hyperfine, chi: "Susceptibility") -> float:
-        """Computes the Fermi contact contribution to the chemical shift."""
-        shift = chi.iso * (1.0 / 3.0 * np.trace(A.fc))
-        return shift
+        """Fermi contact shift: spin-only part plus the g-correction delta.
+
+        ``FC = fc_spin_only + fc_delta_gcorr``. When the g-corrected channel is
+        known this equals ``chi_iso_g_corr * A_iso``; when it is not, the delta
+        is zero and the contact is the spin-only value.
+        """
+        return Shift.calc_fc_spin_only(A, chi) + Shift.calc_fc_delta_gcorr(A, chi)
+
+    # --- Full 3x3 shift tensors (raw, non-symmetric) -----------------------
+    # Each is the shift tensor before the isotropic average; taking one third
+    # of its trace recovers the corresponding scalar above.
+    @staticmethod
+    def calc_pcs_tensor(A: Hyperfine, chi: "Susceptibility") -> NDArray:
+        """Pseudocontact shift tensor (ppm). ``trace/3`` == :meth:`calc_pcs`."""
+        return chi.dtensor @ A.sd
+
+    @staticmethod
+    def calc_fcs_tensor(A: Hyperfine, chi: "Susceptibility") -> NDArray:
+        """Fermi-contact shift tensor (ppm). ``trace/3`` == :meth:`calc_fcs`."""
+        chi_iso = Shift._chi_iso_spin_only(chi) + Shift._chi_iso_delta_gcorr(chi)
+        return chi_iso * A.fc
+
+    @staticmethod
+    def calc_orb_tensor(
+        A: Hyperfine, chi: "Susceptibility", g_tensor_dft: NDArray
+    ) -> NDArray:
+        """Orbital shift tensor (ppm). ``trace/3`` == :meth:`calc_orb`."""
+        g_tensor_dft = np.asarray(g_tensor_dft, dtype=float)
+        if g_tensor_dft.shape != (3, 3):
+            raise ValueError("g_tensor_dft must be a (3, 3) matrix")
+        try:
+            g_inv_t = la.inv(g_tensor_dft).T
+        except la.LinAlgError as exc:
+            raise ValueError("g_tensor_dft must be invertible") from exc
+        a_orb_eff = GE * (g_inv_t @ (A.sd + A.orb).T)
+        # Orbital term uses the true isotropic susceptibility (Tr(chi)/3).
+        return chi.iso * a_orb_eff + chi.dtensor @ a_orb_eff - chi.dtensor @ A.sd
 
     @staticmethod
     def calc_paramag(
