@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-07-23)
+
+### Bug Fixes
+
+- **isotopes**: Default boron to 11B (was 10B)
+  ([`592b3b4`](https://gitlab.com/suturina-group/simpnmr/-/commit/592b3b4d716e4afa2b03991aad093249201b2cdc))
+
+- **relax**: Correct SBM dipolar R1 prefactor to 2/15
+  ([`dc6cacc`](https://gitlab.com/suturina-group/simpnmr/-/commit/dc6cacc2e59ed8a7f208ba7ab89e32425403e0da))
+
+- **susc**: Use matrix product in g-corrected isotropic susceptibility
+  ([`d4d44e0`](https://gitlab.com/suturina-group/simpnmr/-/commit/d4d44e0ca4964571b0e8fad0d3c44d0d9a2af767))
+
+### Code Style
+
+- **test**: Wrap long assert lines in shift-tensor test
+  ([`24b3c1d`](https://gitlab.com/suturina-group/simpnmr/-/commit/24b3c1d537a88a288939ac4512c685daea4b20c6))
+
+### Documentation
+
+- **theory**: Add paramagnetic relaxation equations
+  ([`0023fc6`](https://gitlab.com/suturina-group/simpnmr/-/commit/0023fc674393e26e3710b9994a579a04846623f5))
+
+### Features
+
+- **fit**: Populate iso_g_corr before computing shifts
+  ([`896f654`](https://gitlab.com/suturina-group/simpnmr/-/commit/896f6542bd0c1ae72a5ad69ed537b5a77cdbfbef))
+
+- **shift**: Compute, store and print the full 3x3 shift tensor
+  ([`6661071`](https://gitlab.com/suturina-group/simpnmr/-/commit/6661071a1e0b06d8aefd57946b2065f3ec0291dc))
+
+- **shift**: Split Fermi contact into spin-only + g-correction terms
+  ([`b7380eb`](https://gitlab.com/suturina-group/simpnmr/-/commit/b7380eb338709c45dc91cb77848de0387ea95ac8))
+
+- **susc**: Explicit isotropic channels; two-part Fermi contact
+  ([`86fd245`](https://gitlab.com/suturina-group/simpnmr/-/commit/86fd245f0574f9d54f618fcd16480f394e8a5681))
+
+- **susc**: Make g-corrected chi_iso explicit in the susceptibility CSV
+  ([`3f03351`](https://gitlab.com/suturina-group/simpnmr/-/commit/3f033515d6014a2306174db9a00ff6dd9188e8b1))
+
+- **viz**: Distinguish spin-only vs g-corrected Fermi contact in plots
+  ([`7c07d6a`](https://gitlab.com/suturina-group/simpnmr/-/commit/7c07d6a2fb2ae7d090da44fb11ce5a89fccbb79c))
+
+- **viz**: Stack Fermi contact as spin-only + g-correction in bar plot
+  ([`c19d097`](https://gitlab.com/suturina-group/simpnmr/-/commit/c19d0971ca8e80f32d307407a2d3f2e818c43b84))
+
+
 ## v2.3.0 (2026-07-15)
 
 ### Bug Fixes
