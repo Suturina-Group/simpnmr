@@ -33,3 +33,20 @@ def angstrom_to_mhz(
 
     val_mhz = val_ang * inv
     return val_mhz
+
+
+def mhz_to_rad_s(val_mhz: NDArray | float) -> NDArray | float:
+    """Converts a frequency from MHz to angular frequency (rad/s).
+
+    ORCA prints the hyperfine coupling as ``A/h`` in MHz (a linear frequency),
+    while the SBM/Abragam relaxation rates use ``A/hbar = 2*pi*nu`` (angular
+    frequency). This applies ``omega = 2*pi*nu`` with ``nu`` in MHz, i.e.
+    ``rad/s = 2*pi * 1e6 * MHz``.
+
+    Args:
+        val_mhz: Value in MHz (scalar or array).
+
+    Returns:
+        The value in rad/s, with the same shape as `val_mhz`.
+    """
+    return np.asarray(val_mhz) * 1e6 * 2 * np.pi

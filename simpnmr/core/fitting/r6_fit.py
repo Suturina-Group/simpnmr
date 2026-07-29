@@ -16,7 +16,7 @@ from scipy.optimize import least_squares
 from simpnmr.core.build.eff_factors import calc_g_eff, choose_S_eff
 from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA, KB, MU0, MUB
-from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
+from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz, mhz_to_rad_s
 from simpnmr.core.domain.exp import Experiment
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.relaxation.sbm import calc_r1_contact, calc_r2_contact
@@ -412,8 +412,8 @@ def fit_r6(
                             get_nuclear_gamma(nuc.isotope),
                         )
                     )
-                    # rad/s
-                    aiso_vals.append(a_iso_mhz * 1e6 * 2 * np.pi)
+                    # rad/s (angular frequency for the SBM contact rates)
+                    aiso_vals.append(float(mhz_to_rad_s(a_iso_mhz)))
                 _aiso_by_label[cl] = (
                     float(np.mean(aiso_vals)) if aiso_vals else 0.0
                 )

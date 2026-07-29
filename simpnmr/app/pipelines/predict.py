@@ -47,7 +47,7 @@ from simpnmr.app.policies.susc import resolve_susceptibility_source
 from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.phys.tau_c import get_viscosity, run_beadshell, run_ellipsoid
 from simpnmr.core.const.physics import EGAMMA
-from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
+from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz, mhz_to_rad_s
 from simpnmr.core.domain.mol import Molecule
 from simpnmr.core.relaxation.eval import evaluate_relaxation_rates
 
@@ -993,9 +993,9 @@ def _apply_relaxation_linewidths(
 
         # Convert MHz -> angular frequency (rad/s) for the relaxation routines.
         # The SBM/Abragam contact rates use A in angular-frequency units
-        # (A/hbar = 2*pi*nu); ORCA prints A/h in MHz, so multiply by 2*pi*1e6.
+        # (A/hbar = 2*pi*nu); ORCA prints A/h in MHz.
         A_iso_dict = {
-            label: val_mhz * 1e6 * 2 * np.pi
+            label: float(mhz_to_rad_s(val_mhz))
             for label, val_mhz in A_iso_dict_MHz.items()
         }
 

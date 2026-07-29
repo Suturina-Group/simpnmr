@@ -30,7 +30,7 @@ from simpnmr.app.policies.relax import average_relaxation_rates_by_chem_label
 # Core / domain
 from simpnmr.core.const.gammas import get_nuclear_gamma
 from simpnmr.core.const.physics import EGAMMA
-from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz
+from simpnmr.core.conv.ang_to_freq import angstrom_to_mhz, mhz_to_rad_s
 from simpnmr.core.relaxation.eval import evaluate_relaxation_rates
 
 # IO layer
@@ -454,17 +454,16 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
 
         # Dictionaries for relaxation calculations
         # A_iso in angular frequency (rad/s): ORCA prints A/h in MHz, and the
-        # SBM/Abragam contact rates use A/hbar = 2*pi*nu, so multiply by 2*pi*1e6.
+        # SBM/Abragam contact rates use A/hbar = 2*pi*nu.
         A_fc_dict = {
             nuc.label: float(
-                angstrom_to_mhz(
-                    np.trace(nuc.A.fc) / 3.0,
-                    get_nuclear_gamma(nuc.isotope),
+                mhz_to_rad_s(
+                    angstrom_to_mhz(
+                        np.trace(nuc.A.fc) / 3.0,
+                        get_nuclear_gamma(nuc.isotope),
+                    )
                 )
             )
-            * 1e6
-            * 2
-            * np.pi
             for nuc in base_molecule.nuclei
             if nuc.A is not None
         }
