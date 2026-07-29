@@ -97,7 +97,7 @@ def compute_p1_theoretical(
             + 6 * J(omega_I + omega_S, tau_e)
             + J(omega_I - omega_S, tau_e)
         )
-        p1_sbm = (1.0 / 10.0) * C_sbm * sd_sbm  # (N_e, 1)
+        p1_sbm = (2.0 / 15.0) * C_sbm * sd_sbm  # (N_e, 1)
 
         # Curie R1 spectral density
         sd_curie = 3 * J(omega_I, tau_R)
