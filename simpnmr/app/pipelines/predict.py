@@ -972,7 +972,7 @@ def _apply_relaxation_linewidths(
 
     # Build Aiso, gamma and omega dictionaries for selected nuclei
     # Converts nuclear gyromagnetic ratios from MHz/T to rad/s/T
-    # and multiplies Aiso by 1e6 to convert from MHz to Hz
+    # and converts Aiso from MHz to angular frequency (rad/s = 2*pi*1e6 * MHz)
 
     if config.hyperfine_method == "pdip":
         # In point-dipole (pdip) model, contact hyperfine A_iso = 0 for all nuclei.
@@ -991,8 +991,13 @@ def _apply_relaxation_linewidths(
             if nuc.label in nuclei_coords
         }
 
-        # Convert MHz -> Hz for relaxation routines.
-        A_iso_dict = {label: val_mhz * 1e6 for label, val_mhz in A_iso_dict_MHz.items()}
+        # Convert MHz -> angular frequency (rad/s) for the relaxation routines.
+        # The SBM/Abragam contact rates use A in angular-frequency units
+        # (A/hbar = 2*pi*nu); ORCA prints A/h in MHz, so multiply by 2*pi*1e6.
+        A_iso_dict = {
+            label: val_mhz * 1e6 * 2 * np.pi
+            for label, val_mhz in A_iso_dict_MHz.items()
+        }
 
     gamma_I_dict = {
         nuc.label: get_nuclear_gamma(nuc.isotope) * 2 * np.pi * 1e6

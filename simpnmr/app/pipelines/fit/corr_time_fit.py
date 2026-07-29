@@ -453,6 +453,8 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
         nuclei_coords = {nuc.label: nuc.coord for nuc in base_molecule.nuclei}
 
         # Dictionaries for relaxation calculations
+        # A_iso in angular frequency (rad/s): ORCA prints A/h in MHz, and the
+        # SBM/Abragam contact rates use A/hbar = 2*pi*nu, so multiply by 2*pi*1e6.
         A_fc_dict = {
             nuc.label: float(
                 angstrom_to_mhz(
@@ -461,6 +463,8 @@ def run_fit_corr_time(config, options: FitCorrTimeRunOptions | None = None) -> i
                 )
             )
             * 1e6
+            * 2
+            * np.pi
             for nuc in base_molecule.nuclei
             if nuc.A is not None
         }
